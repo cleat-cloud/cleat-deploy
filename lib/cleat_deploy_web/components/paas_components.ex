@@ -846,6 +846,23 @@ defmodule CleatDeployWeb.PaasComponents do
   attr :value, :string, required: true
   attr :mono, :boolean, default: false
   attr :sub, :string, default: nil
+  attr :href, :string, default: nil
+
+  def info_tile(%{href: href} = assigns) when is_binary(href) do
+    ~H"""
+    <.link
+      id={@id}
+      navigate={@href}
+      class="paas-card flex flex-col justify-between space-y-1 p-3 transition-colors hover:border-hd-orange/50"
+    >
+      <span class="font-mono text-[9px] font-bold uppercase tracking-widest text-hd-muted">
+        {@label}
+      </span>
+      <p class={["truncate text-xs font-semibold text-hd-text", @mono && "font-mono"]}>{@value}</p>
+      <p :if={@sub} class="block font-mono text-[10px] text-hd-orange">{@sub}</p>
+    </.link>
+    """
+  end
 
   def info_tile(assigns) do
     ~H"""

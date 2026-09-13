@@ -164,6 +164,84 @@ defmodule CleatDeploy.AppsTest do
     end
   end
 
+  describe "update_app/3" do
+    test "updates deploy branch for the owning tenant", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "PratoAI",
+          slug: "prato-ai",
+          github_repo: "gestao-bem/prato-ai",
+          branch: "deploy-cleat",
+          host: "pratoai.gestaobem.com",
+          server_id: server.id
+        })
+
+      assert {:ok, updated} = Apps.update_app(scope, app, %{branch: "main"})
+      assert updated.branch == "main"
+      assert Apps.get_app!(scope, app.id).branch == "main"
+    end
+
+    test "strips refs/heads/ when pasted", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Ops",
+          slug: "ops-app",
+          github_repo: "puppe1990/ops-app",
+          host: "app.gestaobem.com",
+          server_id: server.id
+        })
+
+      assert {:ok, updated} = Apps.update_app(scope, app, %{"branch" => "refs/heads/feat/ledger"})
+      assert updated.branch == "feat/ledger"
+    end
+
+    test "ignores non-branch fields", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Ops",
+          slug: "ops-app",
+          github_repo: "puppe1990/ops-app",
+          host: "app.gestaobem.com",
+          server_id: server.id
+        })
+
+      assert {:ok, updated} =
+               Apps.update_app(scope, app, %{branch: "develop", slug: "hacked", host: "evil.com"})
+
+      assert updated.branch == "develop"
+      assert updated.slug == "ops-app"
+      assert updated.host == "app.gestaobem.com"
+    end
+
+    test "rejects a blank branch", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Ops",
+          slug: "ops-app",
+          github_repo: "puppe1990/ops-app",
+          host: "app.gestaobem.com",
+          server_id: server.id
+        })
+
+      assert {:error, changeset} = Apps.update_app(scope, app, %{branch: "   "})
+      assert "can't be blank" in errors_on(changeset).branch
+    end
+
+    test "rejects another tenant", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Ops",
+          slug: "ops-app",
+          github_repo: "puppe1990/ops-app",
+          host: "app.gestaobem.com",
+          server_id: server.id
+        })
+
+      assert {:error, :unauthorized} =
+               Apps.update_app(TenancyFixtures.scope_fixture(), app, %{branch: "main"})
+    end
+  end
+
   describe "delete_app/2" do
     test "removes the app and cascaded env vars", %{scope: scope, server: server} do
       {:ok, app, _} =

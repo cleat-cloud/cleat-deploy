@@ -297,6 +297,7 @@ defmodule CleatDeployWeb.AppLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=webhook")
     assert has_element?(view, "#app-webhook")
+    assert has_element?(view, "#deploy-branch-form")
     refute has_element?(view, "#app-env-vars")
 
     {:ok, view, html} = live(conn, ~p"/apps/#{app.id}?tab=logs")
@@ -310,6 +311,52 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#app-danger-zone")
     assert has_element?(view, "#delete-app-form")
     refute has_element?(view, "#app-webhook")
+  end
+
+  test "edits the deploy branch from the webhook tab", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "PratoAI",
+        slug: "prato-ai",
+        github_repo: "gestao-bem/prato-ai-#{System.unique_integer()}",
+        branch: "deploy-cleat",
+        host: "pratoai.gestaobem.com"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=webhook")
+    assert has_element?(view, "#deploy-branch-form")
+    assert has_element?(view, "#app-deploy-branch-tile", "deploy-cleat")
+
+    html =
+      view
+      |> form("#deploy-branch-form", app: %{branch: "main"})
+      |> render_submit()
+
+    assert html =~ "Auto-deploy now listens to main"
+    assert has_element?(view, "#app-deploy-branch-tile", "main")
+    assert Apps.get_app!(scope, app.id).branch == "main"
+  end
+
+  test "shows an error when the deploy branch is blank", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=webhook")
+
+    html =
+      view
+      |> form("#deploy-branch-form", app: %{branch: "   "})
+      |> render_submit()
+
+    assert html =~ "can&#39;t be blank" or html =~ "can't be blank"
+    assert Apps.get_app!(scope, app.id).branch == "main"
   end
 
   test "danger zone deletes the app after slug confirmation", %{
