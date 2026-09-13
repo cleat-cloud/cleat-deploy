@@ -51,6 +51,7 @@ defmodule CleatDeploy.Apps.App do
     |> validate_required([:name, :slug, :github_repo, :host, :server_id, :tenant_id])
     |> cast_runtime_packages()
     |> put_runtime_packages_text()
+    |> validate_branch()
     |> validate_format(:github_repo, ~r/^[^\/]+\/[^\/]+$/, message: "must be owner/repo")
     |> validate_inclusion(:runtime, ["phoenix", "golang"])
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
@@ -59,6 +60,12 @@ defmodule CleatDeploy.Apps.App do
     |> foreign_key_constraint(:server_id)
     |> put_default_webhook_secret()
     |> put_deploy_defaults()
+  end
+
+  def branch_changeset(app, attrs) do
+    app
+    |> cast(attrs, [:branch], empty_values: [])
+    |> validate_branch()
   end
 
   def release_name("trip-planner"), do: "trip_planner_ia"
@@ -124,6 +131,40 @@ defmodule CleatDeploy.Apps.App do
       put_change(changeset, field, default)
     else
       changeset
+    end
+  end
+
+  defp validate_branch(changeset) do
+    changeset
+    |> normalize_branch()
+    |> validate_required([:branch])
+    |> validate_length(:branch, min: 1, max: 255)
+    |> validate_format(:branch, ~r/^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._\/-]*$/,
+      message: "must be a git branch name"
+    )
+  end
+
+  defp normalize_branch(changeset) do
+    case get_change(changeset, :branch) do
+      branch when is_binary(branch) ->
+        normalized =
+          branch
+          |> String.trim()
+          |> String.replace_prefix("refs/heads/", "")
+
+        cond do
+          normalized == "" ->
+            add_error(changeset, :branch, "can't be blank")
+
+          normalized != branch ->
+            put_change(changeset, :branch, normalized)
+
+          true ->
+            changeset
+        end
+
+      _ ->
+        changeset
     end
   end
 

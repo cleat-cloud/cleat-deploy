@@ -36,6 +36,7 @@ defmodule CleatDeployWeb.AppLive.Show do
       |> assign(:app_memory, nil)
       |> assign(:delete_confirm, "")
       |> assign(:delete_form, to_form(%{"confirm" => ""}, as: :delete))
+      |> assign(:branch_form, to_form(Apps.change_branch(app), as: :app))
       |> assign(:deploying?, deploying?)
       |> schedule_poll(deploying?)
 
@@ -101,6 +102,33 @@ defmodule CleatDeployWeb.AppLive.Show do
 
   def handle_event("refresh_logs", _params, socket) do
     {:noreply, load_logs(socket)}
+  end
+
+  def handle_event("validate_branch", %{"app" => params}, socket) do
+    form =
+      socket.assigns.app
+      |> Apps.change_branch(params)
+      |> Map.put(:action, :validate)
+      |> to_form(as: :app)
+
+    {:noreply, assign(socket, :branch_form, form)}
+  end
+
+  def handle_event("save_branch", %{"app" => params}, socket) do
+    case Apps.update_app(socket.assigns.current_scope, socket.assigns.app, params) do
+      {:ok, app} ->
+        app = Apps.get_app!(socket.assigns.current_scope, app.id)
+
+        {:noreply,
+         socket
+         |> assign(:app, app)
+         |> assign(:apps, Apps.list_app_choices(socket.assigns.current_scope))
+         |> assign(:branch_form, to_form(Apps.change_branch(app), as: :app))
+         |> put_flash(:info, "Auto-deploy now listens to #{app.branch}")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, :branch_form, to_form(changeset, as: :app))}
+    end
   end
 
   def handle_event("validate_delete", %{"delete" => params}, socket) do
@@ -351,7 +379,45 @@ defmodule CleatDeployWeb.AppLive.Show do
               </div>
             </div>
 
-            <div :if={@app_detail_tab == :webhook} id="app-webhook" class="space-y-3">
+            <div :if={@app_detail_tab == :webhook} id="app-webhook" class="space-y-5">
+              <div class="space-y-3">
+                <div class="space-y-0.5">
+                  <h3 class="font-display text-xs font-semibold text-hd-text">
+                    Deploy branch
+                  </h3>
+                  <p class="text-[11px] leading-relaxed text-hd-muted">
+                    Auto-deploy queues only when GitHub pushes this branch.
+                    Other refs are ignored.
+                  </p>
+                </div>
+                <.form
+                  for={@branch_form}
+                  id="deploy-branch-form"
+                  phx-change="validate_branch"
+                  phx-submit="save_branch"
+                  class="flex flex-col gap-2 sm:flex-row sm:items-end"
+                >
+                  <div class="min-w-0 flex-1">
+                    <.input
+                      field={@branch_form[:branch]}
+                      id="app-deploy-branch-input"
+                      type="text"
+                      label="Branch"
+                      class="paas-input w-full font-mono"
+                      spellcheck="false"
+                      autocomplete="off"
+                    />
+                  </div>
+                  <button
+                    id="save-deploy-branch"
+                    type="submit"
+                    class="paas-btn-primary mb-2 shrink-0"
+                  >
+                    Save branch
+                  </button>
+                </.form>
+              </div>
+
               <div class="space-y-0.5">
                 <h3 class="font-display text-xs font-semibold text-hd-text">
                   GitHub Push webhook URL Credentials

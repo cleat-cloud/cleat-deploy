@@ -116,7 +116,14 @@ defmodule CleatDeployWeb.AppLive.Layout do
     <div class="space-y-3">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <.info_tile label="Domain Host" value={@app.host} mono sub="IPv4 ingress endpoint" />
-        <.info_tile label="Deploy Branch" value={@app.branch} mono sub="Git HEAD target" />
+        <.info_tile
+          id="app-deploy-branch-tile"
+          label="Deploy Branch"
+          value={@app.branch}
+          mono
+          sub="Edit auto-deploy target"
+          href={~p"/apps/#{@app.id}?tab=webhook"}
+        />
         <.info_tile label="Target Server" value={@app.server.host_ip} mono sub={@app.server.name} />
         <.info_tile
           label="Auto Deploy"
