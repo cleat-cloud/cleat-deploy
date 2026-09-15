@@ -469,13 +469,26 @@ defmodule CleatDeployWeb.AppLiveTest do
     {:ok, running} = Deployments.mark_running(deployment)
 
     assert has_element?(view, "#cancel-deploy-button")
+    refute has_element?(view, "#cancel-deploy-modal")
 
     view |> element("#cancel-deploy-button") |> render_click()
+
+    assert has_element?(view, "#cancel-deploy-modal")
+    assert render(view) =~ "Cancel this deploy?"
+
+    view |> element("#keep-deploy-button") |> render_click()
+
+    refute has_element?(view, "#cancel-deploy-modal")
+    assert Deployments.get_deployment!(running.id).status == :running
+
+    view |> element("#cancel-deploy-button") |> render_click()
+    view |> element("#confirm-cancel-deploy-button") |> render_click()
 
     assert render(view) =~ "Deploy ##{running.id} cancelled"
     assert Deployments.get_deployment!(running.id).status == :failed
     refute Deployments.deploying?(scope, app)
     refute has_element?(view, "#cancel-deploy-button")
+    refute has_element?(view, "#cancel-deploy-modal")
   end
 
   test "cancels the active deploy from the app page", %{
@@ -491,6 +504,9 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#cancel-deploy-button")
 
     view |> element("#cancel-deploy-button") |> render_click()
+    assert has_element?(view, "#cancel-deploy-modal")
+
+    view |> element("#confirm-cancel-deploy-button") |> render_click()
 
     assert render(view) =~ "cancelled"
     assert Deployments.get_deployment!(deployment.id).status == :failed
