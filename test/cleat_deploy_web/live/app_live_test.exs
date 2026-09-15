@@ -613,6 +613,8 @@ defmodule CleatDeployWeb.AppLiveTest do
 
     assert html =~ "newer deploy log line"
     refute html =~ "older deploy log line"
+    assert has_element?(view, "#view-deploy-log-#{newer.id}[aria-pressed=true]")
+    assert has_element?(view, "#view-deploy-log-#{older.id}[aria-pressed=false]")
 
     view |> element("#view-deploy-log-#{older.id}") |> render_click()
 
@@ -620,6 +622,10 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert html =~ "older deploy log line"
     assert has_element?(view, "#deploy-terminal-#{older.id}")
     refute has_element?(view, "#deploy-terminal-#{newer.id}")
+
+    assert has_element?(view, "#view-deploy-log-#{older.id}[aria-pressed=true]")
+    assert has_element?(view, "#view-deploy-log-#{newer.id}[aria-pressed=false]")
+    assert render(view) =~ "Viewing deploy ##{older.id}"
   end
 
   test "hides history pagination when there are 10 or fewer deployments", %{

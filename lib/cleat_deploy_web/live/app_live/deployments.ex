@@ -93,15 +93,8 @@ defmodule CleatDeployWeb.AppLive.Deployments do
     if socket.assigns.deploying? do
       {:noreply, socket}
     else
-      deployment_id = String.to_integer(id)
-
-      {:noreply,
-       socket
-       |> assign(:selected_deployment_id, deployment_id)
-       |> assign(
-         :viewed_deployment,
-         Deployments.get_with_log!(socket.assigns.app, deployment_id)
-       )}
+      # Re-stream the history so the viewed row highlights without a reload.
+      {:noreply, refresh_deployments(socket, String.to_integer(id), false)}
     end
   end
 
@@ -244,6 +237,11 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                           type="button"
                           phx-click="view_deploy_log"
                           phx-value-id={deployment.id}
+                          aria-pressed={
+                            to_string(
+                              @viewed_deployment != nil and @viewed_deployment.id == deployment.id
+                            )
+                          }
                           class={[
                             "rounded border px-2 py-0.5 font-mono text-[10px] transition-colors",
                             @viewed_deployment && @viewed_deployment.id == deployment.id &&
