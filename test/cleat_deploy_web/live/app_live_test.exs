@@ -455,6 +455,48 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert render(view) =~ "Deploy queued"
   end
 
+  test "cancels the active deploy from the deployments page", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+    refute has_element?(view, "#cancel-deploy-button")
+
+    {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "cancel-me"})
+    {:ok, running} = Deployments.mark_running(deployment)
+
+    assert has_element?(view, "#cancel-deploy-button")
+
+    view |> element("#cancel-deploy-button") |> render_click()
+
+    assert render(view) =~ "Deploy ##{running.id} cancelled"
+    assert Deployments.get_deployment!(running.id).status == :failed
+    refute Deployments.deploying?(scope, app)
+    refute has_element?(view, "#cancel-deploy-button")
+  end
+
+  test "cancels the active deploy from the app page", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server)
+    {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "cancel-here"})
+    {:ok, _queued} = Deployments.mark_running(deployment)
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+    assert has_element?(view, "#cancel-deploy-button")
+
+    view |> element("#cancel-deploy-button") |> render_click()
+
+    assert render(view) =~ "cancelled"
+    assert Deployments.get_deployment!(deployment.id).status == :failed
+    refute has_element?(view, "#cancel-deploy-button")
+  end
+
   test "shows a deploy that starts while the page is open", %{
     conn: conn,
     scope: scope,

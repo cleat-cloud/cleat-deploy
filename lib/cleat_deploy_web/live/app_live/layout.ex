@@ -81,19 +81,30 @@ defmodule CleatDeployWeb.AppLive.Layout do
         <.icon name="hero-arrow-top-right-on-square" class="size-3" />
       </.link>
 
-      <button
-        id="deploy-button"
-        type="button"
-        phx-click="deploy"
-        disabled={@deploying?}
-        class={["paas-btn-primary uppercase", @deploying? && "opacity-50"]}
-      >
-        <.icon
-          name={if @deploying?, do: "hero-arrow-path", else: "hero-play"}
-          class={["size-3.5", @deploying? && "motion-safe:animate-spin"]}
-        />
-        {if @deploying?, do: "Build in progress…", else: "Deploy now"}
-      </button>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          id="deploy-button"
+          type="button"
+          phx-click="deploy"
+          disabled={@deploying?}
+          class={["paas-btn-primary uppercase", @deploying? && "opacity-50"]}
+        >
+          <.icon
+            name={if @deploying?, do: "hero-arrow-path", else: "hero-play"}
+            class={["size-3.5", @deploying? && "motion-safe:animate-spin"]}
+          />
+          {if @deploying?, do: "Build in progress…", else: "Deploy now"}
+        </button>
+        <button
+          :if={@deploying?}
+          id="cancel-deploy-button"
+          type="button"
+          phx-click="cancel_deploy"
+          class="paas-btn-secondary uppercase"
+        >
+          <.icon name="hero-x-mark" class="size-3.5 text-rose-400" /> Cancel deploy
+        </button>
+      </div>
     </div>
     """
   end

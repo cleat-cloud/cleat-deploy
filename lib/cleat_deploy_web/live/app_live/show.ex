@@ -88,6 +88,22 @@ defmodule CleatDeployWeb.AppLive.Show do
     end
   end
 
+  def handle_event("cancel_deploy", _params, socket) do
+    case Deployments.cancel(socket.assigns.current_scope, socket.assigns.app) do
+      {:ok, deployment} ->
+        {:noreply,
+         socket
+         |> refresh_deploying()
+         |> put_flash(:info, "Deploy ##{deployment.id} cancelled")}
+
+      {:error, :no_active_deployment} ->
+        {:noreply, put_flash(socket, :error, "No deploy queued or running")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Could not cancel the deploy")}
+    end
+  end
+
   def handle_event("toggle_secret", _params, socket) do
     {:noreply, assign(socket, :show_secret?, not socket.assigns.show_secret?)}
   end

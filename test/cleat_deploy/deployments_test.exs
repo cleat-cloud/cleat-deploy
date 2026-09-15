@@ -104,6 +104,100 @@ defmodule CleatDeploy.DeploymentsTest do
     end
   end
 
+  describe "cancel/2" do
+    test "rejects a cross-tenant app", %{app: app} do
+      other_scope = TenancyFixtures.scope_fixture()
+      assert {:error, :unauthorized} = Deployments.cancel(other_scope, app)
+    end
+
+    test "fails the active deployment and cancels its pending job", %{scope: scope, app: app} do
+      {:ok, job} = Deployments.enqueue(scope, app, %{git_sha: "cancel-me"})
+      [deployment] = Deployments.for_app(scope, app)
+
+      assert {:ok, cancelled} = Deployments.cancel(scope, app)
+      assert cancelled.id == deployment.id
+      assert cancelled.status == :failed
+      assert cancelled.log =~ "Cancelled by operator"
+      assert cancelled.finished_at
+      refute Deployments.deploying?(scope, app)
+
+      assert CleatDeploy.Repo.get!(Oban.Job, job.id).state == "cancelled"
+    end
+
+    test "cancels the oldest deployment when several are queued", %{scope: scope, app: app} do
+      {:ok, _} = Deployments.enqueue(scope, app, %{git_sha: "first"})
+      {:ok, _} = Deployments.enqueue(scope, app, %{git_sha: "second"})
+
+      [oldest | _] = Deployments.for_app(scope, app) |> Enum.reverse()
+
+      assert {:ok, cancelled} = Deployments.cancel(scope, app)
+      assert cancelled.id == oldest.id
+      assert Deployments.deploying?(scope, app)
+    end
+
+    test "reports when nothing is active", %{scope: scope, app: app} do
+      assert {:error, :no_active_deployment} = Deployments.cancel(scope, app)
+
+      {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "done"})
+      {:ok, running} = Deployments.mark_running(deployment)
+      {:ok, _success} = Deployments.mark_success(running, "deploy ok")
+
+      assert {:error, :no_active_deployment} = Deployments.cancel(scope, app)
+      assert Deployments.get_deployment!(deployment.id).status == :success
+    end
+  end
+
+  describe "recover_orphaned_running/1" do
+    test "fails a running deployment whose worker job is gone", %{app: app} do
+      {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "zombie"})
+      {:ok, _running} = Deployments.mark_running(deployment)
+
+      assert [recovered] = Deployments.recover_orphaned_running(DateTime.utc_now(:second))
+      assert recovered.id == deployment.id
+      assert recovered.status == :failed
+      assert recovered.log =~ "orphaned"
+    end
+
+    test "keeps a running deployment that still has a queued job", %{scope: scope, app: app} do
+      {:ok, _job} = Deployments.enqueue(scope, app, %{git_sha: "alive"})
+      [deployment] = Deployments.for_app(scope, app)
+      {:ok, _running} = Deployments.mark_running(deployment)
+
+      assert Deployments.recover_orphaned_running(DateTime.utc_now(:second)) == []
+      assert Deployments.get_deployment!(deployment.id).status == :running
+    end
+
+    test "fails a deployment whose job was attempted before this boot", %{scope: scope, app: app} do
+      {:ok, job} = Deployments.enqueue(scope, app, %{git_sha: "dead-worker"})
+      [deployment] = Deployments.for_app(scope, app)
+      {:ok, _running} = Deployments.mark_running(deployment)
+
+      attempted_at = DateTime.add(DateTime.utc_now(), -600, :second)
+
+      job
+      |> Ecto.Changeset.change(state: "executing", attempted_at: attempted_at)
+      |> CleatDeploy.Repo.update!()
+
+      assert [recovered] = Deployments.recover_orphaned_running(DateTime.utc_now(:second))
+      assert recovered.id == deployment.id
+    end
+
+    test "keeps a deployment whose job is executing since this boot", %{scope: scope, app: app} do
+      {:ok, job} = Deployments.enqueue(scope, app, %{git_sha: "live-worker"})
+      [deployment] = Deployments.for_app(scope, app)
+      {:ok, _running} = Deployments.mark_running(deployment)
+
+      booted_at = DateTime.add(DateTime.utc_now(:second), -60, :second)
+
+      job
+      |> Ecto.Changeset.change(state: "executing", attempted_at: DateTime.utc_now())
+      |> CleatDeploy.Repo.update!()
+
+      assert Deployments.recover_orphaned_running(booted_at) == []
+      assert Deployments.get_deployment!(deployment.id).status == :running
+    end
+  end
+
   describe "for_app/2" do
     test "orders by newest first", %{scope: scope, app: app} do
       {:ok, older} = Deployments.create_deployment(app, %{git_sha: "old"})

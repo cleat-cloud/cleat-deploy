@@ -57,4 +57,33 @@ defmodule CleatDeploy.Workers.AutoDeployHealthWorkerTest do
     reloaded = CleatDeploy.Servers.get_server!(scope, server.id)
     assert reloaded.host_ip == "52.73.89.19"
   end
+
+  test "fails deploys whose worker died with a previous boot" do
+    scope = TenancyFixtures.scope_fixture()
+
+    server =
+      TenancyFixtures.server_fixture(scope, %{name: "orphan-host", host_ip: "52.0.157.89"})
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "orphan-app",
+        host: "orphan.gestaobem.com",
+        github_repo: "puppe1990/orphan-app-#{System.unique_integer()}"
+      })
+
+    {:ok, deployment} = CleatDeploy.Deployments.create_deployment(app, %{git_sha: "orphan"})
+    {:ok, _running} = CleatDeploy.Deployments.mark_running(deployment)
+
+    stub(CleatDeploy.Deploy.DnsMock, :lookup_a, fn "orphan.gestaobem.com" ->
+      {:ok, ["52.73.89.19"]}
+    end)
+
+    stub(CleatDeploy.AWS.LightsailMock, :list_instances, fn _region -> {:ok, []} end)
+    stub(CleatDeploy.HetznerMock, :list_instances, fn _location -> {:ok, []} end)
+
+    assert :ok = perform_job(AutoDeployHealthWorker, %{})
+
+    assert CleatDeploy.Deployments.get_deployment!(deployment.id).status == :failed
+    refute CleatDeploy.Deployments.deploying?(app)
+  end
 end
