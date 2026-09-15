@@ -38,6 +38,7 @@ defmodule CleatDeployWeb.AppLive.Show do
       |> assign(:delete_form, to_form(%{"confirm" => ""}, as: :delete))
       |> assign(:branch_form, to_form(Apps.change_branch(app), as: :app))
       |> assign(:deploying?, deploying?)
+      |> assign(:confirming_cancel?, false)
       |> schedule_poll(deploying?)
 
     socket =
@@ -88,7 +89,17 @@ defmodule CleatDeployWeb.AppLive.Show do
     end
   end
 
+  def handle_event("open_cancel_deploy", _params, socket) do
+    {:noreply, assign(socket, :confirming_cancel?, true)}
+  end
+
+  def handle_event("close_cancel_deploy", _params, socket) do
+    {:noreply, assign(socket, :confirming_cancel?, false)}
+  end
+
   def handle_event("cancel_deploy", _params, socket) do
+    socket = assign(socket, :confirming_cancel?, false)
+
     case Deployments.cancel(socket.assigns.current_scope, socket.assigns.app) do
       {:ok, deployment} ->
         {:noreply,
@@ -211,7 +222,11 @@ defmodule CleatDeployWeb.AppLive.Show do
     >
       <div class="space-y-4">
         <Layout.shell_header app={@app} apps={@apps} />
-        <Layout.shell_hero app={@app} deploying?={@deploying?} />
+        <Layout.shell_hero
+          app={@app}
+          deploying?={@deploying?}
+          confirming_cancel?={@confirming_cancel?}
+        />
         <Layout.shell_info_tiles app={@app} memory={@app_memory} />
 
         <div id="app-detail-tabs" class="paas-card overflow-hidden">

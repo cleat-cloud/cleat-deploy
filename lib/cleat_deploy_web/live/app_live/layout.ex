@@ -39,6 +39,7 @@ defmodule CleatDeployWeb.AppLive.Layout do
 
   attr :app, :map, required: true
   attr :deploying?, :boolean, required: true
+  attr :confirming_cancel?, :boolean, default: false
 
   def shell_hero(assigns) do
     golang? = assigns.app.runtime == "golang"
@@ -99,11 +100,81 @@ defmodule CleatDeployWeb.AppLive.Layout do
           :if={@deploying?}
           id="cancel-deploy-button"
           type="button"
-          phx-click="cancel_deploy"
+          phx-click="open_cancel_deploy"
           class="paas-btn-secondary uppercase"
         >
           <.icon name="hero-x-mark" class="size-3.5 text-rose-400" /> Cancel deploy
         </button>
+      </div>
+
+      <div
+        :if={@confirming_cancel? and @deploying?}
+        id="cancel-deploy-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        phx-window-keydown="close_cancel_deploy"
+        phx-key="Escape"
+        role="presentation"
+      >
+        <button
+          type="button"
+          class="paas-modal-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm"
+          phx-click="close_cancel_deploy"
+          aria-label="Close confirmation"
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cancel-deploy-title"
+          class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        >
+          <div class="h-px bg-gradient-to-r from-transparent via-rose-500/70 to-transparent" />
+          <div class="space-y-5 p-5 sm:p-6">
+            <div class="flex items-start gap-3">
+              <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-rose-500/30 bg-rose-500/10 text-rose-400">
+                <.icon name="hero-exclamation-triangle" class="size-5" />
+              </div>
+              <div class="min-w-0 space-y-1">
+                <h3
+                  id="cancel-deploy-title"
+                  class="font-display text-base font-semibold text-hd-text"
+                >
+                  Cancel this deploy?
+                </h3>
+                <p class="text-[13px] leading-relaxed text-hd-muted">
+                  The pending job is dropped and the deployment is marked failed. A build already
+                  running on {@app.server.name} is not interrupted.
+                </p>
+              </div>
+            </div>
+
+            <div class="rounded-lg border border-hd-border bg-hd-aside px-3 py-3">
+              <p class="font-display text-sm font-semibold text-hd-text">{@app.name}</p>
+              <p class="mt-1 font-mono text-[11px] text-hd-muted">
+                {@app.github_repo} · branch {@app.branch}
+              </p>
+            </div>
+
+            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                id="keep-deploy-button"
+                type="button"
+                phx-click="close_cancel_deploy"
+                class="paas-btn-secondary justify-center"
+              >
+                Keep it
+              </button>
+              <button
+                id="confirm-cancel-deploy-button"
+                type="button"
+                phx-click="cancel_deploy"
+                phx-disable-with="Cancelling…"
+                class="inline-flex items-center justify-center gap-1.5 rounded-md bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-rose-400"
+              >
+                <.icon name="hero-x-mark" class="size-3.5" /> Yes, cancel it
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     """

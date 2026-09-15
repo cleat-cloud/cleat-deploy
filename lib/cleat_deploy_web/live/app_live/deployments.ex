@@ -21,6 +21,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
       |> assign(:app, app)
       |> assign(:apps, Apps.list_app_choices(scope))
       |> assign(:selected_deployment_id, nil)
+      |> assign(:confirming_cancel?, false)
       |> assign(:history_page, 1)
       |> assign(:app_memory, nil)
       |> assign(:detail_tabs, Layout.detail_tabs(app.slug == "catalogo", runtime_packages(app)))
@@ -58,7 +59,17 @@ defmodule CleatDeployWeb.AppLive.Deployments do
     end
   end
 
+  def handle_event("open_cancel_deploy", _params, socket) do
+    {:noreply, assign(socket, :confirming_cancel?, true)}
+  end
+
+  def handle_event("close_cancel_deploy", _params, socket) do
+    {:noreply, assign(socket, :confirming_cancel?, false)}
+  end
+
   def handle_event("cancel_deploy", _params, socket) do
+    socket = assign(socket, :confirming_cancel?, false)
+
     case Deployments.cancel(socket.assigns.current_scope, socket.assigns.app) do
       {:ok, deployment} ->
         {:noreply,
@@ -82,15 +93,8 @@ defmodule CleatDeployWeb.AppLive.Deployments do
     if socket.assigns.deploying? do
       {:noreply, socket}
     else
-      deployment_id = String.to_integer(id)
-
-      {:noreply,
-       socket
-       |> assign(:selected_deployment_id, deployment_id)
-       |> assign(
-         :viewed_deployment,
-         Deployments.get_with_log!(socket.assigns.app, deployment_id)
-       )}
+      # Re-stream the history so the viewed row highlights without a reload.
+      {:noreply, refresh_deployments(socket, String.to_integer(id), false)}
     end
   end
 
@@ -129,7 +133,11 @@ defmodule CleatDeployWeb.AppLive.Deployments do
     >
       <div class="space-y-4">
         <Layout.shell_header app={@app} apps={@apps} />
-        <Layout.shell_hero app={@app} deploying?={@deploying?} />
+        <Layout.shell_hero
+          app={@app}
+          deploying?={@deploying?}
+          confirming_cancel?={@confirming_cancel?}
+        />
         <Layout.shell_info_tiles app={@app} memory={@app_memory} />
 
         <div id="app-detail-tabs" class="paas-card overflow-hidden">
@@ -229,6 +237,11 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                           type="button"
                           phx-click="view_deploy_log"
                           phx-value-id={deployment.id}
+                          aria-pressed={
+                            to_string(
+                              @viewed_deployment != nil and @viewed_deployment.id == deployment.id
+                            )
+                          }
                           class={[
                             "rounded border px-2 py-0.5 font-mono text-[10px] transition-colors",
                             @viewed_deployment && @viewed_deployment.id == deployment.id &&
