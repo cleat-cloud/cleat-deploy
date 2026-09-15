@@ -34,11 +34,20 @@ defmodule CleatDeploy.Workers.DeployWorker do
          {:ok, _success} <- Deployments.mark_success(running, message) do
       :ok
     else
-      {:error, reason} ->
-        deployment = Deployments.get_deployment!(running.id)
-        _ = Deployments.mark_failed(deployment, format_error(reason))
-        {:error, reason}
+      {:error, reason} -> fail(running, reason)
     end
+  rescue
+    error -> fail(running, Exception.message(error))
+  catch
+    kind, reason -> fail(running, "#{kind}: #{inspect(reason)}")
+  end
+
+  # A crashed worker must never leave the deployment in `:running` — that row
+  # blocks every deploy of every app on the same server.
+  defp fail(running, reason) do
+    deployment = Deployments.get_deployment!(running.id)
+    _ = Deployments.mark_failed(deployment, format_error(reason))
+    {:error, reason}
   end
 
   defp runner do

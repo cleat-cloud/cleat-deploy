@@ -44,6 +44,32 @@ defmodule CleatDeploy.Workers.DeployWorkerTest do
     assert deployment.status == :failed
   end
 
+  test "marks deployment failed when the runner raises", %{app: app} do
+    expect(RunnerMock, :deploy, fn _deployment -> raise "cloak blew up" end)
+
+    {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "abc123"})
+
+    assert {:error, "cloak blew up"} =
+             perform_job(DeployWorker, %{"deployment_id" => deployment.id})
+
+    deployment = Deployments.get_deployment!(deployment.id)
+    assert deployment.status == :failed
+    assert deployment.log =~ "cloak blew up"
+  end
+
+  test "marks deployment failed when the runner exits", %{app: app} do
+    expect(RunnerMock, :deploy, fn _deployment -> exit(:timeout) end)
+
+    {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "abc123"})
+
+    assert {:error, "exit: :timeout"} =
+             perform_job(DeployWorker, %{"deployment_id" => deployment.id})
+
+    deployment = Deployments.get_deployment!(deployment.id)
+    assert deployment.status == :failed
+    assert deployment.log =~ "exit: :timeout"
+  end
+
   test "snoozes when another deploy is already running on the same server", %{app: app} do
     {:ok, first} = Deployments.create_deployment(app, %{git_sha: "first"})
     {:ok, _} = Deployments.mark_running(first)
