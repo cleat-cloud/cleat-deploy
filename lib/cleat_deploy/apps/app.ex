@@ -48,12 +48,13 @@ defmodule CleatDeploy.Apps.App do
       :server_id,
       :tenant_id
     ])
-    |> validate_required([:name, :slug, :github_repo, :host, :server_id, :tenant_id])
+    |> validate_required([:name, :slug, :host, :server_id, :tenant_id])
     |> cast_runtime_packages()
     |> put_runtime_packages_text()
     |> validate_branch()
-    |> validate_format(:github_repo, ~r/^[^\/]+\/[^\/]+$/, message: "must be owner/repo")
     |> validate_inclusion(:runtime, ["phoenix", "golang", "static"])
+    |> put_github_repo_default()
+    |> validate_repo()
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
     |> unique_constraint(:slug, name: :apps_tenant_id_slug_index)
     |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_index)
@@ -123,6 +124,33 @@ defmodule CleatDeploy.Apps.App do
       release_name: release_name(app.slug),
       env_file: "/etc/#{basename}/env"
     }
+  end
+
+  # Static apps can exist without a git repo (git-less `cleat drop` deploys).
+  # The column is NOT NULL, so a blank repo is stored as "".
+  defp put_github_repo_default(changeset) do
+    if get_field(changeset, :runtime) == "static" and
+         get_field(changeset, :github_repo) in [nil, ""] do
+      put_change(changeset, :github_repo, "")
+    else
+      changeset
+    end
+  end
+
+  defp validate_repo(changeset) do
+    case get_field(changeset, :github_repo) do
+      blank when blank in [nil, ""] ->
+        if get_field(changeset, :runtime) == "static" do
+          changeset
+        else
+          add_error(changeset, :github_repo, "can't be blank")
+        end
+
+      _repo ->
+        validate_format(changeset, :github_repo, ~r/^[^\/]+\/[^\/]+$/,
+          message: "must be owner/repo"
+        )
+    end
   end
 
   defp put_deploy_defaults(changeset) do

@@ -74,6 +74,37 @@ defmodule CleatDeploy.Deployments do
     |> Oban.insert()
   end
 
+  @doc """
+  Enqueues a git-less "drop" deploy from an uploaded artifact.
+  """
+  def enqueue_drop(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
+      when tenant_id == tenant.id do
+    enqueue_drop(app, attrs)
+  end
+
+  def enqueue_drop(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
+
+  def enqueue_drop(%App{} = app, attrs) do
+    attrs =
+      attrs
+      |> Map.new()
+      |> Map.put_new(:triggered_by, "drop")
+      |> Map.put_new(:git_sha, "drop")
+      |> Map.put(:app_id, app.id)
+
+    with {:ok, deployment} <- create_drop_deployment(attrs),
+         {:ok, job} <- insert_deploy_job(app, deployment) do
+      {:ok, deployment, job}
+    end
+  end
+
+  defp create_drop_deployment(attrs) do
+    %Deployment{}
+    |> Deployment.drop_changeset(attrs)
+    |> Repo.insert()
+    |> broadcast_change()
+  end
+
   def get_deployment!(id), do: Repo.get!(Deployment, id) |> Repo.preload(:app)
 
   def get_with_log!(id), do: Repo.get!(Deployment, id)

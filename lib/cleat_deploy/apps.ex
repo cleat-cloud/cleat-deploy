@@ -140,6 +140,10 @@ defmodule CleatDeploy.Apps do
 
   Returns `{status, app}` where status is `:synced`, `:no_token`, or `{:error, message}`.
   """
+  def sync_github_webhook(%App{github_repo: repo} = app) when repo in [nil, ""] do
+    {:skipped, app}
+  end
+
   def sync_github_webhook(%App{} = app) do
     case Github.ensure_webhook(app) do
       :ok ->

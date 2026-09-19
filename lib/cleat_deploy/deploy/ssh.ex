@@ -168,7 +168,73 @@ defmodule CleatDeploy.Deploy.Ssh do
 
   defp remote_build(remote_tar, key_path, target, server, app, config, sha, runtime, work_dir) do
     script = remote_build_script(server, app, config, sha, remote_tar, runtime, work_dir)
-    script_path = Path.join(System.tmp_dir!(), "cleat_deploy_remote_#{sha}.sh")
+
+    run_remote_script(script, key_path, target, "remote build", sha)
+  end
+
+  @doc """
+  Publishes a git-less drop: uploads the stored artifact and serves its contents.
+  """
+  def run_drop(deployment, app, server) do
+    config = CleatDeploy.Apps.App.deploy_config(app)
+    manifest = AppManifest.resolve(nil, app)
+    artifact = deployment.artifact_path
+
+    with :ok <- ensure_commands(["ssh", "scp"]),
+         :ok <- ensure_artifact(artifact),
+         {:ok, key_path} <- write_temp_key(server) do
+      try do
+        sha = short_sha(deployment.git_sha)
+        host_ip = CleatDeploy.Deploy.Target.ssh_host_ip(app, server)
+        _ = CleatDeploy.Deploy.Target.sync_server_host_ip(server, host_ip)
+        target = "#{server.ssh_user}@#{host_ip}"
+        remote_tar = "/tmp/cleat_drop_#{sha}_#{:erlang.unique_integer([:positive])}.tar.gz"
+        target_note = target_log(server.host_ip, host_ip, app.host)
+
+        with {:ok, upload_out} <- scp(artifact, remote_tar, key_path, target) do
+          script = Static.remote_drop_script(app, config, sha, remote_tar, manifest)
+
+          case run_remote_script(script, key_path, target, "remote publish", sha) do
+            {:ok, build_out} ->
+              _ = File.rm(artifact)
+
+              log =
+                [
+                  "==> Publishing drop for #{app.slug}",
+                  target_note,
+                  "==> Uploading artifact to #{target}",
+                  trim(upload_out),
+                  "==> Publishing on #{server.provider || "lightsail"} VM",
+                  trim(build_out),
+                  "==> Deployment successful — live at https://#{app.host}"
+                ]
+                |> Enum.reject(&(&1 == ""))
+                |> Enum.join("\n")
+
+              {:ok, log}
+
+            {:error, message} ->
+              {:error, message}
+          end
+        end
+      after
+        File.rm(key_path)
+      end
+    end
+  end
+
+  defp ensure_artifact(path) when is_binary(path) do
+    if File.exists?(path), do: :ok, else: {:error, "Drop artifact not found: #{path}"}
+  end
+
+  defp ensure_artifact(_), do: {:error, "Drop artifact missing"}
+
+  defp run_remote_script(script, key_path, target, label, sha) do
+    script_path =
+      Path.join(
+        System.tmp_dir!(),
+        "cleat_deploy_remote_#{sha}_#{:erlang.unique_integer([:positive])}.sh"
+      )
 
     try do
       :ok = File.write!(script_path, script)
@@ -182,7 +248,7 @@ defmodule CleatDeploy.Deploy.Ssh do
              stderr_to_stdout: true
            ) do
         {output, 0} -> {:ok, output}
-        {output, _code} -> {:error, "remote build failed:\n#{output}"}
+        {output, _code} -> {:error, "#{label} failed:\n#{output}"}
       end
     after
       File.rm(script_path)
