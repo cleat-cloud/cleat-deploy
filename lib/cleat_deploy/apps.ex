@@ -179,6 +179,18 @@ defmodule CleatDeploy.Apps do
     )
   end
 
+  @doc """
+  Deletes an environment variable from an app.
+
+  Returns `:ok` or `{:error, :not_found}` when the key does not exist.
+  """
+  def delete_env_var(%App{} = app, key) when is_binary(key) do
+    {count, _} =
+      Repo.delete_all(from v in AppEnvVar, where: v.app_id == ^app.id and v.key == ^key)
+
+    if count > 0, do: :ok, else: {:error, :not_found}
+  end
+
   def env_map(%App{} = app) do
     vars =
       app
