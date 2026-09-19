@@ -172,6 +172,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
 
   defp parse_runtime("golang"), do: "golang"
   defp parse_runtime("phoenix"), do: "phoenix"
+  defp parse_runtime("static"), do: "static"
   defp parse_runtime(_), do: nil
 
   defp parse_binaries(list) when is_list(list) do
