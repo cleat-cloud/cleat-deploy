@@ -63,6 +63,8 @@ defmodule CleatDeployWeb.Router do
     post "/servers", ServerController, :create
     delete "/servers/:id", ServerController, :delete
     post "/servers/:id/sync", ServerController, :sync
+    post "/servers/:id/start", ServerController, :start
+    post "/servers/:id/stop", ServerController, :stop
 
     post "/apps/:app_id/deployments", DeploymentController, :create
     post "/apps/:app_id/cancel", DeploymentController, :cancel

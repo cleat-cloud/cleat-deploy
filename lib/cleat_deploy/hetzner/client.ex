@@ -42,6 +42,16 @@ defmodule CleatDeploy.Hetzner.Client do
   end
 
   @impl true
+  def power(instance_name, action) when action in [:start, :stop] do
+    endpoint = if action == :start, do: "poweron", else: "poweroff"
+
+    with {:ok, server_id} <- server_id_by_name(instance_name),
+         {:ok, _} <- request(:post, "/servers/#{server_id}/actions/#{endpoint}", %{}) do
+      :ok
+    end
+  end
+
+  @impl true
   def get_metrics(_location, instance_name, start_at, end_at) do
     params = [
       start: DateTime.to_iso8601(start_at),

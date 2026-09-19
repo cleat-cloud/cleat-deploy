@@ -47,6 +47,9 @@ defmodule CleatDeploy.Hetzner.Stub do
   end
 
   @impl true
+  def power(_instance_name, action) when action in [:start, :stop], do: :ok
+
+  @impl true
   def create_instance(attrs) when is_map(attrs) do
     attrs =
       Map.new(attrs, fn

@@ -24,6 +24,8 @@ defmodule CleatDeploy.Hetzner do
   @callback get_metrics(location(), instance_name(), DateTime.t(), DateTime.t()) ::
               {:ok, map()} | {:error, term()}
 
+  @callback power(instance_name(), :start | :stop) :: :ok | {:error, term()}
+
   def client do
     Application.fetch_env!(:cleat_deploy, :hetzner_client)
   end
@@ -50,5 +52,9 @@ defmodule CleatDeploy.Hetzner do
 
   def get_metrics(location, instance_name, start_at, end_at) do
     client().get_metrics(location, instance_name, start_at, end_at)
+  end
+
+  def power(instance_name, action) when action in [:start, :stop] do
+    client().power(instance_name, action)
   end
 end
