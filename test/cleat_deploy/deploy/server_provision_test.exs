@@ -81,6 +81,17 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "systemctl reload caddy"
   end
 
+  test "IP hosts get an http:// site to avoid a broken HTTPS redirect", %{app: app} do
+    app = %{app | host: "203.0.113.10"}
+    config = App.deploy_config(app)
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    assert script =~ "http://203.0.113.10 {"
+    assert script =~ "grep -Fq 'http://203.0.113.10 {'"
+    assert script =~ "reverse_proxy 127.0.0.1:4004"
+  end
+
   test "provision_script replaces caddyfile when manifest requests replace", %{
     app: app,
     config: config
