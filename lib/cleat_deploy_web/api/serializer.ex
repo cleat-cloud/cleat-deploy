@@ -3,6 +3,7 @@ defmodule CleatDeployWeb.Api.Serializer do
 
   alias CleatDeploy.Accounts.{ApiToken, Scope, Tenant, User}
   alias CleatDeploy.Apps.App
+  alias CleatDeploy.AWS.Lightsail.Bundle
   alias CleatDeploy.Deployments.Deployment
   alias CleatDeploy.Servers.Server
 
@@ -84,6 +85,17 @@ defmodule CleatDeployWeb.Api.Serializer do
     else
       base
     end
+  end
+
+  def bundle(%Bundle{} = bundle) do
+    %{
+      bundle_id: bundle.bundle_id,
+      bundle_name: bundle.bundle_name,
+      cpu_count: bundle.cpu_count,
+      ram_mb: bundle.ram_mb,
+      disk_gb: bundle.disk_gb,
+      monthly_price_usd: decimal(bundle.monthly_price_usd)
+    }
   end
 
   defp server_ref(%App{server: %Server{} = server}), do: %{id: server.id, name: server.name}

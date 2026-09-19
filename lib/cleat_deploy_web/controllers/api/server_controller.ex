@@ -57,6 +57,60 @@ defmodule CleatDeployWeb.Api.ServerController do
     end
   end
 
+  def provision(conn, params) do
+    case Servers.provision_server(conn.assigns.current_scope, params) do
+      {:ok, server} ->
+        conn
+        |> put_status(:created)
+        |> json(%{data: Serializer.server(server)})
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "invalid_request", details: errors(changeset)})
+
+      {:error, reason} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "provision_failed", message: format_reason(reason)})
+    end
+  end
+
+  def resize_options(conn, %{"id" => id}) do
+    scope = conn.assigns.current_scope
+
+    case fetch_server(scope, id) do
+      {:ok, server} ->
+        options = Servers.list_resize_options(scope, server)
+        json(conn, %{data: Enum.map(options, &Serializer.bundle/1)})
+
+      :error ->
+        not_found(conn)
+    end
+  end
+
+  def resize(conn, %{"id" => id} = params) do
+    scope = conn.assigns.current_scope
+
+    case fetch_server(scope, id) do
+      {:ok, server} -> do_resize(conn, scope, server, params["bundle_id"])
+      :error -> not_found(conn)
+    end
+  end
+
+  defp do_resize(conn, scope, server, bundle_id) when is_binary(bundle_id) and bundle_id != "" do
+    case Servers.resize_bundle(scope, server, bundle_id) do
+      {:ok, updated} -> json(conn, %{data: Serializer.server(updated)})
+      {:error, reason} -> sync_error(conn, reason)
+    end
+  end
+
+  defp do_resize(conn, _scope, _server, _bundle_id) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: "missing_bundle_id"})
+  end
+
   def start(conn, %{"id" => id}), do: power(conn, id, :start)
   def stop(conn, %{"id" => id}), do: power(conn, id, :stop)
 

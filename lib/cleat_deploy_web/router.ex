@@ -43,6 +43,7 @@ defmodule CleatDeployWeb.Router do
 
     get "/servers", ServerController, :index
     get "/servers/:id", ServerController, :show
+    get "/servers/:id/resize-options", ServerController, :resize_options
 
     get "/apps", AppController, :index
     get "/apps/:id", AppController, :show
@@ -61,10 +62,12 @@ defmodule CleatDeployWeb.Router do
     delete "/apps/:id", AppController, :delete
 
     post "/servers", ServerController, :create
+    post "/servers/provision", ServerController, :provision
     delete "/servers/:id", ServerController, :delete
     post "/servers/:id/sync", ServerController, :sync
     post "/servers/:id/start", ServerController, :start
     post "/servers/:id/stop", ServerController, :stop
+    post "/servers/:id/resize", ServerController, :resize
 
     post "/apps/:app_id/deployments", DeploymentController, :create
     post "/apps/:app_id/cancel", DeploymentController, :cancel
