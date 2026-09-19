@@ -48,6 +48,7 @@ defmodule CleatDeploy.Apps.App do
       :server_id,
       :tenant_id
     ])
+    |> update_change(:host, &normalize_host/1)
     |> validate_required([:name, :slug, :host, :server_id, :tenant_id])
     |> cast_runtime_packages()
     |> put_runtime_packages_text()
@@ -55,9 +56,9 @@ defmodule CleatDeploy.Apps.App do
     |> validate_inclusion(:runtime, ["phoenix", "golang", "static"])
     |> put_github_repo_default()
     |> validate_repo()
-    |> validate_number(:port, greater_than: 0, less_than: 65_536)
     |> unique_constraint(:slug, name: :apps_tenant_id_slug_index)
     |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_index)
+    |> unique_constraint(:host, name: :apps_server_id_host_index)
     |> foreign_key_constraint(:server_id)
     |> put_default_webhook_secret()
     |> put_deploy_defaults()
@@ -183,6 +184,13 @@ defmodule CleatDeploy.Apps.App do
     |> validate_format(:branch, ~r/^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._\/-]*$/,
       message: "must be a git branch name"
     )
+  end
+
+  defp normalize_host(host) when is_binary(host) do
+    host
+    |> String.trim()
+    |> String.downcase()
+    |> String.trim_trailing(".")
   end
 
   defp normalize_branch(changeset) do
