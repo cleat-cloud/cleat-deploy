@@ -9,6 +9,7 @@ defmodule CleatDeploy.Deploy.Ssh do
   alias CleatDeploy.Deploy.Golang
   alias CleatDeploy.Deploy.Runtime
   alias CleatDeploy.Deploy.ServerProvision
+  alias CleatDeploy.Deploy.Static
   alias CleatDeploy.Repo
 
   @tar_excludes ~w(_build deps node_modules .git tmp priv/static/assets)
@@ -254,10 +255,15 @@ defmodule CleatDeploy.Deploy.Ssh do
       |> apply_manifest_config(manifest)
       |> Map.put(:ssh_user, server.ssh_user)
 
-    if Runtime.kind(work_dir, app) == :golang or manifest.runtime == "golang" do
-      Golang.remote_build_script(server, app, config, sha, remote_tar, manifest)
-    else
-      phoenix_remote_build_script(server, app, config, sha, remote_tar, runtime, manifest)
+    cond do
+      manifest.runtime == "static" ->
+        Static.remote_build_script(server, app, config, sha, remote_tar, manifest)
+
+      Runtime.kind(work_dir, app) == :golang or manifest.runtime == "golang" ->
+        Golang.remote_build_script(server, app, config, sha, remote_tar, manifest)
+
+      true ->
+        phoenix_remote_build_script(server, app, config, sha, remote_tar, runtime, manifest)
     end
   end
 

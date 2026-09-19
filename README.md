@@ -11,7 +11,7 @@ Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and w
 ## Features
 
 - **Servers** — register Hetzner Cloud or Lightsail VMs (IP, location, SSH user)
-- **Apps** — Phoenix OTP releases and Go/Cais binaries (detected from `mix.exs` / `go.mod`)
+- **Apps** — Phoenix OTP releases, Go/Cais binaries, and static sites (detected from `mix.exs` / `go.mod` / `index.html`)
 - **Deployments** — queued → running → success/failed, with build logs
 - **GitHub webhooks** — HMAC-verified `POST /webhooks/github`
 - **Oban queue** — background deploy worker with Mox-tested runner behaviour
@@ -67,6 +67,14 @@ mix phx.server
 1. Register a server with its **SSH private key (PEM)**
 2. Register an app (Trip Planner defaults: `trip_planner_ia`, `/opt/trip_planner_ia`)
 3. Click **Deploy now** — clones repo, builds on the VM, migrates, restarts systemd
+
+### Static sites
+
+Set `runtime: "static"` (or put `"runtime": "static"` in `.cleat_deploy/deploy.json`).
+The panel runs an optional `npm ci && npm run build`, then publishes the output
+directory (`dist`, `build`, `public`, `_site`, `out`, or `build_dir` from the
+manifest) to `/var/www/<slug>/current`. Caddy serves it with `file_server` and
+an SPA fallback (`try_files {path} /index.html`); there is no systemd unit.
 
 One-off test script (no UI):
 

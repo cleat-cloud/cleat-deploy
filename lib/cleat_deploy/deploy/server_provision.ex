@@ -9,6 +9,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     golang_provision_script(app, config, manifest)
   end
 
+  def provision_script(%App{} = app, config, %AppManifest{runtime: "static"} = manifest) do
+    static_provision_script(app, config, manifest)
+  end
+
   def provision_script(%App{} = app, config, %AppManifest{} = manifest) do
     data_dir = "/var/lib/#{Path.basename(config.release_path)}"
     env_dir = Path.dirname(config.env_file)
@@ -119,6 +123,17 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   defp golang_unit_description(name, "worker"), do: "#{name} worker (Cais jobs)"
   defp golang_unit_description(name, bin), do: "#{name} #{bin}"
 
+  defp static_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
+    caddy_script = caddy_provision_script(app, manifest)
+
+    """
+    log "Provisioning static site #{app.host}"
+    sudo mkdir -p #{shell_escape(config.release_path)}
+
+    #{caddy_script}
+    """
+  end
+
   defp caddy_provision_script(%App{}, %AppManifest{caddy_mode: "replace", caddyfile: path})
        when is_binary(path) and path != "" do
     """
@@ -131,6 +146,20 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     """
   end
 
+  defp caddy_provision_script(%App{} = app, %AppManifest{runtime: "static"}) do
+    caddy_site = """
+
+    #{app.host} {
+      encode gzip
+      root * #{static_site_root(app)}
+      try_files {path} /index.html
+      file_server
+    }
+    """
+
+    append_caddy_site(app, caddy_site)
+  end
+
   defp caddy_provision_script(%App{} = app, %AppManifest{}) do
     caddy_site = """
 
@@ -140,6 +169,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     }
     """
 
+    append_caddy_site(app, caddy_site)
+  end
+
+  defp append_caddy_site(%App{} = app, caddy_site) do
     """
     if ! sudo grep -Fq '#{app.host} {' /etc/caddy/Caddyfile; then
       log "Adding Caddy site #{app.host}"
@@ -148,6 +181,13 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     PAAS_CADDY_SITE
     fi
     """
+  end
+
+  defp static_site_root(%App{} = app) do
+    app
+    |> App.deploy_config()
+    |> Map.fetch!(:release_path)
+    |> Kernel.<>("/current")
   end
 
   @doc false
