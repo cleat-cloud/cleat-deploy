@@ -32,7 +32,7 @@ defmodule CleatDeploy.TenancyFixtures do
       name: "App #{System.unique_integer()}",
       slug: "app-#{System.unique_integer()}",
       github_repo: "owner/repo-#{System.unique_integer()}",
-      host: "example.com",
+      host: "app-#{System.unique_integer([:positive])}.example.com",
       server_id: server.id
     }
 
