@@ -73,8 +73,10 @@ mix phx.server
 Set `runtime: "static"` (or put `"runtime": "static"` in `.cleat_deploy/deploy.json`).
 The panel runs an optional `npm ci && npm run build`, then publishes the output
 directory (`dist`, `build`, `public`, `_site`, `out`, or `build_dir` from the
-manifest) to `/var/www/<slug>/current`. Caddy serves it with `file_server` and
+manifest; if none exist, the repo root when it has an `index.html`) to
+`/var/www/<slug>/current`. Caddy serves it with `file_server` and
 an SPA fallback (`try_files {path} /index.html`); there is no systemd unit.
+Plain HTML/CSS/JS folders need no build and work as-is.
 
 One-off test script (no UI):
 
