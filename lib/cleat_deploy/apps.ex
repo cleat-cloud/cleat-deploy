@@ -62,6 +62,14 @@ defmodule CleatDeploy.Apps do
     Repo.get_by(App, github_repo: github_repo)
   end
 
+  def get_app_by_slug!(%Scope{tenant: tenant}, slug) when is_binary(slug) do
+    Repo.one!(
+      from a in App,
+        where: a.tenant_id == ^tenant.id and a.slug == ^slug,
+        preload: [:server, :env_vars]
+    )
+  end
+
   def list_apps_by_repo(github_repo) when is_binary(github_repo) do
     Repo.all(from a in App, where: a.github_repo == ^github_repo)
   end

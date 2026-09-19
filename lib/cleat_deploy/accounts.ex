@@ -6,7 +6,15 @@ defmodule CleatDeploy.Accounts do
   import Ecto.Query, warn: false
   alias CleatDeploy.Repo
 
-  alias CleatDeploy.Accounts.{Scope, Tenant, TenantMembership, User, UserNotifier, UserToken}
+  alias CleatDeploy.Accounts.{
+    ApiToken,
+    Scope,
+    Tenant,
+    TenantMembership,
+    User,
+    UserNotifier,
+    UserToken
+  }
 
   ## Database getters
 
@@ -413,6 +421,98 @@ defmodule CleatDeploy.Accounts do
     token = normalize_session_token(token)
     Repo.delete_all(from(UserToken, where: [token: ^token, context: "session"]))
     :ok
+  end
+
+  ## API tokens
+
+  @doc """
+  Creates a personal access token for the user in the given tenant.
+
+  Returns `{:ok, raw_token, %ApiToken{}}`. The raw token is only returned here
+  and never stored, so it cannot be recovered later.
+  """
+  def create_api_token(%User{} = user, %Tenant{} = tenant, attrs \\ %{}) do
+    name = attrs |> Map.new() |> string_key_get("name")
+
+    {raw, token} = ApiToken.build(user, tenant, name)
+
+    case Repo.insert(token) do
+      {:ok, token} -> {:ok, raw, token}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  @doc """
+  Lists the user's personal access tokens (without the raw value).
+  """
+  def list_api_tokens(%User{} = user) do
+    Repo.all(
+      from t in ApiToken,
+        where: t.user_id == ^user.id,
+        order_by: [desc: t.inserted_at, desc: t.id]
+    )
+  end
+
+  @doc """
+  Revokes one of the user's tokens. Returns `:ok` or `{:error, :not_found}`.
+  """
+  def revoke_api_token(%User{} = user, id) do
+    case Repo.get_by(ApiToken, id: id, user_id: user.id) do
+      nil ->
+        {:error, :not_found}
+
+      token ->
+        case Repo.delete(token) do
+          {:ok, _} -> :ok
+          {:error, changeset} -> {:error, changeset}
+        end
+    end
+  end
+
+  @doc """
+  Resolves a raw bearer token to `{%Scope{}, %ApiToken{}}`.
+
+  Returns `nil` when the token is unknown, revoked, or the user no longer
+  belongs to the token's tenant. Touches `last_used_at` on success.
+  """
+  def get_scope_by_api_token(raw) when is_binary(raw) do
+    case Repo.one(ApiToken.verify_query(raw)) do
+      nil ->
+        nil
+
+      %ApiToken{} = token ->
+        with %User{} = user <- Repo.get(User, token.user_id),
+             %Tenant{} = tenant <- Repo.get(Tenant, token.tenant_id),
+             role when is_binary(role) <- membership_role(user.id, tenant.id) do
+          _ = touch_api_token(token)
+          {Scope.for_user(user, tenant, role), token}
+        else
+          _ -> nil
+        end
+    end
+  end
+
+  def get_scope_by_api_token(_), do: nil
+
+  defp membership_role(user_id, tenant_id) do
+    Repo.one(
+      from m in TenantMembership,
+        where: m.user_id == ^user_id and m.tenant_id == ^tenant_id,
+        select: m.role
+    )
+  end
+
+  defp touch_api_token(%ApiToken{id: id}) do
+    Repo.update_all(
+      from(t in ApiToken, where: t.id == ^id),
+      set: [last_used_at: DateTime.utc_now(:second)]
+    )
+  end
+
+  defp string_key_get(map, key) do
+    Map.get(map, key) || Map.get(map, String.to_existing_atom(key))
+  rescue
+    ArgumentError -> Map.get(map, key)
   end
 
   ## Token helper

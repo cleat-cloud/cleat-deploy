@@ -45,12 +45,33 @@ defmodule CleatDeploy.Deployments do
 
   def enqueue(%App{} = app, attrs) do
     with {:ok, deployment} <- create_deployment(app, attrs),
-         {:ok, job} <-
-           %{deployment_id: deployment.id, server_id: app.server_id}
-           |> CleatDeploy.Workers.DeployWorker.new()
-           |> Oban.insert() do
+         {:ok, job} <- insert_deploy_job(app, deployment) do
       {:ok, job}
     end
+  end
+
+  @doc """
+  Like `enqueue/3` but also returns the created deployment, so API callers can
+  report its id and status.
+  """
+  def enqueue_deployment(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
+      when tenant_id == tenant.id do
+    enqueue_deployment(app, attrs)
+  end
+
+  def enqueue_deployment(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
+
+  def enqueue_deployment(%App{} = app, attrs) do
+    with {:ok, deployment} <- create_deployment(app, attrs),
+         {:ok, job} <- insert_deploy_job(app, deployment) do
+      {:ok, deployment, job}
+    end
+  end
+
+  defp insert_deploy_job(%App{} = app, %Deployment{} = deployment) do
+    %{deployment_id: deployment.id, server_id: app.server_id}
+    |> CleatDeploy.Workers.DeployWorker.new()
+    |> Oban.insert()
   end
 
   def get_deployment!(id), do: Repo.get!(Deployment, id) |> Repo.preload(:app)

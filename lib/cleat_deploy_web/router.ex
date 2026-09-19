@@ -17,8 +17,36 @@ defmodule CleatDeployWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :api_auth do
+    plug CleatDeployWeb.Plugs.ApiAuth
+  end
+
   pipeline :github_webhook do
     plug :accepts, ["json"]
+  end
+
+  scope "/api/v1", CleatDeployWeb.Api do
+    pipe_through :api
+
+    post "/auth/tokens", AuthController, :create
+  end
+
+  scope "/api/v1", CleatDeployWeb.Api do
+    pipe_through [:api, :api_auth]
+
+    get "/me", AuthController, :me
+    delete "/auth/tokens", AuthController, :delete
+
+    get "/servers", ServerController, :index
+    get "/servers/:id", ServerController, :show
+
+    get "/apps", AppController, :index
+    get "/apps/:id", AppController, :show
+    post "/apps", AppController, :create
+
+    get "/apps/:app_id/deployments", DeploymentController, :index
+    post "/apps/:app_id/deployments", DeploymentController, :create
+    get "/deployments/:id", DeploymentController, :show
   end
 
   scope "/webhooks", CleatDeployWeb do
