@@ -18,6 +18,8 @@ defmodule CleatDeploy.AWS.Lightsail do
 
   @callback change_bundle(region(), instance_name(), bundle_id()) :: :ok | {:error, term()}
 
+  @callback power(region(), instance_name(), :start | :stop) :: :ok | {:error, term()}
+
   def client do
     Application.fetch_env!(:cleat_deploy, :lightsail_client)
   end
@@ -36,5 +38,9 @@ defmodule CleatDeploy.AWS.Lightsail do
 
   def change_bundle(region, instance_name, bundle_id) do
     client().change_bundle(region, instance_name, bundle_id)
+  end
+
+  def power(region, instance_name, action) when action in [:start, :stop] do
+    client().power(region, instance_name, action)
   end
 end

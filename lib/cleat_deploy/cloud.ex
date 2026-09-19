@@ -67,6 +67,24 @@ defmodule CleatDeploy.Cloud do
     end
   end
 
+  @doc """
+  Powers a cloud instance on or off, then refreshes its specs.
+  """
+  def power(%Server{} = server, action) when action in [:start, :stop] do
+    with {:ok, name} <- instance_name(server),
+         :ok <- do_power(server, name, action) do
+      sync_specs(server)
+    end
+  end
+
+  defp do_power(%Server{} = server, name, action) do
+    if hetzner?(server) do
+      Hetzner.power(name, action)
+    else
+      Lightsail.power(server.region, name, action)
+    end
+  end
+
   def provider(%Server{provider: provider}) when is_binary(provider) and provider != "",
     do: provider
 

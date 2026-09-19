@@ -57,6 +57,24 @@ defmodule CleatDeployWeb.Api.ServerController do
     end
   end
 
+  def start(conn, %{"id" => id}), do: power(conn, id, :start)
+  def stop(conn, %{"id" => id}), do: power(conn, id, :stop)
+
+  defp power(conn, id, action) do
+    scope = conn.assigns.current_scope
+
+    case fetch_server(scope, id) do
+      {:ok, server} ->
+        case Servers.power(scope, server, action) do
+          {:ok, updated} -> json(conn, %{data: Serializer.server(updated)})
+          {:error, reason} -> sync_error(conn, reason)
+        end
+
+      :error ->
+        not_found(conn)
+    end
+  end
+
   defp delete_server(conn, scope, server) do
     case Servers.delete_server(scope, server) do
       {:ok, _server} ->

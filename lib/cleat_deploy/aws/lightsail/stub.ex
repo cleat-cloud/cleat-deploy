@@ -40,6 +40,9 @@ defmodule CleatDeploy.AWS.Lightsail.Stub do
     end
   end
 
+  @impl true
+  def power(_region, _instance_name, action) when action in [:start, :stop], do: :ok
+
   defp bundle_for_instance(instance_name) do
     case :ets.lookup(stub_table(), instance_name) do
       [{^instance_name, bundle_id}] -> bundle_id

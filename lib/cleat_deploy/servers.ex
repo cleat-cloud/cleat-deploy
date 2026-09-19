@@ -140,6 +140,16 @@ defmodule CleatDeploy.Servers do
     Cloud.resize_bundle(server, bundle_id)
   end
 
+  @doc """
+  Powers a server's cloud instance on or off and refreshes its specs.
+  """
+  def power(%Scope{tenant: tenant}, %Server{tenant_id: tenant_id} = server, action)
+      when tenant_id == tenant.id and action in [:start, :stop] do
+    Cloud.power(server, action)
+  end
+
+  def power(%Scope{}, %Server{}, _action), do: {:error, :unauthorized}
+
   def sync_inventory(%Scope{tenant: tenant} = scope) do
     servers = list_servers(scope)
     result = Cloud.sync_inventory(servers)

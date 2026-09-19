@@ -44,6 +44,16 @@ defmodule CleatDeploy.AWS.Lightsail.ExAwsClient do
     end
   end
 
+  @impl true
+  def power(region, instance_name, action) when action in [:start, :stop] do
+    action_name = if action == :start, do: "StartInstance", else: "StopInstance"
+
+    case request(region, action_name, %{instanceName: instance_name}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp request(region, action, params) do
     host = "lightsail.#{region}.amazonaws.com"
     url = "https://#{host}/"
