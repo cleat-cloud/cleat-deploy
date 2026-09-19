@@ -75,9 +75,11 @@ defmodule CleatDeploy.Apps.App do
   """
   def deploy_settings_changeset(app, attrs) do
     app
-    |> cast(attrs, [:branch, :auto_deploy], empty_values: [])
+    |> cast(attrs, [:branch, :auto_deploy, :host], empty_values: [])
+    |> update_change(:host, &normalize_host/1)
     |> validate_branch()
     |> validate_required([:auto_deploy])
+    |> unique_constraint(:host, name: :apps_server_id_host_index)
   end
 
   def release_name("trip-planner"), do: "trip_planner_ia"

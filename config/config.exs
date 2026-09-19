@@ -34,6 +34,9 @@ config :cleat_deploy, :auto_deploy_health_on_boot, true
 # Git-less "drop" uploads (CLEAT_DROPS_DIR / CLEAT_DROP_MAX_BYTES override at runtime).
 config :cleat_deploy, :drop_max_bytes, 52_428_800
 
+# Failed token requests allowed per IP+email per 5-minute window.
+config :cleat_deploy, :login_throttle_limit, 10
+
 config :cleat_deploy, Oban,
   repo: CleatDeploy.Repo,
   engine: Oban.Engines.Lite,

@@ -10,9 +10,22 @@ defmodule CleatDeployWeb.Api.AuthController do
 
   alias CleatDeploy.Accounts
   alias CleatDeploy.Accounts.User
+  alias CleatDeploy.LoginThrottle
   alias CleatDeployWeb.Api.Serializer
 
   def create(conn, params) do
+    case LoginThrottle.check(throttle_key(conn, params)) do
+      {:error, :rate_limited} ->
+        conn
+        |> put_status(429)
+        |> json(%{error: "rate_limited"})
+
+      :ok ->
+        do_create(conn, params)
+    end
+  end
+
+  defp do_create(conn, params) do
     with {:ok, email, password} <- credentials(params),
          %User{} = user <- Accounts.get_user_by_email_and_password(email, password),
          %{} = scope <- Accounts.ensure_scope_for_user(user),
@@ -51,6 +64,11 @@ defmodule CleatDeployWeb.Api.AuthController do
 
   def me(conn, _params) do
     json(conn, %{data: Serializer.scope(conn.assigns.current_scope)})
+  end
+
+  defp throttle_key(conn, params) do
+    ip = conn.remote_ip |> :inet.ntoa() |> to_string()
+    ip <> "|" <> to_string(params["email"] || "")
   end
 
   defp credentials(params) do
