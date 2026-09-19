@@ -21,6 +21,9 @@ defmodule CleatDeployWeb.Api.EnvTest do
 
     data = json_response(conn, 200)["data"]
     assert Enum.any?(data, &(&1["key"] == "DATABASE_URL" and &1["value"] == "postgres://x"))
+
+    assert data |> hd() |> Map.keys() |> Enum.sort() ==
+             CleatDeployWeb.Api.Contract.keys("env_var") |> Enum.sort()
   end
 
   test "sensitive values are masked unless reveal=true", %{token: token, app: app} do

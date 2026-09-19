@@ -59,6 +59,24 @@ defmodule CleatDeployWeb.Api.DeploymentController do
     end
   end
 
+  def cancel(conn, %{"app_id" => app_id}) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- resolve_app(scope, app_id) do
+      case Deployments.cancel(scope, app) do
+        {:ok, deployment} ->
+          json(conn, %{data: Serializer.deployment(deployment, log: true)})
+
+        {:error, :no_active_deployment} ->
+          conn
+          |> put_status(:conflict)
+          |> json(%{error: "no_active_deployment"})
+      end
+    else
+      :error -> not_found(conn)
+    end
+  end
+
   defp fetch_deployment(scope, id) do
     with {int, ""} <- Integer.parse(id) do
       deployment = Deployments.get_deployment!(int)

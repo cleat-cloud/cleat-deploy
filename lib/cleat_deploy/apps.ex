@@ -113,6 +113,18 @@ defmodule CleatDeploy.Apps do
   def update_app(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
 
   @doc """
+  Updates deploy settings (`:branch` and `:auto_deploy`). Other keys are ignored.
+  """
+  def update_app_settings(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
+      when tenant_id == tenant.id do
+    app
+    |> App.deploy_settings_changeset(Map.take(stringify_keys(attrs), ["branch", "auto_deploy"]))
+    |> Repo.update()
+  end
+
+  def update_app_settings(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
+
+  @doc """
   Deletes an app and its deployments/env vars. Best-effort removes the GitHub webhook.
   """
   def delete_app(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app)

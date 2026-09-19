@@ -43,7 +43,7 @@ if [[ -n "${SYNC_PAAS_ENV:-}" ]]; then
   : "${DEPLOY_SSH_KEY:?Set DEPLOY_SSH_KEY}"
 
   echo "==> Syncing catalog S3 env vars to panel and redeploying"
-  PANEL_BIN="${PANEL_BIN:-/opt/cleat_deploy/releases/build/bin/cleat_deploy}"
+  PANEL_BIN="${PANEL_BIN:-/opt/cleat_deploy/current/bin/cleat_deploy}"
 
   ssh -i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=no "ubuntu@${DEPLOY_IP}" \
     "CATALOGO_S3_BUCKET='${BUCKET}' \

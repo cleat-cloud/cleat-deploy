@@ -25,6 +25,9 @@ defmodule CleatDeployWeb.Api.ApiTest do
     assert String.starts_with?(body["token"], "cleat_")
     assert body["tenant"]["id"] == scope.tenant.id
     assert body["user"]["email"] == scope.user.email
+
+    assert body |> Map.keys() |> Enum.sort() ==
+             CleatDeployWeb.Api.Contract.keys("token") |> Enum.sort()
   end
 
   test "POST /api/v1/auth/tokens rejects bad credentials" do
@@ -108,11 +111,43 @@ defmodule CleatDeployWeb.Api.ApiTest do
     assert json_response(conn, 401)["error"] == "invalid_or_revoked_token"
   end
 
+  test "PATCH /api/v1/apps/:id updates branch and auto-deploy", %{token: token, app: app} do
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_patch(~p"/api/v1/apps/#{app.id}", %{branch: "develop", auto_deploy: false})
+
+    data = json_response(conn, 200)["data"]
+    assert data["branch"] == "develop"
+    assert data["auto_deploy"] == false
+  end
+
+  test "POST /api/v1/apps/:app/cancel cancels the active deploy", %{token: token, app: app} do
+    {:ok, deployment, _job} = Deployments.enqueue_deployment(app, %{git_sha: "manual"})
+
+    conn = build_conn() |> auth(token) |> json_post(~p"/api/v1/apps/#{app.id}/cancel", %{})
+    data = json_response(conn, 200)["data"]
+
+    assert data["id"] == deployment.id
+    assert data["status"] == "failed"
+  end
+
+  test "POST /api/v1/apps/:app/cancel is 409 when nothing is active", %{token: token, app: app} do
+    conn = build_conn() |> auth(token) |> json_post(~p"/api/v1/apps/#{app.id}/cancel", %{})
+    assert json_response(conn, 409)["error"] == "no_active_deployment"
+  end
+
   defp auth(conn, token), do: put_req_header(conn, "authorization", "Bearer #{token}")
 
   defp json_post(conn, path, body) do
     conn
     |> put_req_header("content-type", "application/json")
     |> post(path, Jason.encode!(body))
+  end
+
+  defp json_patch(conn, path, body) do
+    conn
+    |> put_req_header("content-type", "application/json")
+    |> patch(path, Jason.encode!(body))
   end
 end

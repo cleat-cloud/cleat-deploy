@@ -1,0 +1,87 @@
+{
+  "app": [
+    "id",
+    "name",
+    "slug",
+    "github_repo",
+    "branch",
+    "host",
+    "port",
+    "systemd_unit",
+    "release_path",
+    "auto_deploy",
+    "runtime",
+    "runtime_apt_packages",
+    "server",
+    "inserted_at"
+  ],
+  "deployment": [
+    "id",
+    "app_id",
+    "git_sha",
+    "git_ref",
+    "status",
+    "triggered_by",
+    "started_at",
+    "finished_at",
+    "inserted_at",
+    "updated_at"
+  ],
+  "deployment_log": [
+    "id",
+    "app_id",
+    "git_sha",
+    "git_ref",
+    "status",
+    "triggered_by",
+    "started_at",
+    "finished_at",
+    "inserted_at",
+    "updated_at",
+    "log"
+  ],
+  "env_var": [
+    "key",
+    "value",
+    "sensitive",
+    "revealed"
+  ],
+  "me": [
+    "user",
+    "tenant",
+    "role"
+  ],
+  "server": [
+    "id",
+    "name",
+    "host_ip",
+    "ssh_user",
+    "region",
+    "provider",
+    "deploy_mode",
+    "instance_status",
+    "bundle_id",
+    "bundle_name",
+    "cpu_count",
+    "ram_mb",
+    "disk_gb",
+    "monthly_price_usd",
+    "specs_synced_at",
+    "inserted_at"
+  ],
+  "tenant": [
+    "id",
+    "name",
+    "slug"
+  ],
+  "token": [
+    "token",
+    "token_id",
+    "user",
+    "tenant"
+  ],
+  "user": [
+    "id",
+    "email"
+  ]
+}
