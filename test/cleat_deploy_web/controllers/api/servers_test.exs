@@ -3,9 +3,11 @@ defmodule CleatDeployWeb.Api.ServersTest do
 
   import Mox
 
-  alias CleatDeploy.AWS.Lightsail.{InstanceSpec}
+  alias CleatDeploy.AWS.Lightsail.InstanceSpec
   alias CleatDeploy.Accounts
   alias CleatDeploy.AWS.LightsailMock
+  alias CleatDeploy.Hetzner.Catalog
+  alias CleatDeploy.HetznerMock
   alias CleatDeploy.TenancyFixtures
 
   setup :verify_on_exit!
@@ -113,16 +115,98 @@ defmodule CleatDeployWeb.Api.ServersTest do
     assert json_response(conn, 200)["data"]["instance_status"] == "running"
   end
 
-  defp spec(status) do
+  test "POST /api/v1/servers/provision creates a Hetzner VM", %{token: token} do
+    spec = spec("running", "cx33", "203.0.113.7")
+    name = "box-provision"
+
+    expect(HetznerMock, :create_instance, fn attrs ->
+      assert attrs.name == name
+      {:ok, spec}
+    end)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_post(~p"/api/v1/servers/provision", %{
+        name: name,
+        region: "fsn1",
+        bundle_id: "cx33",
+        deploy_mode: "shared"
+      })
+
+    data = json_response(conn, 201)["data"]
+    assert data["host_ip"] == "203.0.113.7"
+    assert data["provider"] == "hetzner"
+  end
+
+  test "POST /api/v1/servers/provision rejects an invalid bundle", %{token: token} do
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_post(~p"/api/v1/servers/provision", %{
+        name: "box-bad",
+        region: "fsn1",
+        bundle_id: "nope",
+        deploy_mode: "shared"
+      })
+
+    assert json_response(conn, 422)["error"] == "invalid_request"
+  end
+
+  test "GET /api/v1/servers/:id/resize-options excludes the current bundle", %{
+    scope: scope,
+    token: token
+  } do
+    server =
+      TenancyFixtures.server_fixture(scope, %{
+        provider: "hetzner",
+        region: "fsn1",
+        bundle_id: "cx33"
+      })
+
+    expect(HetznerMock, :list_bundles, fn "fsn1" -> {:ok, Catalog.all_bundles()} end)
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/servers/#{server.id}/resize-options")
+    ids = json_response(conn, 200)["data"] |> Enum.map(& &1["bundle_id"])
+
+    assert "cx43" in ids
+    refute "cx33" in ids
+  end
+
+  test "POST /api/v1/servers/:id/resize changes the bundle", %{scope: scope, token: token} do
+    server =
+      TenancyFixtures.server_fixture(scope, %{
+        provider: "hetzner",
+        region: "fsn1",
+        aws_instance_name: "box9",
+        bundle_id: "cx33"
+      })
+
+    expect(HetznerMock, :change_bundle, fn "fsn1", "box9", "cx43" -> :ok end)
+
+    expect(HetznerMock, :get_instance, fn "fsn1", "box9" ->
+      {:ok, spec("running", "cx43")}
+    end)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_post(~p"/api/v1/servers/#{server.id}/resize", %{bundle_id: "cx43"})
+
+    assert json_response(conn, 200)["data"]["bundle_id"] == "cx43"
+  end
+
+  defp spec(status, bundle_id \\ "nano_3_0", public_ip \\ nil) do
     %InstanceSpec{
-      bundle_id: "nano_3_0",
+      bundle_id: bundle_id,
       bundle_name: "Nano",
       cpu_count: 2,
       ram_mb: 512,
       disk_gb: 20,
       status: status,
       blueprint_name: "Ubuntu",
-      monthly_price_usd: Decimal.new("5.00")
+      monthly_price_usd: Decimal.new("5.00"),
+      public_ip: public_ip
     }
   end
 
