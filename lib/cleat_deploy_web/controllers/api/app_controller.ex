@@ -63,6 +63,61 @@ defmodule CleatDeployWeb.Api.AppController do
     end
   end
 
+  def logs(conn, %{"app_id" => app_id}) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- resolve_app(scope, app_id) do
+      if app.runtime == "static" do
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "runtime_logs_unavailable"})
+      else
+        fetch_logs(conn, app)
+      end
+    else
+      :error -> not_found(conn)
+    end
+  end
+
+  defp fetch_logs(conn, app) do
+    case Apps.RuntimeLogs.fetch(app) do
+      {:ok, result} ->
+        json(conn, %{
+          data: %{
+            unit: result.unit,
+            lines: result.lines,
+            fetched_at: result.fetched_at
+          }
+        })
+
+      {:error, message} ->
+        conn
+        |> put_status(:bad_gateway)
+        |> json(%{error: "runtime_logs_failed", message: message})
+    end
+  end
+
+  def delete(conn, %{"id" => id}) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- resolve_app(scope, id) do
+      case Apps.delete_app(scope, app) do
+        {:ok, _app} ->
+          send_resp(conn, :no_content, "")
+
+        {:error, :unauthorized} ->
+          not_found(conn)
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "invalid_request", details: errors(changeset)})
+      end
+    else
+      :error -> not_found(conn)
+    end
+  end
+
   defp filter_by_slug(apps, nil), do: apps
   defp filter_by_slug(apps, slug), do: Enum.filter(apps, &(&1.slug == slug))
 

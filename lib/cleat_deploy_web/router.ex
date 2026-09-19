@@ -48,6 +48,7 @@ defmodule CleatDeployWeb.Router do
     get "/apps/:id", AppController, :show
 
     get "/apps/:app_id/env", EnvController, :index
+    get "/apps/:app_id/logs", AppController, :logs
     get "/apps/:app_id/deployments", DeploymentController, :index
     get "/deployments/:id", DeploymentController, :show
   end
@@ -57,6 +58,11 @@ defmodule CleatDeployWeb.Router do
 
     post "/apps", AppController, :create
     patch "/apps/:id", AppController, :update
+    delete "/apps/:id", AppController, :delete
+
+    post "/servers", ServerController, :create
+    delete "/servers/:id", ServerController, :delete
+    post "/servers/:id/sync", ServerController, :sync
 
     post "/apps/:app_id/deployments", DeploymentController, :create
     post "/apps/:app_id/cancel", DeploymentController, :cancel

@@ -113,12 +113,14 @@ defmodule CleatDeploy.Apps do
   def update_app(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
 
   @doc """
-  Updates deploy settings (`:branch` and `:auto_deploy`). Other keys are ignored.
+  Updates deploy settings (`:branch`, `:auto_deploy`, `:host`). Other keys are ignored.
   """
   def update_app_settings(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
       when tenant_id == tenant.id do
     app
-    |> App.deploy_settings_changeset(Map.take(stringify_keys(attrs), ["branch", "auto_deploy"]))
+    |> App.deploy_settings_changeset(
+      Map.take(stringify_keys(attrs), ["branch", "auto_deploy", "host"])
+    )
     |> Repo.update()
   end
 

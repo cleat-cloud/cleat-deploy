@@ -137,6 +137,60 @@ defmodule CleatDeployWeb.Api.ApiTest do
     assert json_response(conn, 409)["error"] == "no_active_deployment"
   end
 
+  test "PATCH /api/v1/apps/:id updates the host (normalized)", %{token: token, app: app} do
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_patch(~p"/api/v1/apps/#{app.id}", %{host: "New.Host.Example.com"})
+
+    assert json_response(conn, 200)["data"]["host"] == "new.host.example.com"
+  end
+
+  test "PATCH rejects a host already used on the same server", %{
+    token: token,
+    scope: scope,
+    server: server,
+    app: app
+  } do
+    other = TenancyFixtures.app_fixture(scope, server)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_patch(~p"/api/v1/apps/#{app.id}", %{host: other.host})
+
+    assert json_response(conn, 422)["details"]["host"] == ["has already been taken"]
+  end
+
+  test "DELETE /api/v1/apps/:id deletes the app", %{token: token, app: app} do
+    conn = build_conn() |> auth(token) |> delete(~p"/api/v1/apps/#{app.id}")
+    assert response(conn, 204) == ""
+
+    assert build_conn()
+           |> auth(token)
+           |> get(~p"/api/v1/apps/#{app.id}")
+           |> json_response(404)
+  end
+
+  test "GET /api/v1/apps/:app/logs returns recent journal lines", %{token: token, app: app} do
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{app.id}/logs")
+    data = json_response(conn, 200)["data"]
+
+    assert data["unit"] == app.systemd_unit
+    assert Enum.any?(data["lines"], &String.contains?(&1, "started"))
+  end
+
+  test "GET /api/v1/apps/:app/logs rejects static apps", %{
+    token: token,
+    scope: scope,
+    server: server
+  } do
+    static = TenancyFixtures.app_fixture(scope, server, %{runtime: "static", github_repo: nil})
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{static.id}/logs")
+    assert json_response(conn, 422)["error"] == "runtime_logs_unavailable"
+  end
+
   defp auth(conn, token), do: put_req_header(conn, "authorization", "Bearer #{token}")
 
   defp json_post(conn, path, body) do
