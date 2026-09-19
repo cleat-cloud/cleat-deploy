@@ -61,6 +61,34 @@ defmodule CleatDeploy.Deploy.Static do
     """
   end
 
+  @doc """
+  Publishes an uploaded tarball (git-less drop) as-is: extract and serve.
+  No build step, no source detection — the archive root is the site.
+  """
+  def remote_drop_script(%App{} = app, config, sha, remote_tar, %AppManifest{} = manifest) do
+    """
+    set -euo pipefail
+
+    log() { printf '==> %s\\n' "$*"; }
+
+    BUILD_DIR="$HOME/cleat_deploy_drop_#{sha}"
+    rm -rf "$BUILD_DIR"
+    mkdir -p "$BUILD_DIR"
+    tar -xzf #{remote_tar} -C "$BUILD_DIR"
+
+    RELEASE_DIR="#{config.release_path}/releases/build"
+    sudo mkdir -p "$RELEASE_DIR"
+    sudo rm -rf "${RELEASE_DIR:?}"/*
+    sudo cp -a "$BUILD_DIR"/. "$RELEASE_DIR"/
+    sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
+    sudo chmod -R a+rX #{config.release_path}
+    rm -rf "$BUILD_DIR"
+
+    #{ServerProvision.provision_script(app, config, manifest)}
+    #{ServerProvision.reload_caddy_script()}
+    """
+  end
+
   defp node_install do
     """
     if [[ -f package.json ]] && ! command -v npm >/dev/null 2>&1; then

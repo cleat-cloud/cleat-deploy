@@ -51,7 +51,7 @@ defmodule CleatDeployWeb.Api.Serializer do
       id: app.id,
       name: app.name,
       slug: app.slug,
-      github_repo: app.github_repo,
+      github_repo: blank_to_nil(app.github_repo),
       branch: app.branch,
       host: app.host,
       port: app.port,
@@ -92,4 +92,7 @@ defmodule CleatDeployWeb.Api.Serializer do
 
   defp decimal(nil), do: nil
   defp decimal(%Decimal{} = value), do: Decimal.to_string(value)
+
+  defp blank_to_nil(value) when value in [nil, ""], do: nil
+  defp blank_to_nil(value), do: value
 end

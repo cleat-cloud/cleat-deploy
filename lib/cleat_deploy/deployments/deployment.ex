@@ -15,6 +15,8 @@ defmodule CleatDeploy.Deployments.Deployment do
     field :triggered_by, :string, default: "manual"
     field :started_at, :utc_datetime
     field :finished_at, :utc_datetime
+    field :source, :string, default: "git"
+    field :artifact_path, :string
 
     belongs_to :app, App
 
@@ -35,6 +37,19 @@ defmodule CleatDeploy.Deployments.Deployment do
     ])
     |> validate_required([:git_sha, :app_id])
     |> foreign_key_constraint(:app_id)
+  end
+
+  @doc """
+  Changeset for a git-less "drop": `source`/`artifact_path` are set
+  programmatically so a caller can never point the runner at arbitrary files.
+  """
+  def drop_changeset(deployment, attrs) do
+    artifact = Map.get(attrs, :artifact_path) || Map.get(attrs, "artifact_path")
+
+    deployment
+    |> changeset(attrs)
+    |> put_change(:source, "drop")
+    |> put_change(:artifact_path, artifact)
   end
 
   def statuses, do: @statuses

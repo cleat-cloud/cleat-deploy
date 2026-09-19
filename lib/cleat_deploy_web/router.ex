@@ -60,6 +60,7 @@ defmodule CleatDeployWeb.Router do
 
     post "/apps/:app_id/deployments", DeploymentController, :create
     post "/apps/:app_id/cancel", DeploymentController, :cancel
+    post "/apps/:app_id/drops", DropController, :create
 
     put "/apps/:app_id/env", EnvController, :update
     delete "/apps/:app_id/env/:key", EnvController, :delete

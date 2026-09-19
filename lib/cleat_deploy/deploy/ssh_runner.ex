@@ -16,6 +16,9 @@ defmodule CleatDeploy.Deploy.SshRunner do
     app = Apps.get_app!(deployment.app_id)
     server = app.server
 
-    Ssh.run_deploy(deployment, app, server)
+    case deployment.source do
+      "drop" -> Ssh.run_drop(deployment, app, server)
+      _ -> Ssh.run_deploy(deployment, app, server)
+    end
   end
 end

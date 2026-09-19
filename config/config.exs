@@ -31,6 +31,9 @@ config :cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeLogsSsh
 
 config :cleat_deploy, :auto_deploy_health_on_boot, true
 
+# Git-less "drop" uploads (CLEAT_DROPS_DIR / CLEAT_DROP_MAX_BYTES override at runtime).
+config :cleat_deploy, :drop_max_bytes, 52_428_800
+
 config :cleat_deploy, Oban,
   repo: CleatDeploy.Repo,
   engine: Oban.Engines.Lite,

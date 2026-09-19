@@ -76,7 +76,9 @@ directory (`dist`, `build`, `public`, `_site`, `out`, or `build_dir` from the
 manifest; if none exist, the repo root when it has an `index.html`) to
 `/var/www/<slug>/current`. Caddy serves it with `file_server` and
 an SPA fallback (`try_files {path} /index.html`); there is no systemd unit.
-Plain HTML/CSS/JS folders need no build and work as-is.
+Plain HTML/CSS/JS folders need no build and work as-is. They can also be
+published without git via `cleat drop`, which uploads a folder to
+`POST /api/v1/apps/:app/drops` and publishes it the same way.
 
 One-off test script (no UI):
 
