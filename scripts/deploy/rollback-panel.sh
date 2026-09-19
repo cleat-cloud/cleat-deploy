@@ -4,7 +4,7 @@ set -euo pipefail
 # Rolls the panel back to a previous release built by build-on-panel-server.sh.
 #
 #   ./scripts/deploy/rollback-panel.sh              # previous release
-#   ./scripts/deploy/rollback-panel.sh 20260919050500
+#   ./scripts/deploy/rollback-panel.sh 20260919051529
 #   DRY_RUN=true ./scripts/deploy/rollback-panel.sh # only print the target
 #
 # Migrations are NOT rolled back; roll forward with a new deploy instead.
@@ -38,15 +38,21 @@ main() {
   [[ -f "$DEPLOY_SSH_KEY" ]] || die "SSH key not found: $DEPLOY_SSH_KEY"
   chmod 600 "$DEPLOY_SSH_KEY"
 
+  # Keep the value safe to interpolate into the remote command.
+  if [[ -n "$TARGET" && ! "$TARGET" =~ ^[A-Za-z0-9_./:-]+$ ]]; then
+    die "Invalid target: $TARGET"
+  fi
+
   log "Selecting rollback target on ${DEPLOY_IP}"
   ssh -i "$DEPLOY_SSH_KEY" \
     -o StrictHostKeyChecking=accept-new \
     -o ConnectTimeout=15 \
-    "${DEPLOY_USER}@${DEPLOY_IP}" bash -s -- "$TARGET" "$DRY_RUN" <<'REMOTE'
+    "${DEPLOY_USER}@${DEPLOY_IP}" \
+    "TARGET='${TARGET}' DRY_RUN='${DRY_RUN}' bash -s" <<'REMOTE'
 set -euo pipefail
 
-TARGET="${1:-}"
-DRY_RUN="${2:-false}"
+TARGET="${TARGET:-}"
+DRY_RUN="${DRY_RUN:-false}"
 RELEASE_ROOT="/opt/cleat_deploy/releases"
 CURRENT="$(readlink -f /opt/cleat_deploy/current 2>/dev/null || true)"
 
