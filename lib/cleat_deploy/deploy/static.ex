@@ -91,8 +91,11 @@ defmodule CleatDeploy.Deploy.Static do
         break
       fi
     done
+    if [[ -z "$PUBLISH_DIR" && -f index.html ]]; then
+      PUBLISH_DIR="."
+    fi
     if [[ -z "$PUBLISH_DIR" ]]; then
-      echo "No static output directory found (looked for #{Enum.join(@candidate_dirs, ", ")})" >&2
+      echo "No static output directory found (looked for #{Enum.join(@candidate_dirs, ", ")}, or index.html at the repo root)" >&2
       exit 1
     fi
     log "Publishing $PUBLISH_DIR"

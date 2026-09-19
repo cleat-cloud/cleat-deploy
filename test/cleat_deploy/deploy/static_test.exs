@@ -56,6 +56,23 @@ defmodule CleatDeploy.Deploy.StaticTest do
     assert script =~ "file_server"
   end
 
+  test "build script falls back to the repo root for plain HTML folders" do
+    app = %App{
+      name: "Plain",
+      slug: "plain",
+      host: "plain.example.com",
+      runtime: "static",
+      release_path: "/var/www/plain"
+    }
+
+    config = App.deploy_config(app)
+    manifest = %AppManifest{runtime: "static"}
+    script = Static.remote_build_script(nil, app, config, "sha", "/tmp/s.tar.gz", manifest)
+
+    assert script =~ ~s|PUBLISH_DIR="."|
+    assert script =~ "index.html at the repo root"
+  end
+
   test "build script honours an explicit build_dir" do
     app = %App{
       name: "X",
