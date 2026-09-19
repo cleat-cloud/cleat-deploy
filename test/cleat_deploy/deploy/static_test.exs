@@ -45,6 +45,17 @@ defmodule CleatDeploy.Deploy.StaticTest do
     refute script =~ "systemd"
   end
 
+  test "IP hosts get an http:// static site", %{app: app} do
+    app = %{app | host: "203.0.113.10"}
+    config = App.deploy_config(app)
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    assert script =~ "http://203.0.113.10 {"
+    assert script =~ "root * /var/www/landing/current"
+    assert script =~ "file_server"
+  end
+
   test "build script installs node, builds, and publishes the output", %{app: app, config: config} do
     manifest = AppManifest.resolve(nil, app)
     script = Static.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)

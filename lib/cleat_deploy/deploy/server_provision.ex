@@ -147,9 +147,11 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   end
 
   defp caddy_provision_script(%App{} = app, %AppManifest{runtime: "static"}) do
+    address = caddy_site_address(app)
+
     caddy_site = """
 
-    #{app.host} {
+    #{address} {
       encode gzip
       root * #{static_site_root(app)}
       try_files {path} /index.html
@@ -157,30 +159,41 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     }
     """
 
-    append_caddy_site(app, caddy_site)
+    append_caddy_site(address, caddy_site)
   end
 
   defp caddy_provision_script(%App{} = app, %AppManifest{}) do
+    address = caddy_site_address(app)
+
     caddy_site = """
 
-    #{app.host} {
+    #{address} {
       encode gzip
       reverse_proxy 127.0.0.1:#{app.port}
     }
     """
 
-    append_caddy_site(app, caddy_site)
+    append_caddy_site(address, caddy_site)
   end
 
-  defp append_caddy_site(%App{} = app, caddy_site) do
+  defp append_caddy_site(address, caddy_site) do
     """
-    if ! sudo grep -Fq '#{app.host} {' /etc/caddy/Caddyfile; then
-      log "Adding Caddy site #{app.host}"
+    if ! sudo grep -Fq '#{address} {' /etc/caddy/Caddyfile; then
+      log "Adding Caddy site #{address}"
       sudo tee -a /etc/caddy/Caddyfile > /dev/null <<'PAAS_CADDY_SITE'
     #{String.trim_leading(caddy_site)}
     PAAS_CADDY_SITE
     fi
     """
+  end
+
+  # Caddy would force HTTPS for a bare IP and have no certificate to serve it,
+  # so an IP host gets an explicit http:// site (port 80, no redirect).
+  defp caddy_site_address(%App{host: host}) when is_binary(host) do
+    case :inet.parse_address(String.to_charlist(host)) do
+      {:ok, _ip} -> "http://#{host}"
+      _ -> host
+    end
   end
 
   defp static_site_root(%App{} = app) do
