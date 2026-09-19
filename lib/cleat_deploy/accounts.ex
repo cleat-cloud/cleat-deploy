@@ -541,6 +541,10 @@ defmodule CleatDeploy.Accounts do
 
         Repo.delete_all(from(t in UserToken, where: t.id in ^Enum.map(tokens_to_delete, & &1.id)))
 
+        # Password changes and email confirmations invalidate API tokens too, so
+        # a leaked CLI token cannot outlive the credentials that created it.
+        _ = Repo.delete_all(from(t in ApiToken, where: t.user_id == ^user.id))
+
         {:ok, {user, tokens_to_delete}}
       end
     end)

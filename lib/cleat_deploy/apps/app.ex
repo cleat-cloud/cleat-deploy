@@ -68,6 +68,16 @@ defmodule CleatDeploy.Apps.App do
     |> validate_branch()
   end
 
+  @doc """
+  Changeset for deploy settings editable after creation: branch and auto-deploy.
+  """
+  def deploy_settings_changeset(app, attrs) do
+    app
+    |> cast(attrs, [:branch, :auto_deploy], empty_values: [])
+    |> validate_branch()
+    |> validate_required([:auto_deploy])
+  end
+
   def release_name("trip-planner"), do: "trip_planner_ia"
   def release_name("catalogo"), do: "catalog_platform"
   def release_name("controle-agente-viagens"), do: "controle_agente_viagens_phx"

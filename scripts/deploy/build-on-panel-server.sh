@@ -91,13 +91,22 @@ mix assets.setup
 mix assets.deploy
 mix release --overwrite
 
-RELEASE_DIR="/opt/cleat_deploy/releases/build"
+RELEASE_ROOT="/opt/cleat_deploy/releases"
+RELEASE_ID="$(date -u +%Y%m%d%H%M%S)"
+RELEASE_DIR="$RELEASE_ROOT/$RELEASE_ID"
 sudo mkdir -p "$RELEASE_DIR"
-sudo rm -rf "${RELEASE_DIR:?}"/*
 sudo cp -a _build/prod/rel/cleat_deploy/. "$RELEASE_DIR/"
-sudo ln -sfn "$RELEASE_DIR" /opt/cleat_deploy/current
+
+# Atomic switch: rename a fresh symlink over `current` (same filesystem), so a
+# failed copy never leaves the panel pointing at a half-written release.
+sudo ln -sfn "$RELEASE_DIR" /opt/cleat_deploy/current.next
+sudo mv -Tf /opt/cleat_deploy/current.next /opt/cleat_deploy/current
+
+# Keep the last 5 releases for rollback.
+ls -1dt "$RELEASE_ROOT"/*/ 2>/dev/null | tail -n +6 | xargs -r sudo rm -rf
+
 sudo rm -f /tmp/cleat_deploy_src.tar.gz
-log "Server build complete"
+log "Server build complete (release $RELEASE_ID)"
 REMOTE
 
   log "Build on panel server finished"

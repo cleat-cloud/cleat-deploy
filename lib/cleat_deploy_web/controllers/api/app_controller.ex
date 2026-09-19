@@ -42,6 +42,27 @@ defmodule CleatDeployWeb.Api.AppController do
     end
   end
 
+  def update(conn, %{"id" => id} = params) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- resolve_app(scope, id) do
+      case Apps.update_app_settings(scope, app, params) do
+        {:ok, updated} ->
+          json(conn, %{data: Serializer.app(Apps.get_app!(scope, updated.id))})
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "invalid_request", details: errors(changeset)})
+
+        {:error, :unauthorized} ->
+          not_found(conn)
+      end
+    else
+      :error -> not_found(conn)
+    end
+  end
+
   defp filter_by_slug(apps, nil), do: apps
   defp filter_by_slug(apps, slug), do: Enum.filter(apps, &(&1.slug == slug))
 
