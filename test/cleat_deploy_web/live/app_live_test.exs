@@ -185,6 +185,36 @@ defmodule CleatDeployWeb.AppLiveTest do
     refute html =~ "Atelie"
   end
 
+  test "applies filters from the URL", %{conn: conn, scope: scope, server: server} do
+    go_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "golang"})
+    phx_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps?runtime=golang")
+    rendered = render(view)
+    assert rendered =~ go_app.name
+    refute rendered =~ phx_app.name
+
+    {:ok, view, _html} = live(conn, ~p"/apps?query=#{phx_app.slug}")
+    rendered = render(view)
+    assert rendered =~ phx_app.name
+    refute rendered =~ go_app.name
+  end
+
+  test "reflects filters in the URL", %{conn: conn, scope: scope, server: server} do
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "golang"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    view |> element("#apps-filter-golang") |> render_click()
+    assert_patch(view, ~p"/apps?runtime=golang")
+
+    view |> element("#apps-filter-all") |> render_click()
+    assert_patch(view, ~p"/apps")
+
+    view |> form("#apps-filter", %{query: app.slug}) |> render_change()
+    assert_patch(view, ~p"/apps?query=#{app.slug}")
+  end
+
   test "sorts registered apps when a column header is clicked", %{
     conn: conn,
     scope: scope,
