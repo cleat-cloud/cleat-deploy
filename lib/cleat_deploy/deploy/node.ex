@@ -68,6 +68,7 @@ defmodule CleatDeploy.Deploy.Node do
     log "Publishing $PWD to $RELEASE_DIR"
     sudo cp -a . "$RELEASE_DIR"/
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
+    #{ServerProvision.prune_releases_script(config.release_path)}
     sudo chmod -R a+rX #{config.release_path}
 
     log "Start command: $START_CMD"

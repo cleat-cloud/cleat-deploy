@@ -63,6 +63,8 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "sudo systemctl restart node-cleat-web"
     # build dir and source tarball must not leak (they filled the disk in prod)
     assert script =~ ~s|trap 'rm -rf "$BUILD_DIR"; rm -f /tmp/src.tar.gz' EXIT|
+    # orphan (non-build) release dirs are pruned
+    assert script =~ "! -name build -exec rm -rf {} +"
   end
 
   test "manifest custom build/start commands and node version win over detection" do

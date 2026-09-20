@@ -200,6 +200,24 @@ defmodule CleatDeploy.AppsTest do
 
       assert updated.host == "moved.example.com"
     end
+
+    test "updates the repo", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server)
+
+      assert {:ok, updated} =
+               Apps.update_app_settings(scope, app, %{"github_repo" => "owner/new-repo"})
+
+      assert updated.github_repo == "owner/new-repo"
+    end
+
+    test "rejects a malformed repo", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server)
+
+      assert {:error, changeset} =
+               Apps.update_app_settings(scope, app, %{"github_repo" => "not-a-repo"})
+
+      assert "must be owner/repo" in errors_on(changeset).github_repo
+    end
   end
 
   describe "runtime_packages_text" do

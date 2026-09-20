@@ -78,13 +78,15 @@ defmodule CleatDeploy.Apps.App do
   """
   def deploy_settings_changeset(app, attrs) do
     app
-    |> cast(attrs, [:branch, :auto_deploy, :host, :port], empty_values: [])
+    |> cast(attrs, [:branch, :auto_deploy, :host, :port, :github_repo], empty_values: [])
     |> update_change(:host, &normalize_host/1)
     |> validate_branch()
     |> validate_required([:auto_deploy])
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
+    |> validate_repo()
     |> unique_constraint(:host, name: :apps_server_id_host_index)
     |> unique_constraint(:port, name: :apps_server_id_port_index)
+    |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_index)
   end
 
   def release_name("trip-planner"), do: "trip_planner_ia"

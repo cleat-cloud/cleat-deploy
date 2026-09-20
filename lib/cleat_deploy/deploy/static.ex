@@ -55,6 +55,7 @@ defmodule CleatDeploy.Deploy.Static do
     sudo rm -rf "${RELEASE_DIR:?}"/*
     sudo cp -a "$PUBLISH_DIR"/. "$RELEASE_DIR/"
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
+    #{ServerProvision.prune_releases_script(config.release_path)}
     sudo chmod -R a+rX #{config.release_path}
 
     #{ServerProvision.provision_script(app, config, manifest)}
@@ -83,6 +84,7 @@ defmodule CleatDeploy.Deploy.Static do
     sudo rm -rf "${RELEASE_DIR:?}"/*
     sudo cp -a "$BUILD_DIR"/. "$RELEASE_DIR"/
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
+    #{ServerProvision.prune_releases_script(config.release_path)}
     sudo chmod -R a+rX #{config.release_path}
     rm -rf "$BUILD_DIR"
 
