@@ -59,6 +59,8 @@ defmodule CleatDeploy.Apps.App do
     |> unique_constraint(:slug, name: :apps_tenant_id_slug_index)
     |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_index)
     |> unique_constraint(:host, name: :apps_server_id_host_index)
+    |> unique_constraint(:port, name: :apps_server_id_port_index)
+    |> validate_number(:port, greater_than: 0, less_than: 65_536)
     |> foreign_key_constraint(:server_id)
     |> put_default_webhook_secret()
     |> put_deploy_defaults()
@@ -71,15 +73,18 @@ defmodule CleatDeploy.Apps.App do
   end
 
   @doc """
-  Changeset for deploy settings editable after creation: branch and auto-deploy.
+  Changeset for deploy settings editable after creation: branch, auto-deploy,
+  host and port.
   """
   def deploy_settings_changeset(app, attrs) do
     app
-    |> cast(attrs, [:branch, :auto_deploy, :host], empty_values: [])
+    |> cast(attrs, [:branch, :auto_deploy, :host, :port], empty_values: [])
     |> update_change(:host, &normalize_host/1)
     |> validate_branch()
     |> validate_required([:auto_deploy])
+    |> validate_number(:port, greater_than: 0, less_than: 65_536)
     |> unique_constraint(:host, name: :apps_server_id_host_index)
+    |> unique_constraint(:port, name: :apps_server_id_port_index)
   end
 
   def release_name("trip-planner"), do: "trip_planner_ia"
