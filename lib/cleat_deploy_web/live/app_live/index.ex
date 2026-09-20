@@ -429,6 +429,13 @@ defmodule CleatDeployWeb.AppLive.Index do
               >
                 Ruby
               </.runtime_filter_chip>
+              <.runtime_filter_chip
+                id="apps-filter-static"
+                runtime={:static}
+                current={@apps_runtime}
+              >
+                Static
+              </.runtime_filter_chip>
             </div>
           </div>
 
@@ -513,6 +520,8 @@ defmodule CleatDeployWeb.AppLive.Index do
                   <td>{app.server.name}</td>
                   <td class="text-right">
                     <.link
+                      :if={app.runtime != "static"}
+                      id={"app-#{app.id}-deploy"}
                       navigate={~p"/apps/#{app.id}/deployments"}
                       class="paas-btn-secondary text-[10px]"
                     >
@@ -651,6 +660,7 @@ defmodule CleatDeployWeb.AppLive.Index do
 
   defp parse_runtime("golang"), do: :golang
   defp parse_runtime("node"), do: :node
+  defp parse_runtime("static"), do: :static
   defp parse_runtime("rails"), do: :rails
   defp parse_runtime("phoenix"), do: :phoenix
   defp parse_runtime(_), do: :all
@@ -722,10 +732,11 @@ defmodule CleatDeployWeb.AppLive.Index do
   defp matches_runtime?(_app, :all), do: true
   defp matches_runtime?(%App{runtime: "golang"}, :golang), do: true
   defp matches_runtime?(%App{runtime: "node"}, :node), do: true
+  defp matches_runtime?(%App{runtime: "static"}, :static), do: true
   defp matches_runtime?(%App{runtime: "rails"}, :rails), do: true
 
   defp matches_runtime?(%App{runtime: runtime}, :phoenix)
-       when runtime not in ["golang", "node", "rails"],
+       when runtime not in ["golang", "node", "static", "rails"],
        do: true
 
   defp matches_runtime?(_app, _runtime), do: false
