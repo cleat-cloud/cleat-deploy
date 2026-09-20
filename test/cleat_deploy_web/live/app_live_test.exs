@@ -185,6 +185,46 @@ defmodule CleatDeployWeb.AppLiveTest do
     refute html =~ "Atelie"
   end
 
+  test "filters static apps separately from phoenix", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    static_app =
+      TenancyFixtures.app_fixture(scope, server, %{runtime: "static", github_repo: ""})
+
+    phx_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    view |> element("#apps-filter-static") |> render_click()
+    rendered = render(view)
+    assert rendered =~ static_app.name
+    refute rendered =~ phx_app.name
+    assert_patch(view, ~p"/apps?runtime=static")
+
+    view |> element("#apps-filter-phoenix") |> render_click()
+    rendered = render(view)
+    assert rendered =~ phx_app.name
+    refute rendered =~ static_app.name
+  end
+
+  test "hides the deploy action for static apps", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    static_app =
+      TenancyFixtures.app_fixture(scope, server, %{runtime: "static", github_repo: ""})
+
+    phx_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    refute has_element?(view, "#app-#{static_app.id}-deploy")
+    assert has_element?(view, "#app-#{phx_app.id}-deploy")
+  end
+
   test "applies filters from the URL", %{conn: conn, scope: scope, server: server} do
     go_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "golang"})
     phx_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
