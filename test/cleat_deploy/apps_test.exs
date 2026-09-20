@@ -218,6 +218,27 @@ defmodule CleatDeploy.AppsTest do
 
       assert "must be owner/repo" in errors_on(changeset).github_repo
     end
+
+    test "updates the runtime and re-derives the systemd unit and data dir", %{
+      scope: scope,
+      server: server
+    } do
+      app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+      assert {:ok, updated} = Apps.update_app_settings(scope, app, %{"runtime" => "node"})
+      assert updated.runtime == "node"
+      assert updated.systemd_unit == "node-#{updated.slug}"
+      assert App.data_dir(updated) == "#{updated.release_path}/data"
+    end
+
+    test "rejects an unknown runtime", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server)
+
+      assert {:error, changeset} =
+               Apps.update_app_settings(scope, app, %{"runtime" => "elixir"})
+
+      assert "is invalid" in errors_on(changeset).runtime
+    end
   end
 
   describe "runtime_packages_text" do

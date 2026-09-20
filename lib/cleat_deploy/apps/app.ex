@@ -74,13 +74,21 @@ defmodule CleatDeploy.Apps.App do
 
   @doc """
   Changeset for deploy settings editable after creation: branch, auto-deploy,
-  host and port.
+  host, port, repo and runtime.
+
+  Changing the runtime re-derives the systemd unit and, for non-phoenix
+  runtimes, the data dir default (which depends on the release path), so an app
+  registered as `phoenix` by mistake can be corrected to `node`/`golang`/`rails`.
   """
   def deploy_settings_changeset(app, attrs) do
     app
-    |> cast(attrs, [:branch, :auto_deploy, :host, :port, :github_repo], empty_values: [])
+    |> cast(attrs, [:branch, :auto_deploy, :host, :port, :github_repo, :runtime],
+      empty_values: []
+    )
     |> update_change(:host, &normalize_host/1)
+    |> update_runtime_defaults()
     |> validate_branch()
+    |> validate_inclusion(:runtime, ["phoenix", "golang", "static", "node", "rails"])
     |> validate_required([:auto_deploy])
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
     |> validate_repo()
@@ -88,6 +96,17 @@ defmodule CleatDeploy.Apps.App do
     |> unique_constraint(:port, name: :apps_server_id_port_index)
     |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_index)
   end
+
+  # Regenerate defaults that are derived from the runtime. Port is untouched.
+  defp update_runtime_defaults(%Ecto.Changeset{changes: %{runtime: runtime}} = changeset) do
+    slug = get_field(changeset, :slug) || ""
+
+    changeset
+    |> put_change(:systemd_unit, default_systemd_unit(slug, runtime))
+    |> put_change(:release_path, default_release_path(slug, runtime))
+  end
+
+  defp update_runtime_defaults(changeset), do: changeset
 
   def release_name("trip-planner"), do: "trip_planner_ia"
   def release_name("catalogo"), do: "catalog_platform"

@@ -194,7 +194,7 @@ defmodule CleatDeploy.Apps do
 
     app
     |> App.deploy_settings_changeset(
-      Map.take(attrs, ["branch", "auto_deploy", "host", "port", "github_repo"])
+      Map.take(attrs, ["branch", "auto_deploy", "host", "port", "github_repo", "runtime"])
     )
     |> Repo.update()
     |> case do
