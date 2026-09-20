@@ -51,6 +51,24 @@ defmodule CleatDeploy.AppsTest do
     end
   end
 
+  describe "data_dir/1" do
+    test "keeps runtime data outside the release dir" do
+      assert App.data_dir(%App{runtime: "node", slug: "leitor", release_path: "/opt/leitor"}) ==
+               "/opt/leitor/data"
+
+      assert App.data_dir(%App{runtime: "golang", slug: "trama", release_path: "/opt/trama"}) ==
+               "/opt/trama/data"
+
+      assert App.data_dir(%App{runtime: "phoenix", slug: "tts", release_path: "/opt/phoenix_tts"}) ==
+               "/var/lib/phoenix_tts"
+    end
+
+    test "static apps have no data dir" do
+      assert App.data_dir(%App{runtime: "static", slug: "site", release_path: "/var/www/site"}) ==
+               nil
+    end
+  end
+
   describe "count_apps/1" do
     test "counts tenant apps without loading them", %{scope: scope, server: server} do
       assert Apps.count_apps(scope) == 0

@@ -140,6 +140,22 @@ defmodule CleatDeploy.Apps.App do
     }
   end
 
+  @doc """
+  Persistent directory for runtime data (e.g. an embedded SQLite database).
+
+  Lives outside the release directory so it survives deploys. Injected into the
+  app's systemd unit as `CLEAT_DATA_DIR`. `nil` for static sites.
+  """
+  def data_dir(%__MODULE__{runtime: "static"}), do: nil
+
+  def data_dir(%__MODULE__{} = app) do
+    release_path = app.release_path || default_release_path(app.slug, app.runtime)
+    data_dir_for(app.runtime, release_path)
+  end
+
+  defp data_dir_for("phoenix", release_path), do: "/var/lib/#{Path.basename(release_path)}"
+  defp data_dir_for(_runtime, release_path), do: "#{release_path}/data"
+
   # Static apps can exist without a git repo (git-less `cleat drop` deploys).
   # The column is NOT NULL, so a blank repo is stored as "".
   defp put_github_repo_default(changeset) do

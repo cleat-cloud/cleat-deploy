@@ -22,7 +22,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   end
 
   def provision_script(%App{} = app, config, %AppManifest{} = manifest) do
-    data_dir = "/var/lib/#{Path.basename(config.release_path)}"
+    data_dir = data_dir_for(manifest, config)
     env_dir = Path.dirname(config.env_file)
     memory_max = manifest.memory_max_mb || 400
 
@@ -37,6 +37,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     Group=root
     WorkingDirectory=#{config.release_path}/current
     EnvironmentFile=#{config.env_file}
+    Environment=CLEAT_DATA_DIR=#{data_dir}
     ExecStart=#{config.release_path}/current/bin/#{config.release_name} start
     Restart=always
     RestartSec=5
@@ -65,7 +66,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   end
 
   defp golang_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
-    data_dir = "#{config.release_path}/data"
+    data_dir = data_dir_for(manifest, config)
     env_dir = Path.dirname(config.env_file)
     ssh_user = Map.get(config, :ssh_user, "ubuntu")
     memory_max = manifest.memory_max_mb || 256
@@ -88,6 +89,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
         Group=#{ssh_user}
         WorkingDirectory=#{config.release_path}/current
         EnvironmentFile=#{config.env_file}
+        Environment=CLEAT_DATA_DIR=#{data_dir}
         ExecStart=#{exec}
         Restart=always
         RestartSec=5
@@ -153,6 +155,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   # Shared systemd unit for long-lived app servers that start through a
   # generated `current/start.sh` (Node, Rails).
   defp service_provision_script(%App{} = app, config, %AppManifest{} = manifest, env_lines, label) do
+    data_dir = data_dir_for(manifest, config)
     env_dir = Path.dirname(config.env_file)
     memory_max = manifest.memory_max_mb || 400
     extra_env = Enum.join(env_lines, "\n    ")
@@ -168,6 +171,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     Group=root
     WorkingDirectory=#{config.release_path}/current
     EnvironmentFile=#{config.env_file}
+    Environment=CLEAT_DATA_DIR=#{data_dir}
     #{extra_env}
     Environment=HOST=127.0.0.1
     Environment=PORT=#{app.port}
@@ -185,7 +189,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
 
     """
     log "Provisioning #{label} host #{app.host} on port #{app.port}"
-    sudo mkdir -p #{shell_escape(env_dir)}
+    sudo mkdir -p #{shell_escape(env_dir)} #{shell_escape(data_dir)}
     sudo touch #{shell_escape(config.env_file)}
     sudo chmod 600 #{shell_escape(config.env_file)}
 
@@ -331,6 +335,15 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     """
     |> String.trim()
   end
+
+  # Persistent runtime data, kept outside the release directory so deploys do
+  # not wipe it. Mirrors `App.data_dir/1` but honours a manifest release_path.
+  defp data_dir_for(%AppManifest{runtime: "static"}, _config), do: nil
+
+  defp data_dir_for(%AppManifest{runtime: "phoenix"}, config),
+    do: "/var/lib/#{Path.basename(config.release_path)}"
+
+  defp data_dir_for(_manifest, config), do: "#{config.release_path}/data"
 
   defp escape_unit_description(name) when is_binary(name) do
     name |> String.replace(~r/[\r\n]/, " ") |> String.trim()

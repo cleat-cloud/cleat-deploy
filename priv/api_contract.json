@@ -9,6 +9,7 @@
     "port",
     "systemd_unit",
     "release_path",
+    "data_dir",
     "auto_deploy",
     "runtime",
     "runtime_apt_packages",

@@ -58,6 +58,7 @@ defmodule CleatDeployWeb.Api.Serializer do
       port: app.port,
       systemd_unit: app.systemd_unit,
       release_path: app.release_path,
+      data_dir: App.data_dir(app),
       auto_deploy: app.auto_deploy,
       runtime: app.runtime,
       runtime_apt_packages: app.runtime_apt_packages,
