@@ -65,6 +65,14 @@ defmodule CleatDeploy.Deploy.StaticTest do
     assert script =~ "/var/www/landing/releases/build"
     assert script =~ ~s|PUBLISH_DIR="$candidate"|
     assert script =~ "file_server"
+    assert script =~ ~s|trap 'rm -rf "$BUILD_DIR"; rm -f /tmp/src.tar.gz' EXIT|
+  end
+
+  test "drop script removes its build dir and tarball", %{app: app, config: config} do
+    manifest = AppManifest.resolve(nil, app)
+    script = Static.remote_drop_script(app, config, "sha", "/tmp/drop.tar.gz", manifest)
+
+    assert script =~ ~s|trap 'rm -rf "$BUILD_DIR"; rm -f /tmp/drop.tar.gz' EXIT|
   end
 
   test "build script falls back to the repo root for plain HTML folders" do

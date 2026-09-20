@@ -45,7 +45,7 @@ defmodule CleatDeploy.Deploy.Node do
     BUILD_DIR="$HOME/cleat_deploy_build_#{sha}"
     rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
-    trap 'rm -rf "$BUILD_DIR"' EXIT
+    trap 'rm -rf "$BUILD_DIR"; rm -f #{remote_tar}' EXIT
     tar -xzf #{remote_tar} -C "$BUILD_DIR"
     cd "$BUILD_DIR"
     #{project_cd(manifest)}
