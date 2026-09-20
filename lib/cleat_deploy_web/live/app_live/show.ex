@@ -179,8 +179,6 @@ defmodule CleatDeployWeb.AppLive.Show do
         {:noreply, put_flash(socket, :error, "Type #{app.slug} to confirm deletion")}
 
       true ->
-        _ = CleatDeploy.Deploy.Teardown.run(app)
-
         case Apps.delete_app(socket.assigns.current_scope, app) do
           {:ok, _} ->
             {:noreply,
