@@ -4,6 +4,8 @@ defmodule CleatDeployWeb.AppLive.Index do
   alias CleatDeploy.{Apps, Github, Servers}
   alias CleatDeploy.Apps.{App, Provisioning, RuntimeMemory}
 
+  @page_size 10
+
   @impl true
   def mount(_params, _session, socket) do
     apps = Apps.list_apps(socket.assigns.current_scope)
@@ -19,6 +21,7 @@ defmodule CleatDeployWeb.AppLive.Index do
       |> assign(:apps_runtime, :all)
       |> assign(:apps_sort, :name)
       |> assign(:apps_sort_dir, :asc)
+      |> assign(:apps_page, 1)
       |> restream_apps(apps, %{})
 
     socket =
@@ -99,6 +102,7 @@ defmodule CleatDeployWeb.AppLive.Index do
     {:noreply,
      socket
      |> assign(:apps_query, query)
+     |> assign(:apps_page, 1)
      |> restream_apps()}
   end
 
@@ -115,6 +119,7 @@ defmodule CleatDeployWeb.AppLive.Index do
     {:noreply,
      socket
      |> assign(:apps_runtime, runtime)
+     |> assign(:apps_page, 1)
      |> restream_apps()}
   end
 
@@ -132,6 +137,14 @@ defmodule CleatDeployWeb.AppLive.Index do
      socket
      |> assign(:apps_sort, sort)
      |> assign(:apps_sort_dir, dir)
+     |> assign(:apps_page, 1)
+     |> restream_apps()}
+  end
+
+  def handle_event("paginate_apps", %{"page" => page}, socket) do
+    {:noreply,
+     socket
+     |> assign(:apps_page, parse_page(page))
      |> restream_apps()}
   end
 
@@ -150,6 +163,7 @@ defmodule CleatDeployWeb.AppLive.Index do
         {:noreply,
          socket
          |> assign(:apps_list, apps_list)
+         |> assign(:apps_page, 1)
          |> restream_apps()
          |> assign(:app_count, socket.assigns.app_count + 1)
          |> put_flash(:info, app_registered_message(webhook_status))
@@ -522,6 +536,43 @@ defmodule CleatDeployWeb.AppLive.Index do
               </tbody>
             </table>
           </div>
+          <div
+            :if={@apps_total_pages > 1}
+            id="apps-pagination"
+            class="flex flex-wrap items-center justify-between gap-3 border-t border-hd-border bg-hd-aside/40 px-4 py-2"
+          >
+            <span
+              id="apps-page-status"
+              class="font-mono text-[11px] tabular-nums text-hd-muted"
+            >
+              {apps_range(@apps_page, @apps_visible_count)} of {@apps_visible_count}
+            </span>
+            <div class="flex items-center gap-2">
+              <button
+                id="apps-page-prev"
+                type="button"
+                phx-click="paginate_apps"
+                phx-value-page={@apps_page - 1}
+                disabled={@apps_page <= 1}
+                class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <.icon name="hero-chevron-left" class="size-3.5" /> Prev
+              </button>
+              <span class="font-mono text-[10px] uppercase tracking-widest text-hd-muted">
+                Page {@apps_page}/{@apps_total_pages}
+              </span>
+              <button
+                id="apps-page-next"
+                type="button"
+                phx-click="paginate_apps"
+                phx-value-page={@apps_page + 1}
+                disabled={@apps_page >= @apps_total_pages}
+                class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next <.icon name="hero-chevron-right" class="size-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </Layouts.app>
@@ -629,10 +680,16 @@ defmodule CleatDeployWeb.AppLive.Index do
 
   defp restream_apps(socket, apps, memory) do
     visible = visible_apps(apps, socket, memory)
+    total = length(visible)
+    total_pages = max(div(total + @page_size - 1, @page_size), 1)
+    page = min(max(socket.assigns.apps_page, 1), total_pages)
+    page_entries = Enum.slice(visible, (page - 1) * @page_size, @page_size)
 
     socket
-    |> assign(:apps_visible_count, length(visible))
-    |> stream(:apps, visible, reset: true)
+    |> assign(:apps_page, page)
+    |> assign(:apps_total_pages, total_pages)
+    |> assign(:apps_visible_count, total)
+    |> stream(:apps, page_entries, reset: true)
   end
 
   defp visible_apps(apps, socket, memory) do
@@ -700,6 +757,24 @@ defmodule CleatDeployWeb.AppLive.Index do
 
   defp toggle_dir(:asc), do: :desc
   defp toggle_dir(_dir), do: :asc
+
+  defp parse_page(page) when is_binary(page) do
+    case Integer.parse(page) do
+      {n, ""} when n > 0 -> n
+      _ -> 1
+    end
+  end
+
+  defp parse_page(page) when is_integer(page) and page > 0, do: page
+  defp parse_page(_), do: 1
+
+  defp apps_range(_page, 0), do: "0-0"
+
+  defp apps_range(page, total) when is_integer(page) and is_integer(total) do
+    from = (page - 1) * @page_size + 1
+    to = min(page * @page_size, total)
+    "#{from}-#{to}"
+  end
 
   attr :id, :string, required: true
   attr :runtime, :atom, required: true
