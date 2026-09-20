@@ -67,6 +67,18 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "! -name build -exec rm -rf {} +"
   end
 
+  test "build script timestamps each phase so slow deploys are measurable", %{
+    app: app,
+    config: config
+  } do
+    manifest = AppManifest.resolve(nil, app)
+    script = Node.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
+
+    assert script =~ "SECONDS=0"
+    assert script =~ ~s|log "Installing JS dependencies"|
+    assert script =~ "Done in ${SECONDS}s"
+  end
+
   test "build script prunes dev dependencies and drops node_modules for Nitro output", %{
     app: app,
     config: config
