@@ -71,7 +71,7 @@ defmodule CleatDeploy.Deploy.Node do
 
     log "Start command: $START_CMD"
     printf '%s' "$START_CMD" | sudo tee "$RELEASE_DIR/start.cmd" > /dev/null
-    echo '#{Base.encode64(start_sh())}' | base64 -d | sudo tee "$RELEASE_DIR/start.sh" > /dev/null
+    echo '#{Base.encode64(ServerProvision.start_script())}' | base64 -d | sudo tee "$RELEASE_DIR/start.sh" > /dev/null
     sudo chmod +x "$RELEASE_DIR/start.sh"
 
     #{ServerProvision.provision_script(app, config, manifest)}
@@ -172,18 +172,6 @@ defmodule CleatDeploy.Deploy.Node do
     fi
     """
     |> String.trim()
-  end
-
-  defp start_sh do
-    """
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd "$(dirname "$0")"
-    export NODE_ENV="${NODE_ENV:-production}"
-    export HOST="${HOST:-127.0.0.1}"
-    export PORT="${PORT:-4000}"
-    exec bash -c "$(cat "$(dirname "$0")/start.cmd")"
-    """
   end
 
   defp shell_escape(value) when is_binary(value) do

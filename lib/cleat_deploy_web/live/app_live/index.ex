@@ -107,6 +107,7 @@ defmodule CleatDeployWeb.AppLive.Index do
       case runtime do
         "golang" -> :golang
         "node" -> :node
+        "rails" -> :rails
         "phoenix" -> :phoenix
         _ -> :all
       end
@@ -296,7 +297,8 @@ defmodule CleatDeployWeb.AppLive.Index do
                     options={[
                       {"Phoenix / Elixir", "phoenix"},
                       {"Go / Cais", "golang"},
-                      {"Node / Next.js / TanStack Start", "node"}
+                      {"Node / Next.js / TanStack Start", "node"},
+                      {"Ruby on Rails", "rails"}
                     ]}
                   />
                   <.input
@@ -418,6 +420,13 @@ defmodule CleatDeployWeb.AppLive.Index do
                 current={@apps_runtime}
               >
                 JS
+              </.runtime_filter_chip>
+              <.runtime_filter_chip
+                id="apps-filter-rails"
+                runtime={:rails}
+                current={@apps_runtime}
+              >
+                Ruby
               </.runtime_filter_chip>
             </div>
           </div>
@@ -636,9 +645,11 @@ defmodule CleatDeployWeb.AppLive.Index do
   defp matches_runtime?(_app, :all), do: true
   defp matches_runtime?(%App{runtime: "golang"}, :golang), do: true
   defp matches_runtime?(%App{runtime: "node"}, :node), do: true
+  defp matches_runtime?(%App{runtime: "rails"}, :rails), do: true
 
-  defp matches_runtime?(%App{runtime: runtime}, :phoenix) when runtime not in ["golang", "node"],
-    do: true
+  defp matches_runtime?(%App{runtime: runtime}, :phoenix)
+       when runtime not in ["golang", "node", "rails"],
+       do: true
 
   defp matches_runtime?(_app, _runtime), do: false
 

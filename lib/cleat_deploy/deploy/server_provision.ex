@@ -17,6 +17,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     node_provision_script(app, config, manifest)
   end
 
+  def provision_script(%App{} = app, config, %AppManifest{runtime: "rails"} = manifest) do
+    rails_provision_script(app, config, manifest)
+  end
+
   def provision_script(%App{} = app, config, %AppManifest{} = manifest) do
     data_dir = "/var/lib/#{Path.basename(config.release_path)}"
     env_dir = Path.dirname(config.env_file)
@@ -139,8 +143,19 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   end
 
   defp node_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
+    service_provision_script(app, config, manifest, ["Environment=NODE_ENV=production"], "Node")
+  end
+
+  defp rails_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
+    service_provision_script(app, config, manifest, ["Environment=RAILS_ENV=production"], "Rails")
+  end
+
+  # Shared systemd unit for long-lived app servers that start through a
+  # generated `current/start.sh` (Node, Rails).
+  defp service_provision_script(%App{} = app, config, %AppManifest{} = manifest, env_lines, label) do
     env_dir = Path.dirname(config.env_file)
     memory_max = manifest.memory_max_mb || 400
+    extra_env = Enum.join(env_lines, "\n    ")
 
     unit = """
     [Unit]
@@ -153,7 +168,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     Group=root
     WorkingDirectory=#{config.release_path}/current
     EnvironmentFile=#{config.env_file}
-    Environment=NODE_ENV=production
+    #{extra_env}
     Environment=HOST=127.0.0.1
     Environment=PORT=#{app.port}
     ExecStart=/bin/bash #{config.release_path}/current/start.sh
@@ -169,7 +184,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     caddy_script = caddy_provision_script(app, manifest)
 
     """
-    log "Provisioning Node host #{app.host} on port #{app.port}"
+    log "Provisioning #{label} host #{app.host} on port #{app.port}"
     sudo mkdir -p #{shell_escape(env_dir)}
     sudo touch #{shell_escape(config.env_file)}
     sudo chmod 600 #{shell_escape(config.env_file)}
@@ -182,6 +197,20 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     sudo systemctl enable #{config.systemd_unit}
 
     #{caddy_script}
+    """
+  end
+
+  @doc """
+  Generic launcher written to `current/start.sh` for app servers whose start
+  command lives in `current/start.cmd`. Sources the systemd-provided env
+  (`PORT`, `HOST`, `NODE_ENV`/`RAILS_ENV`) and execs the command.
+  """
+  def start_script do
+    """
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "$(dirname "$0")"
+    exec bash -c "$(cat "$(dirname "$0")/start.cmd")"
     """
   end
 

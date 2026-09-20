@@ -83,4 +83,43 @@ defmodule CleatDeploy.Deploy.RuntimeTest do
 
     assert Runtime.kind(repo_path, app) == :node
   end
+
+  test "detects rails from Gemfile and config/application.rb", %{
+    scope: scope,
+    server: server,
+    repo_path: repo_path
+  } do
+    File.write!(Path.join(repo_path, "Gemfile"), ~s(gem "rails", "~> 7.1"\n))
+    File.mkdir_p!(Path.join(repo_path, "config"))
+    File.write!(Path.join(repo_path, "config/application.rb"), "module Loja\nend\n")
+
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Loja",
+        slug: "loja",
+        github_repo: "puppe1990/loja",
+        host: "loja.gestaobem.com",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :rails
+  end
+
+  test "app.runtime rails is detected as rails", %{
+    scope: scope,
+    server: server,
+    repo_path: repo_path
+  } do
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Loja",
+        slug: "loja-forced",
+        github_repo: "puppe1990/loja-forced",
+        host: "loja-forced.gestaobem.com",
+        runtime: "rails",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :rails
+  end
 end
