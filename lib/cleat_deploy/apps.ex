@@ -202,6 +202,9 @@ defmodule CleatDeploy.Apps do
   """
   def delete_app(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app)
       when tenant_id == tenant.id do
+    # Best-effort remote cleanup (systemd unit, release dir, Caddy site) so the
+    # CLI/API path does not leave orphans behind.
+    _ = CleatDeploy.Deploy.Teardown.run(Repo.preload(app, :server))
     _ = Github.delete_webhook(app)
     Repo.delete(app)
   end
