@@ -67,4 +67,43 @@ defmodule CleatDeploy.Servers.HostStatsTest do
     refute HostStats.local?(nil)
     assert HostStats.local?(%{host_ip: "127.0.0.1"})
   end
+
+  @df """
+  Filesystem     1024-blocks     Used Available Capacity Mounted on
+  /dev/sda1         78397936 67004240   8176812      90% /
+  """
+
+  test "parse_df returns used/total and df's capacity percentage" do
+    usage = HostStats.parse_df(@df)
+
+    assert usage.total == 78_397_936 * 1024
+    assert usage.used == 67_004_240 * 1024
+    # df's Capacity column: used/(used+avail), excluding reserved blocks.
+    assert usage.pct == 90.0
+  end
+
+  test "parse_df is nil on unparseable output" do
+    assert HostStats.parse_df("") == nil
+
+    assert HostStats.parse_df("Filesystem 1024-blocks Used Available Capacity Mounted on\n") ==
+             nil
+  end
+
+  @meminfo """
+  MemTotal:        7937232 kB
+  MemFree:         1223156 kB
+  MemAvailable:    5978488 kB
+  """
+
+  test "parse_meminfo returns used/total/pct" do
+    usage = HostStats.parse_meminfo(@meminfo)
+
+    assert usage.total == 7_937_232 * 1024
+    assert usage.used == (7_937_232 - 5_978_488) * 1024
+    assert usage.pct == 25.0
+  end
+
+  test "parse_meminfo is nil without the needed keys" do
+    assert HostStats.parse_meminfo("MemFree: 10 kB\n") == nil
+  end
 end

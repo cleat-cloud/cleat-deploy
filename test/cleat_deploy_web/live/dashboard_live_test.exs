@@ -70,6 +70,8 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     {:ok, view, html} = live(conn, ~p"/")
     assert has_element?(view, "#dashboard")
     assert html =~ "Configured apps"
+    assert has_element?(view, "#metric-disk", "Disk used")
+    assert has_element?(view, "#metric-memory", "Memory used")
     refute has_element?(view, "#dashboard-hero")
     refute html =~ "No Kubernetes Overheads"
     refute html =~ "HETZNER + LIGHTSAIL"

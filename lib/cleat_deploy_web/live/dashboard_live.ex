@@ -15,6 +15,7 @@ defmodule CleatDeployWeb.DashboardLive do
       |> assign(:host_sample, nil)
       |> assign(:live_host?, false)
       |> load_insights(metrics: connected?(socket))
+      |> refresh_resources()
 
     socket =
       if connected?(socket) do
@@ -38,6 +39,7 @@ defmodule CleatDeployWeb.DashboardLive do
     {:noreply,
      socket
      |> load_insights(metrics: true)
+     |> refresh_resources()
      |> apply_live()
      |> schedule_hetzner()}
   end
@@ -95,6 +97,24 @@ defmodule CleatDeployWeb.DashboardLive do
               icon="hero-globe-alt"
             />
           </.link>
+
+          <div id="metric-disk">
+            <.metric_card
+              title="Disk used"
+              value={usage_pct(@resources && @resources.disk)}
+              hint={usage_hint(@resources && @resources.disk)}
+              icon="hero-circle-stack"
+            />
+          </div>
+
+          <div id="metric-memory">
+            <.metric_card
+              title="Memory used"
+              value={usage_pct(@resources && @resources.memory)}
+              hint={usage_hint(@resources && @resources.memory)}
+              icon="hero-cpu-chip"
+            />
+          </div>
         </div>
 
         <div id="server-charts" class="grid gap-4 lg:grid-cols-2">
@@ -159,6 +179,28 @@ defmodule CleatDeployWeb.DashboardLive do
 
   defp load_insights(socket, opts) do
     assign(socket, :insights, Insights.snapshot(socket.assigns.current_scope, opts))
+  end
+
+  # Disk/memory of the host the panel runs on; nil when the primary server is
+  # remote (the counters come from the local /proc and df).
+  defp refresh_resources(socket) do
+    assign(socket, :resources, resources_for(socket.assigns.insights.server))
+  end
+
+  defp resources_for(nil), do: nil
+
+  defp resources_for(server) do
+    if HostStats.local?(server), do: HostStats.resources(), else: nil
+  end
+
+  defp usage_pct(%{pct: pct}) when is_number(pct), do: "#{round(pct)}%"
+  defp usage_pct(_), do: "—"
+
+  defp usage_hint(%{used: used, total: total}), do: "#{gb(used)} / #{gb(total)} GB"
+  defp usage_hint(_), do: "unavailable"
+
+  defp gb(bytes) when is_integer(bytes) do
+    :erlang.float_to_binary(bytes / 1_073_741_824, decimals: 1)
   end
 
   defp arm_live(socket) do
