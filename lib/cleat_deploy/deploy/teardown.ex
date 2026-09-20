@@ -55,6 +55,36 @@ defmodule CleatDeploy.Deploy.Teardown do
     end
   end
 
+  @doc """
+  Best-effort removal of a systemd unit, used when an app's runtime changes and
+  the unit name is re-derived so the old process does not keep holding the port.
+  """
+  def remove_unit(%App{} = app, unit) when is_binary(unit) and unit != "" do
+    if remote_enabled?() do
+      case app.server do
+        nil -> {:error, :missing_server}
+        server -> Ssh.run(server, app, ["bash", "-lc", remove_unit_script(unit)])
+      end
+    else
+      :ok
+    end
+  end
+
+  def remove_unit(%App{}, _unit), do: :ok
+
+  @doc "Shell snippet that stops, disables and deletes a systemd unit."
+  def remove_unit_script(unit) when is_binary(unit) do
+    """
+    set -u
+    UNIT=#{sh_quote(unit)}
+    sudo systemctl stop "$UNIT" 2>/dev/null || true
+    sudo systemctl disable "$UNIT" 2>/dev/null || true
+    sudo rm -f "/etc/systemd/system/${UNIT}.service"
+    sudo systemctl daemon-reload 2>/dev/null || true
+    sudo systemctl reset-failed "$UNIT" 2>/dev/null || true
+    """
+  end
+
   @doc "Shell snippet that deletes the Caddy site block for `host` and reloads."
   def remove_host_script(host) when is_binary(host) do
     """

@@ -48,4 +48,22 @@ defmodule CleatDeploy.Deploy.TeardownTest do
 
     assert Teardown.remove_host(app, "old.sites.gestaobem.com") == :ok
   end
+
+  test "remove_unit_script stops, disables and deletes the unit" do
+    script = Teardown.remove_unit_script("phx-lumina")
+
+    assert script =~ ~s(UNIT='phx-lumina')
+    assert script =~ ~s(systemctl stop "$UNIT")
+    assert script =~ ~s(systemctl disable "$UNIT")
+    assert script =~ ~s(rm -f "/etc/systemd/system/${UNIT}.service")
+    assert script =~ ~s(systemctl reset-failed "$UNIT")
+  end
+
+  test "remove_unit/2 is a no-op when the deploy runner is not SSH" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    assert Teardown.remove_unit(app, "phx-lumina") == :ok
+  end
 end
