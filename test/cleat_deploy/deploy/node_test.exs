@@ -67,6 +67,20 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "! -name build -exec rm -rf {} +"
   end
 
+  test "build script prunes dev dependencies and drops node_modules for Nitro output", %{
+    app: app,
+    config: config
+  } do
+    manifest = AppManifest.resolve(nil, app)
+    script = Node.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
+
+    # devDependencies are only needed for the build; don't publish them
+    assert script =~ "npm prune --omit=dev"
+    # TanStack Start / Nitro output is self-contained (native deps live under
+    # .output/server/node_modules), so the project node_modules is dead weight
+    assert script =~ "rm -rf node_modules"
+  end
+
   test "manifest custom build/start commands and node version win over detection" do
     app = %App{
       name: "Web",

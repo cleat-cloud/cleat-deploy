@@ -62,6 +62,8 @@ defmodule CleatDeploy.Deploy.Node do
 
     #{start_command_script(manifest.start_command)}
 
+    #{shrink_release_script()}
+
     RELEASE_DIR="#{config.release_path}/releases/build"
     sudo mkdir -p "$RELEASE_DIR"
     sudo rm -rf "${RELEASE_DIR:?}"/*
@@ -171,6 +173,24 @@ defmodule CleatDeploy.Deploy.Node do
     else
       echo "Could not determine a start command. Add a \\"start\\" script, a .output/server/index.mjs, or set start_command in .cleat_deploy/deploy.json." >&2
       exit 1
+    fi
+    """
+    |> String.trim()
+  end
+
+  # devDependencies are only needed to build. Publishing them multiplied the
+  # release size on disk (~100MB for a Vite/TanStack app), so prune them before
+  # the copy. TanStack Start / Nitro output is self-contained — native deps are
+  # traced into `.output/server/node_modules` — so its project node_modules can
+  # be dropped entirely.
+  defp shrink_release_script do
+    """
+    if [[ "$START_CMD" == "node .output/server/index.mjs" ]]; then
+      log "Self-contained Nitro output; dropping node_modules before publish"
+      rm -rf node_modules
+    elif [[ -d node_modules ]]; then
+      log "Pruning dev dependencies for the release"
+      npm prune --omit=dev
     fi
     """
     |> String.trim()
