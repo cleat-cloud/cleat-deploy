@@ -36,12 +36,35 @@ defmodule CleatDeploy.Deploy.Teardown do
     sudo rm -rf "$RELEASE"
     sudo rm -f "$ENVFILE"
 
+    #{remove_host_script(host)}
+    """
+  end
+
+  @doc """
+  Best-effort removal of the Caddy site for `host`, used when an app's host
+  changes so the previous vhost does not linger.
+  """
+  def remove_host(%App{} = app, host) when is_binary(host) do
+    if remote_enabled?() do
+      case app.server do
+        nil -> {:error, :missing_server}
+        server -> Ssh.run(server, app, ["bash", "-lc", remove_host_script(host)])
+      end
+    else
+      :ok
+    end
+  end
+
+  @doc "Shell snippet that deletes the Caddy site block for `host` and reloads."
+  def remove_host_script(host) when is_binary(host) do
+    """
+    set -u
     if [[ -f /etc/caddy/Caddyfile ]]; then
-      TEARDOWN_HOST="$HOST" sudo -E python3 - <<'PY'
+      CLEAT_REMOVE_HOST=#{sh_quote(host)} sudo -E python3 - <<'PY'
     import os
     from pathlib import Path
 
-    host = os.environ.get("TEARDOWN_HOST", "")
+    host = os.environ.get("CLEAT_REMOVE_HOST", "")
     path = Path("/etc/caddy/Caddyfile")
     if not host or not path.exists():
         raise SystemExit(0)
