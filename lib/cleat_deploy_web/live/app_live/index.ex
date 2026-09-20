@@ -22,6 +22,9 @@ defmodule CleatDeployWeb.AppLive.Index do
       |> assign(:apps_sort, :name)
       |> assign(:apps_sort_dir, :asc)
       |> assign(:apps_page, 1)
+      |> assign(:pending_delete, nil)
+      |> assign(:delete_confirm, "")
+      |> assign(:delete_form, to_form(%{"confirm" => ""}, as: :delete))
       |> restream_apps(apps, %{})
 
     socket =
@@ -108,6 +111,66 @@ defmodule CleatDeployWeb.AppLive.Index do
      push_patch(socket,
        to: apps_filter_path(parse_runtime(runtime), socket.assigns.apps_query)
      )}
+  end
+
+  def handle_event("delete_app_prompt", %{"id" => id}, socket) do
+    case find_app(socket.assigns.apps_list, id) do
+      nil ->
+        {:noreply, socket}
+
+      app ->
+        {:noreply,
+         socket
+         |> assign(:pending_delete, app)
+         |> assign(:delete_confirm, "")
+         |> assign(:delete_form, to_form(%{"confirm" => ""}, as: :delete))}
+    end
+  end
+
+  def handle_event("cancel_delete", _params, socket) do
+    {:noreply, assign(socket, :pending_delete, nil)}
+  end
+
+  def handle_event("validate_delete", %{"delete" => params}, socket) do
+    confirm = Map.get(params, "confirm", "")
+
+    {:noreply,
+     socket
+     |> assign(:delete_confirm, confirm)
+     |> assign(:delete_form, to_form(%{"confirm" => confirm}, as: :delete))}
+  end
+
+  def handle_event("delete_app", %{"delete" => params}, socket) do
+    app = socket.assigns.pending_delete
+    confirm = params |> Map.get("confirm", "") |> String.trim()
+
+    cond do
+      is_nil(app) ->
+        {:noreply, assign(socket, :pending_delete, nil)}
+
+      confirm != app.slug ->
+        {:noreply, put_flash(socket, :error, "Type #{app.slug} to confirm deletion")}
+
+      true ->
+        _ = CleatDeploy.Deploy.Teardown.run(app)
+
+        case Apps.delete_app(socket.assigns.current_scope, app) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> assign(:pending_delete, nil)
+             |> assign(
+               :apps_list,
+               Enum.reject(socket.assigns.apps_list, &(&1.id == app.id))
+             )
+             |> assign(:app_count, max(socket.assigns.app_count - 1, 0))
+             |> restream_apps()
+             |> put_flash(:info, "#{app.name} was deleted")}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Could not delete #{app.name}")}
+        end
+    end
   end
 
   def handle_event("sort_apps", %{"by" => field}, socket) do
@@ -519,14 +582,26 @@ defmodule CleatDeployWeb.AppLive.Index do
                   </td>
                   <td>{app.server.name}</td>
                   <td class="text-right">
-                    <.link
-                      :if={app.runtime != "static"}
-                      id={"app-#{app.id}-deploy"}
-                      navigate={~p"/apps/#{app.id}/deployments"}
-                      class="paas-btn-secondary text-[10px]"
-                    >
-                      <.icon name="hero-rocket-launch" class="size-3" /> Deploy
-                    </.link>
+                    <div class="flex items-center justify-end gap-2">
+                      <.link
+                        :if={app.runtime != "static"}
+                        id={"app-#{app.id}-deploy"}
+                        navigate={~p"/apps/#{app.id}/deployments"}
+                        class="paas-btn-secondary text-[10px]"
+                      >
+                        <.icon name="hero-rocket-launch" class="size-3" /> Deploy
+                      </.link>
+                      <button
+                        type="button"
+                        id={"app-#{app.id}-delete"}
+                        phx-click="delete_app_prompt"
+                        phx-value-id={app.id}
+                        title="Delete app"
+                        class="paas-btn-secondary px-2 py-1 text-rose-400 hover:border-rose-400/40"
+                      >
+                        <.icon name="hero-trash" class="size-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -568,6 +643,63 @@ defmodule CleatDeployWeb.AppLive.Index do
                 Next <.icon name="hero-chevron-right" class="size-3.5" />
               </button>
             </div>
+          </div>
+        </div>
+
+        <div
+          :if={@pending_delete}
+          id="apps-delete-modal"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div class="w-full max-w-md rounded-lg border border-rose-500/30 bg-hd-card p-5 shadow-xl">
+            <h3 class="font-display text-sm font-semibold text-rose-400">
+              Delete {@pending_delete.name}?
+            </h3>
+            <p class="mt-2 text-[11px] leading-relaxed text-hd-muted">
+              Permanently removes the app from Cleat — deploy history, env vars, and the GitHub
+              webhook. The unit on {@pending_delete.server.name} is stopped and
+              <span class="font-mono text-hd-text">{@pending_delete.release_path}</span>
+              is deleted. This cannot be undone.
+            </p>
+            <.form
+              for={@delete_form}
+              id="apps-delete-form"
+              phx-change="validate_delete"
+              phx-submit="delete_app"
+              class="mt-4 space-y-3"
+            >
+              <p class="text-[11px] text-hd-muted">
+                Type <span class="font-mono text-hd-text">{@pending_delete.slug}</span> to confirm.
+              </p>
+              <input
+                id="apps-delete-confirm"
+                type="text"
+                name={@delete_form[:confirm].name}
+                value={@delete_form[:confirm].value}
+                autocomplete="off"
+                spellcheck="false"
+                class="paas-input w-full font-mono"
+                placeholder={@pending_delete.slug}
+              />
+              <div class="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  id="apps-keep-button"
+                  phx-click="cancel_delete"
+                  class="paas-btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  id="apps-delete-button"
+                  type="submit"
+                  disabled={String.trim(@delete_confirm) != @pending_delete.slug}
+                  class="inline-flex items-center justify-center gap-1.5 rounded-md bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <.icon name="hero-trash" class="size-3.5" /> Delete app
+                </button>
+              </div>
+            </.form>
           </div>
         </div>
       </div>
@@ -683,6 +815,10 @@ defmodule CleatDeployWeb.AppLive.Index do
 
   defp put_query_param(params, query) when query in [nil, ""], do: params
   defp put_query_param(params, query), do: Map.put(params, :query, query)
+
+  defp find_app(apps, id) do
+    Enum.find(apps, &(to_string(&1.id) == to_string(id)))
+  end
 
   defp server_options(servers) do
     Enum.map(servers, fn server -> {server.name, server.id} end)

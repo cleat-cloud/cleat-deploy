@@ -255,6 +255,54 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert_patch(view, ~p"/apps?query=#{app.slug}")
   end
 
+  test "deletes an app from the list after slug confirmation", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Cifra",
+        slug: "cifra",
+        github_repo: "puppe1990/cifra-finops",
+        host: "finops.gestaobem.com"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    refute has_element?(view, "#apps-delete-modal")
+
+    view |> element("#app-#{app.id}-delete") |> render_click()
+    assert has_element?(view, "#apps-delete-modal")
+    assert has_element?(view, "#apps-delete-button[disabled]")
+
+    view |> element("#apps-keep-button") |> render_click()
+    refute has_element?(view, "#apps-delete-modal")
+    assert Apps.get_app!(scope, app.id)
+
+    view |> element("#app-#{app.id}-delete") |> render_click()
+
+    html =
+      view
+      |> form("#apps-delete-form", delete: %{confirm: "wrong"})
+      |> render_submit()
+
+    assert html =~ "Type cifra to confirm"
+    assert Apps.get_app_by_repo("puppe1990/cifra-finops")
+
+    view |> form("#apps-delete-form", delete: %{confirm: "cifra"}) |> render_change()
+    assert has_element?(view, "#apps-delete-button:not([disabled])")
+
+    html =
+      view
+      |> form("#apps-delete-form", delete: %{confirm: "cifra"})
+      |> render_submit()
+
+    assert html =~ "was deleted"
+    refute has_element?(view, "#apps-delete-modal")
+    refute Apps.get_app_by_repo("puppe1990/cifra-finops")
+  end
+
   test "sorts registered apps when a column header is clicked", %{
     conn: conn,
     scope: scope,
