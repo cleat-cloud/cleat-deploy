@@ -199,14 +199,14 @@ defmodule CleatDeployWeb.AppLiveTest do
 
     view |> element("#apps-filter-static") |> render_click()
     rendered = render(view)
-    assert rendered =~ static_app.name
-    refute rendered =~ phx_app.name
+    assert rendered =~ static_app.host
+    refute rendered =~ phx_app.host
     assert_patch(view, ~p"/apps?runtime=static")
 
     view |> element("#apps-filter-phoenix") |> render_click()
     rendered = render(view)
-    assert rendered =~ phx_app.name
-    refute rendered =~ static_app.name
+    assert rendered =~ phx_app.host
+    refute rendered =~ static_app.host
   end
 
   test "hides the deploy action for static apps", %{
@@ -231,13 +231,13 @@ defmodule CleatDeployWeb.AppLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/apps?runtime=golang")
     rendered = render(view)
-    assert rendered =~ go_app.name
-    refute rendered =~ phx_app.name
+    assert rendered =~ go_app.host
+    refute rendered =~ phx_app.host
 
     {:ok, view, _html} = live(conn, ~p"/apps?query=#{phx_app.slug}")
     rendered = render(view)
-    assert rendered =~ phx_app.name
-    refute rendered =~ go_app.name
+    assert rendered =~ phx_app.host
+    refute rendered =~ go_app.host
   end
 
   test "reflects filters in the URL", %{conn: conn, scope: scope, server: server} do
