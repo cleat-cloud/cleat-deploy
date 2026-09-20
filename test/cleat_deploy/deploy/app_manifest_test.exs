@@ -59,6 +59,24 @@ defmodule CleatDeploy.Deploy.AppManifestTest do
     assert manifest.release_name == "assistente"
   end
 
+  test "resolve reads node runtime and commands from deploy.json", %{
+    app: app,
+    repo_path: repo_path
+  } do
+    File.write!(
+      Path.join(repo_path, ".cleat_deploy/deploy.json"),
+      ~s({"runtime": "node", "build_command": "npm run build:prod",
+          "start_command": "npm start", "node_version": "20"})
+    )
+
+    manifest = AppManifest.resolve(repo_path, app)
+
+    assert manifest.runtime == "node"
+    assert manifest.build_command == "npm run build:prod"
+    assert manifest.start_command == "npm start"
+    assert manifest.node_version == "20"
+  end
+
   test "validate_for_server rejects solo app on shared server", %{
     app: app,
     server: server,

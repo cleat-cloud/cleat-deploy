@@ -20,6 +20,8 @@
   --color-hd-orange-dark: #d9480f;
   --color-hd-green: #3fb950;
   --color-hd-green-dark: #238636;
+  --color-hd-blue: #58a6ff;
+  --color-hd-blue-dark: #1f6feb;
 }
 
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
@@ -429,6 +431,8 @@ html[data-theme="light"] {
   --color-hd-orange-dark: #c45f0a;
   --color-hd-green: #1a7f37;
   --color-hd-green-dark: #116329;
+  --color-hd-blue: #0969da;
+  --color-hd-blue-dark: #0550ae;
 }
 
 html[data-theme="light"] .paas-btn-primary,

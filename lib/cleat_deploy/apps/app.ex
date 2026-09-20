@@ -53,7 +53,7 @@ defmodule CleatDeploy.Apps.App do
     |> cast_runtime_packages()
     |> put_runtime_packages_text()
     |> validate_branch()
-    |> validate_inclusion(:runtime, ["phoenix", "golang", "static"])
+    |> validate_inclusion(:runtime, ["phoenix", "golang", "static", "node"])
     |> put_github_repo_default()
     |> validate_repo()
     |> unique_constraint(:slug, name: :apps_tenant_id_slug_index)
@@ -95,6 +95,7 @@ defmodule CleatDeploy.Apps.App do
   def default_systemd_unit(slug, runtime \\ "phoenix")
 
   def default_systemd_unit(slug, "golang") when is_binary(slug), do: slug
+  def default_systemd_unit(slug, "node") when is_binary(slug), do: "node-#{slug}"
   def default_systemd_unit(_slug, "static"), do: nil
   def default_systemd_unit("trip-planner", _), do: "trip_planner_ia"
   def default_systemd_unit("decor", _), do: "festa_platform"
@@ -106,6 +107,7 @@ defmodule CleatDeploy.Apps.App do
   def default_release_path(slug, runtime \\ "phoenix")
 
   def default_release_path(slug, "golang") when is_binary(slug), do: "/opt/#{slug}"
+  def default_release_path(slug, "node") when is_binary(slug), do: "/opt/#{slug}"
   def default_release_path(slug, "static") when is_binary(slug), do: "/var/www/#{slug}"
   def default_release_path("trip-planner", _), do: "/opt/trip_planner_ia"
   def default_release_path("decor", _), do: "/opt/festa_platform"
@@ -115,6 +117,7 @@ defmodule CleatDeploy.Apps.App do
   def main_language(%__MODULE__{runtime: runtime}), do: main_language(runtime)
   def main_language("golang"), do: "Go"
   def main_language("static"), do: "Static"
+  def main_language("node"), do: "JavaScript"
   def main_language(_runtime), do: "Elixir"
 
   def deploy_config(%__MODULE__{} = app) do
