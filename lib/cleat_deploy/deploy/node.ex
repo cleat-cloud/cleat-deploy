@@ -65,10 +65,17 @@ defmodule CleatDeploy.Deploy.Node do
     fi
 
     log "Installing JS dependencies"
+    # A persistent cache outside BUILD_DIR (wiped every deploy) means a redeploy
+    # only downloads what changed. Registry tarballs dominate install time.
+    export npm_config_cache="$HOME/.npm"
     if [[ -f package-lock.json ]]; then
-      npm ci || npm install
+      if ! npm ci --no-audit --no-fund; then
+        log "package-lock.json out of sync (npm ci failed); falling back to npm install"
+        npm install --no-audit --no-fund
+      fi
     else
-      npm install
+      log "No package-lock.json; using npm install"
+      npm install --no-audit --no-fund
     fi
 
     #{build_step(manifest.build_command)}

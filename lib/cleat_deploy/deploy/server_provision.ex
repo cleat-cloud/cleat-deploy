@@ -30,6 +30,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     [Unit]
     Description=#{escape_unit_description(app.name)}
     After=network.target
+    StartLimitIntervalSec=60
+    StartLimitBurst=5
 
     [Service]
     Type=exec
@@ -41,6 +43,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     ExecStart=#{config.release_path}/current/bin/#{config.release_name} start
     Restart=always
     RestartSec=5
+    KillMode=control-group
+    TimeoutStopSec=15
     MemoryMax=#{memory_max}M
     LimitNOFILE=65535
 
@@ -82,6 +86,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
         [Unit]
         Description=#{escape_unit_description(description)}
         After=network.target
+        StartLimitIntervalSec=60
+        StartLimitBurst=5
 
         [Service]
         Type=exec
@@ -93,6 +99,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
         ExecStart=#{exec}
         Restart=always
         RestartSec=5
+        KillMode=control-group
+        TimeoutStopSec=15
         MemoryMax=#{memory_max}M
         LimitNOFILE=65535
         NoNewPrivileges=true
@@ -164,6 +172,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     [Unit]
     Description=#{escape_unit_description(app.name)}
     After=network.target
+    StartLimitIntervalSec=60
+    StartLimitBurst=5
 
     [Service]
     Type=exec
@@ -178,6 +188,11 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     ExecStart=/bin/bash #{config.release_path}/current/start.sh
     Restart=always
     RestartSec=5
+    # Kill the whole cgroup: an orphaned child (e.g. a node process that escaped
+    # the launcher) keeps the port and makes every restart fail to bind, which
+    # without a start limit becomes an infinite restart loop.
+    KillMode=control-group
+    TimeoutStopSec=15
     MemoryMax=#{memory_max}M
     LimitNOFILE=65535
 
@@ -207,14 +222,27 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   @doc """
   Generic launcher written to `current/start.sh` for app servers whose start
   command lives in `current/start.cmd`. Sources the systemd-provided env
-  (`PORT`, `HOST`, `NODE_ENV`/`RAILS_ENV`) and execs the command.
+  (`PORT`, `HOST`, `NODE_ENV`/`RAILS_ENV`) and runs the command.
+
+  Runs the command instead of `exec`-ing straight through so a non-zero exit and
+  the app's own stderr stay visible in the journal (a bare `exec` made a crashed
+  app indistinguishable from a clean shutdown).
   """
   def start_script do
     """
     #!/usr/bin/env bash
     set -euo pipefail
     cd "$(dirname "$0")"
-    exec bash -c "$(cat "$(dirname "$0")/start.cmd")"
+
+    CMD="$(cat "$(dirname "$0")/start.cmd")"
+    printf '==> starting: %s\\n' "$CMD" >&2
+
+    set +e
+    bash -c "$CMD"
+    code=$?
+    set -e
+    printf '==> app exited with status %s\\n' "$code" >&2
+    exit "$code"
     """
   end
 
