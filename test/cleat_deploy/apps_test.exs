@@ -191,6 +191,15 @@ defmodule CleatDeploy.AppsTest do
       assert {:error, changeset} = Apps.update_app_settings(scope, other, %{"port" => 4000})
       assert "has already been taken" in errors_on(changeset).port
     end
+
+    test "updates the host", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server)
+
+      assert {:ok, updated} =
+               Apps.update_app_settings(scope, app, %{"host" => "moved.example.com"})
+
+      assert updated.host == "moved.example.com"
+    end
   end
 
   describe "runtime_packages_text" do

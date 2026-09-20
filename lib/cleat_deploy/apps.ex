@@ -188,14 +188,33 @@ defmodule CleatDeploy.Apps do
   """
   def update_app_settings(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
       when tenant_id == tenant.id do
+    attrs = stringify_keys(attrs)
+    previous_host = app.host
+
     app
-    |> App.deploy_settings_changeset(
-      Map.take(stringify_keys(attrs), ["branch", "auto_deploy", "host", "port"])
-    )
+    |> App.deploy_settings_changeset(Map.take(attrs, ["branch", "auto_deploy", "host", "port"]))
     |> Repo.update()
+    |> case do
+      {:ok, updated} ->
+        prune_previous_host(updated, previous_host, attrs)
+        {:ok, updated}
+
+      error ->
+        error
+    end
   end
 
   def update_app_settings(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
+
+  # Changing an app's host provisions a new Caddy site but leaves the old one
+  # behind, so remove it (best-effort) once the new host is persisted.
+  defp prune_previous_host(%App{} = app, previous_host, attrs) do
+    if is_binary(attrs["host"]) and is_binary(previous_host) and previous_host != app.host do
+      _ = CleatDeploy.Deploy.Teardown.remove_host(Repo.preload(app, :server), previous_host)
+    end
+
+    :ok
+  end
 
   @doc """
   Deletes an app and its deployments/env vars. Best-effort removes the GitHub webhook.
