@@ -148,11 +148,6 @@ mix test
 mix precommit
 ```
 
-## Related
-
-- [paas-example](https://github.com/puppe1990/paas-example) — React UI mock of this panel
-- [trip-planner-ia-phx](https://github.com/puppe1990/trip-planner-ia-phx) — first production app ([trip.gestaobem.com](https://trip.gestaobem.com))
-
 ## License
 
 MIT
