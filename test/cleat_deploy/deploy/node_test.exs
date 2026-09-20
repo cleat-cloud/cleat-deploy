@@ -61,6 +61,8 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "/opt/cleat-web/releases/build"
     assert script =~ "start.sh"
     assert script =~ "sudo systemctl restart node-cleat-web"
+    # build dir must not leak (it accumulated ~50 GB in production)
+    assert script =~ ~s|trap 'rm -rf "$BUILD_DIR"' EXIT|
   end
 
   test "manifest custom build/start commands and node version win over detection" do
