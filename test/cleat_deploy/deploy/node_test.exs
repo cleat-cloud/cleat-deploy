@@ -44,6 +44,39 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "ExecStart=/bin/bash /opt/cleat-web/current/start.sh"
     assert script =~ "Environment=PORT=4020"
     assert script =~ "reverse_proxy 127.0.0.1:4020"
+    # An orphaned node from a previous unit kept the port and put the unit in an
+    # infinite restart loop; kill the whole cgroup and rate-limit retries.
+    assert script =~ "KillMode=control-group"
+    assert script =~ "TimeoutStopSec=15"
+    assert script =~ "StartLimitIntervalSec=60"
+    assert script =~ "StartLimitBurst=5"
+  end
+
+  test "start.sh surfaces the app's own output instead of swallowing failures" do
+    script = ServerProvision.start_script()
+
+    # `exec cmd` with no wrapper made a crashing app look like a clean exit
+    refute script =~ "exec bash -c"
+    # the launcher logs the command and the exit status, then propagates it
+    assert script =~ "starting:"
+    assert script =~ "exited with status"
+    assert script =~ ~s|exit "$code"|
+  end
+
+  test "build script reuses the npm cache and warns when the lock is out of sync", %{
+    app: app,
+    config: config
+  } do
+    manifest = AppManifest.resolve(nil, app)
+    script = Node.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
+
+    # A persistent npm cache survives between deploys (the tarballs do not live
+    # in BUILD_DIR, which is wiped on every deploy).
+    assert script =~ ~s|npm_config_cache="$HOME/.npm"|
+    # `npm ci` only runs when a lockfile exists; a stale lock must say so loudly
+    # instead of silently falling back to `npm install`.
+    assert script =~ "package-lock.json out of sync"
+    assert script =~ "npm install --no-audit --no-fund"
   end
 
   test "build script installs node, builds, resolves a start command, and restarts", %{
@@ -54,7 +87,7 @@ defmodule CleatDeploy.Deploy.NodeTest do
     script = Node.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
 
     assert script =~ "Installing Node.js"
-    assert script =~ "npm ci || npm install"
+    assert script =~ "npm ci --no-audit --no-fund"
     assert script =~ "npm run build"
     assert script =~ ".output/server/index.mjs"
     assert script =~ "next start"
