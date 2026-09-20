@@ -39,7 +39,21 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "sudo mkdir -p '/etc/phoenix_tts' '/var/lib/phoenix_tts'"
     assert script =~ "tts.gestaobem.com {"
     assert script =~ "reverse_proxy 127.0.0.1:4004"
-    assert script =~ "grep -Fq 'tts.gestaobem.com {'"
+    assert script =~ "Writing Caddy site tts.gestaobem.com"
+    assert script =~ "sudo awk -v site='tts.gestaobem.com'"
+    assert script =~ ~s|sudo install -m 0644 -o root -g root "$TMPFILE" "$CADDYFILE"|
+  end
+
+  test "provision_script rewrites an existing caddy site when the port changes", %{
+    app: app,
+    config: config
+  } do
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(%{app | port: 4088}, config, manifest)
+
+    assert script =~ "reverse_proxy 127.0.0.1:4088"
+    assert script =~ "Writing Caddy site tts.gestaobem.com"
+    refute script =~ "reverse_proxy 127.0.0.1:4004"
   end
 
   test "migrate_script falls back to release eval when bin/migrate is absent", %{config: config} do
@@ -88,7 +102,7 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     script = ServerProvision.provision_script(app, config, manifest)
 
     assert script =~ "http://203.0.113.10 {"
-    assert script =~ "grep -Fq 'http://203.0.113.10 {'"
+    assert script =~ "Writing Caddy site http://203.0.113.10"
     assert script =~ "reverse_proxy 127.0.0.1:4004"
   end
 
@@ -107,6 +121,6 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "Installing custom Caddyfile (deploy/Caddyfile)"
     assert script =~ ~s|sudo cp "$BUILD_DIR/deploy/Caddyfile" /etc/caddy/Caddyfile|
     assert script =~ "MemoryMax=1024M"
-    refute script =~ "grep -Fq"
+    refute script =~ "Writing Caddy site"
   end
 end
