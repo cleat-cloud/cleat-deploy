@@ -441,6 +441,7 @@ defmodule CleatDeploy.Deploy.Ssh do
     sudo rm -rf "${RELEASE_DIR:?}"/*
     sudo cp -a "$REL_DIR/." "$RELEASE_DIR/"
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
+    #{ServerProvision.prune_releases_script(config.release_path)}
 
     #{ServerProvision.provision_script(app, config, manifest)}
     #{env_sync_script(app, config)}

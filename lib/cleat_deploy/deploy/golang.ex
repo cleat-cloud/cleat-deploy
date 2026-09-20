@@ -101,6 +101,7 @@ defmodule CleatDeploy.Deploy.Golang do
       sudo cp -a web/static "$RELEASE_DIR/web/"
     fi
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
+    #{ServerProvision.prune_releases_script(config.release_path)}
 
     #{ServerProvision.provision_script(app, config, manifest)}
     #{CleatDeploy.Deploy.Ssh.env_sync_script(app, config)}

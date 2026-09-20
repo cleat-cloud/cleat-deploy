@@ -321,6 +321,20 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     """
   end
 
+  @doc """
+  Deletes legacy/orphan release directories under `release_path/releases`.
+
+  Every runtime publishes to `releases/build` and the caller runs this right
+  after pointing `current` at it, so anything else is stale (e.g. the old
+  timestamped releases that used to fill the disk).
+  """
+  def prune_releases_script(release_path) do
+    """
+    sudo find #{shell_escape(release_path)}/releases -mindepth 1 -maxdepth 1 -type d ! -name build -exec rm -rf {} + 2>/dev/null || true
+    """
+    |> String.trim()
+  end
+
   @doc false
   def reload_caddy_script do
     """
