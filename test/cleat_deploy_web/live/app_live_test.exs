@@ -63,6 +63,35 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert render(view) =~ "Trip Planner"
   end
 
+  test "paginates the apps list 10 per page", %{conn: conn, scope: scope, server: server} do
+    for n <- 1..12 do
+      label = String.pad_leading(Integer.to_string(n), 2, "0")
+
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "App #{label}",
+        slug: "app-#{n}",
+        github_repo: "owner/repo-#{n}",
+        host: "app-#{n}.example.com"
+      })
+    end
+
+    {:ok, view, html} = live(conn, ~p"/apps")
+
+    assert html =~ "App 01"
+    assert html =~ "App 10"
+    refute html =~ "App 11"
+    assert has_element?(view, "#apps-pagination")
+    assert has_element?(view, "#apps-page-status", "1-10 of 12")
+
+    html = view |> element("#apps-page-next") |> render_click()
+
+    assert html =~ "App 11"
+    assert html =~ "App 12"
+    refute html =~ "App 01"
+    assert has_element?(view, "#apps-page-status", "11-12 of 12")
+    assert has_element?(view, "#apps-page-next[disabled]")
+  end
+
   test "lists each app's main language", %{conn: conn, scope: scope, server: server} do
     phoenix_app =
       TenancyFixtures.app_fixture(scope, server, %{
