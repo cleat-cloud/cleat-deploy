@@ -92,6 +92,87 @@ defmodule CleatDeploy.AppsTest do
       assert "can't be blank" in errors_on(changeset).github_repo
       assert "can't be blank" in errors_on(changeset).host
     end
+
+    test "assigns a free port when the requested one is taken", %{scope: scope, server: server} do
+      first = TenancyFixtures.app_fixture(scope, server, %{port: 4000})
+      assert first.port == 4000
+
+      {:ok, second, _} =
+        Apps.create_app(scope, %{
+          name: "Second",
+          slug: "second",
+          github_repo: "owner/second",
+          host: "second.example.com",
+          server_id: server.id,
+          port: 4000
+        })
+
+      assert second.port == 4001
+    end
+
+    test "keeps an explicit port that is free", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Third",
+          slug: "third",
+          github_repo: "owner/third",
+          host: "third.example.com",
+          server_id: server.id,
+          port: 4050
+        })
+
+      assert app.port == 4050
+    end
+  end
+
+  describe "allocate_port/2" do
+    test "returns the preferred port when free", %{server: server} do
+      assert Apps.allocate_port(server.id, 4025) == 4025
+    end
+
+    test "skips ports already used on the server", %{scope: scope, server: server} do
+      TenancyFixtures.app_fixture(scope, server, %{port: 4000})
+
+      assert Apps.allocate_port(server.id, 4000) == 4001
+      assert Apps.allocate_port(server.id) == 4001
+    end
+
+    test "is scoped per server", %{scope: scope, server: server} do
+      other_server =
+        TenancyFixtures.server_fixture(scope, %{name: "other-#{System.unique_integer()}"})
+
+      TenancyFixtures.app_fixture(scope, server, %{port: 4000})
+
+      assert Apps.allocate_port(other_server.id) == 4000
+    end
+
+    test "never hands out the panel's own port", %{server: server} do
+      previous = System.get_env("PORT")
+      System.put_env("PORT", "4010")
+      on_exit(fn -> restore_env("PORT", previous) end)
+
+      assert Apps.allocate_port(server.id, 4010) == 4000
+    end
+  end
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
+
+  describe "update_app_settings/3" do
+    test "updates the port", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{port: 4000})
+
+      assert {:ok, updated} = Apps.update_app_settings(scope, app, %{"port" => 4030})
+      assert updated.port == 4030
+    end
+
+    test "rejects a port already used on the same server", %{scope: scope, server: server} do
+      TenancyFixtures.app_fixture(scope, server, %{port: 4000})
+      other = TenancyFixtures.app_fixture(scope, server, %{port: 4001})
+
+      assert {:error, changeset} = Apps.update_app_settings(scope, other, %{"port" => 4000})
+      assert "has already been taken" in errors_on(changeset).port
+    end
   end
 
   describe "runtime_packages_text" do
