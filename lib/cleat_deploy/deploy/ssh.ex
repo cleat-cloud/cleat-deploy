@@ -22,12 +22,25 @@ defmodule CleatDeploy.Deploy.Ssh do
       try do
         host_ip = CleatDeploy.Deploy.Target.ssh_host_ip(app, server)
         target = "#{server.ssh_user}@#{host_ip}"
-        args = log_ssh_base(key_path, target) ++ argv
+        args = log_ssh_base(key_path, target) ++ [command(argv)]
         cmd("ssh", args)
       after
         File.rm(key_path)
       end
     end
+  end
+
+  @doc """
+  Shell-quotes `argv` into a single remote command.
+
+  ssh joins the trailing arguments with spaces, so passing them raw would split
+  scripts (and only prefix the first line with `bash -lc`). Quoting each element
+  keeps the remote command exactly as intended.
+  """
+  def command(argv) when is_list(argv) do
+    argv
+    |> Enum.map(&shell_escape/1)
+    |> Enum.join(" ")
   end
 
   def run_deploy(deployment, app, server) do
