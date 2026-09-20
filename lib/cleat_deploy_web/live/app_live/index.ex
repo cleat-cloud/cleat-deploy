@@ -53,7 +53,7 @@ defmodule CleatDeployWeb.AppLive.Index do
     |> assign(:form, to_form(Apps.change_app(%App{})))
   end
 
-  defp apply_action(socket, :index, _params) do
+  defp apply_action(socket, :index, params) do
     socket
     |> assign(:page_title, "Apps")
     |> assign(:app, nil)
@@ -62,6 +62,7 @@ defmodule CleatDeployWeb.AppLive.Index do
     |> assign(:repo_search, "")
     |> assign(:repo_picker_open?, false)
     |> assign(:show_advanced?, false)
+    |> apply_filter_params(params)
   end
 
   @impl true
@@ -99,28 +100,14 @@ defmodule CleatDeployWeb.AppLive.Index do
   def handle_event("filter_apps", params, socket) do
     query = params["query"] || params["apps_query"] || ""
 
-    {:noreply,
-     socket
-     |> assign(:apps_query, query)
-     |> assign(:apps_page, 1)
-     |> restream_apps()}
+    {:noreply, push_patch(socket, to: apps_filter_path(socket.assigns.apps_runtime, query))}
   end
 
   def handle_event("filter_runtime", %{"runtime" => runtime}, socket) do
-    runtime =
-      case runtime do
-        "golang" -> :golang
-        "node" -> :node
-        "rails" -> :rails
-        "phoenix" -> :phoenix
-        _ -> :all
-      end
-
     {:noreply,
-     socket
-     |> assign(:apps_runtime, runtime)
-     |> assign(:apps_page, 1)
-     |> restream_apps()}
+     push_patch(socket,
+       to: apps_filter_path(parse_runtime(runtime), socket.assigns.apps_query)
+     )}
   end
 
   def handle_event("sort_apps", %{"by" => field}, socket) do
@@ -653,6 +640,39 @@ defmodule CleatDeployWeb.AppLive.Index do
     |> assign(:show_advanced?, show_advanced?)
     |> assign(:form, to_form(changeset))
   end
+
+  defp apply_filter_params(socket, params) do
+    socket
+    |> assign(:apps_runtime, parse_runtime(params["runtime"]))
+    |> assign(:apps_query, params["query"] || "")
+    |> assign(:apps_page, 1)
+    |> restream_apps()
+  end
+
+  defp parse_runtime("golang"), do: :golang
+  defp parse_runtime("node"), do: :node
+  defp parse_runtime("rails"), do: :rails
+  defp parse_runtime("phoenix"), do: :phoenix
+  defp parse_runtime(_), do: :all
+
+  # Filters live in the URL (`/apps?runtime=golang&query=catalogo`) so they are
+  # shareable and survive reload/back-forward.
+  defp apps_filter_path(runtime, query) do
+    params =
+      %{}
+      |> put_runtime_param(runtime)
+      |> put_query_param(query)
+
+    if map_size(params) == 0, do: ~p"/apps", else: ~p"/apps?#{params}"
+  end
+
+  defp put_runtime_param(params, :all), do: params
+
+  defp put_runtime_param(params, runtime),
+    do: Map.put(params, :runtime, Atom.to_string(runtime))
+
+  defp put_query_param(params, query) when query in [nil, ""], do: params
+  defp put_query_param(params, query), do: Map.put(params, :query, query)
 
   defp server_options(servers) do
     Enum.map(servers, fn server -> {server.name, server.id} end)

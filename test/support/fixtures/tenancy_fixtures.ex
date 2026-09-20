@@ -16,9 +16,11 @@ defmodule CleatDeploy.TenancyFixtures do
   end
 
   def server_fixture(scope, attrs \\ %{}) do
+    suffix = System.unique_integer([:positive])
+
     defaults = %{
-      name: "server-#{System.unique_integer()}",
-      host_ip: "10.0.0.1",
+      name: "#{Faker.Company.name()} #{suffix}",
+      host_ip: Faker.Internet.ip_v4_address(),
       ssh_user: "ubuntu",
       region: "us-east-1"
     }
@@ -28,11 +30,13 @@ defmodule CleatDeploy.TenancyFixtures do
   end
 
   def app_fixture(scope, server, attrs \\ %{}) do
+    suffix = System.unique_integer([:positive])
+
     defaults = %{
-      name: "App #{System.unique_integer()}",
-      slug: "app-#{System.unique_integer()}",
-      github_repo: "owner/repo-#{System.unique_integer()}",
-      host: "app-#{System.unique_integer([:positive])}.example.com",
+      name: Faker.Company.name(),
+      slug: "app-#{suffix}",
+      github_repo: "#{Faker.Internet.user_name()}/#{Faker.Internet.slug()}-#{suffix}",
+      host: "#{Faker.Internet.slug()}-#{suffix}.example.com",
       server_id: server.id
     }
 
