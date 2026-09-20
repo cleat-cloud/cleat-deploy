@@ -92,6 +92,17 @@ unit behind the Caddy reverse proxy. The start command is resolved at build time
 (e.g. `"20"`; defaults to the latest 22.x), `build_command`, and `build_dir` for
 monorepos.
 
+### Ruby on Rails apps
+
+Set `runtime: "rails"` (or `"runtime": "rails"` in `.cleat_deploy/deploy.json`).
+The panel installs Ruby via mise (version from `ruby_version`, `.ruby-version`
+or the Gemfile `ruby` directive), runs `bundle install`, `assets:precompile` and
+`db:prepare`, publishes the project to `/opt/<slug>/current`, and keeps Puma
+alive with a `rails-<slug>` systemd unit behind the Caddy reverse proxy.
+`DATABASE_URL`, `SECRET_KEY_BASE` and `RAILS_MASTER_KEY` are read from the panel
+env vars. Start command: `start_command` → `bundle exec puma -C config/puma.rb`
+→ `bundle exec puma -b tcp://0.0.0.0:$PORT`.
+
 One-off test script (no UI):
 
 ```bash

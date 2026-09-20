@@ -120,6 +120,7 @@ defmodule CleatDeployWeb.DashboardLive do
             elixir={@insights.runtimes.elixir}
             go={@insights.runtimes.go}
             js={@insights.runtimes.node}
+            ruby={@insights.runtimes.ruby}
           />
           <.deploy_bars id="chart-deploys" days={@insights.deploys} />
         </div>

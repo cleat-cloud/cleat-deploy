@@ -19,6 +19,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
             build_command: nil,
             start_command: nil,
             node_version: nil,
+            ruby_version: nil,
             domain_checklist?: false
 
   @type t :: %__MODULE__{
@@ -36,6 +37,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
           build_command: String.t() | nil,
           start_command: String.t() | nil,
           node_version: String.t() | nil,
+          ruby_version: String.t() | nil,
           domain_checklist?: boolean()
         }
 
@@ -100,6 +102,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       build_command: nil,
       start_command: nil,
       node_version: nil,
+      ruby_version: nil,
       domain_checklist?: false
     }
   end
@@ -177,6 +180,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       build_command: blank_to_nil(Map.get(map, "build_command")),
       start_command: blank_to_nil(Map.get(map, "start_command")),
       node_version: blank_to_nil(Map.get(map, "node_version")),
+      ruby_version: blank_to_nil(Map.get(map, "ruby_version")),
       domain_checklist?: Map.get(map, "caddy_mode") == "replace"
     }
     |> Enum.reject(fn {_k, v} -> v in [nil, []] end)
@@ -187,6 +191,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
   defp parse_runtime("phoenix"), do: "phoenix"
   defp parse_runtime("static"), do: "static"
   defp parse_runtime("node"), do: "node"
+  defp parse_runtime("rails"), do: "rails"
   defp parse_runtime(_), do: nil
 
   defp parse_binaries(list) when is_list(list) do

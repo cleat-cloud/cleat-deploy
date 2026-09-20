@@ -40,9 +40,10 @@ defmodule CleatDeploy.Apps do
       select: {a.runtime, count(a.id)}
     )
     |> Repo.all()
-    |> Enum.reduce(%{elixir: 0, go: 0, node: 0}, fn
+    |> Enum.reduce(%{elixir: 0, go: 0, node: 0, ruby: 0}, fn
       {"golang", n}, acc -> %{acc | go: n}
       {"node", n}, acc -> %{acc | node: n}
+      {"rails", n}, acc -> %{acc | ruby: n}
       {_runtime, n}, acc -> %{acc | elixir: acc.elixir + n}
     end)
   end
