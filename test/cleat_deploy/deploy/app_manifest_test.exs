@@ -131,4 +131,66 @@ defmodule CleatDeploy.Deploy.AppManifestTest do
     manifest = AppManifest.resolve(repo_path, app)
     assert manifest.release_name == "festa_platform"
   end
+
+  test "infers node for a TanStack Start repo without deploy.json" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path =
+      tmp_repo(%{
+        "package.json" =>
+          ~s({"dependencies": {"@tanstack/react-start": "latest", "react": "^19"}})
+      })
+
+    assert AppManifest.resolve(repo_path, app).runtime == "node"
+  end
+
+  test "infers static for a package.json without a JS framework" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path = tmp_repo(%{"package.json" => ~s({"dependencies": {"left-pad": "^1.0.0"}})})
+
+    assert AppManifest.resolve(repo_path, app).runtime == "static"
+  end
+
+  test "deploy.json runtime wins over detection" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path =
+      tmp_repo(%{
+        "package.json" => ~s({"dependencies": {"@tanstack/react-start": "latest"}}),
+        ".cleat_deploy/deploy.json" => ~s({"runtime": "static"})
+      })
+
+    assert AppManifest.resolve(repo_path, app).runtime == "static"
+  end
+
+  test "keeps an explicit non-phoenix runtime even without framework files" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "node"})
+
+    repo_path = tmp_repo(%{"package.json" => ~s({"dependencies": {"left-pad": "^1.0.0"}})})
+
+    assert AppManifest.resolve(repo_path, app).runtime == "node"
+  end
+
+  defp tmp_repo(files) do
+    path = Path.join(System.tmp_dir!(), "manifest_detect_#{:erlang.unique_integer([:positive])}")
+    File.mkdir_p!(path)
+
+    Enum.each(files, fn {relative, content} ->
+      full = Path.join(path, relative)
+      File.mkdir_p!(Path.dirname(full))
+      File.write!(full, content)
+    end)
+
+    on_exit(fn -> File.rm_rf(path) end)
+    path
+  end
 end

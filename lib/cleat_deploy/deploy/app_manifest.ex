@@ -47,12 +47,68 @@ defmodule CleatDeploy.Deploy.AppManifest do
     |> Map.merge(app_overrides(app))
     |> Map.merge(from_mix_exs(repo_path))
     |> Map.merge(from_go_mod(repo_path))
+    |> Map.merge(detected_runtime(repo_path, app))
     |> Map.merge(from_repo(repo_path))
     |> then(&struct(__MODULE__, &1))
   end
 
   @doc false
   def resolve(nil, %App{} = app), do: struct(__MODULE__, app_overrides(app))
+
+  # Infers the runtime from the checked-out repo so a TanStack Start / Next repo
+  # deploys as `node` without a committed deploy.json. Only runs while the app is
+  # on the default runtime; an explicit deploy.json runtime (merged after) or a
+  # non-phoenix app.runtime always wins.
+  defp detected_runtime(repo_path, %App{runtime: "phoenix"}) do
+    case detect_runtime(repo_path) do
+      nil -> %{}
+      runtime -> %{runtime: runtime}
+    end
+  end
+
+  defp detected_runtime(_repo_path, %App{}), do: %{}
+
+  defp detect_runtime(repo_path) do
+    cond do
+      file?(repo_path, "mix.exs") -> "phoenix"
+      file?(repo_path, "go.mod") -> "golang"
+      rails?(repo_path) -> "rails"
+      node_project?(repo_path) -> "node"
+      file?(repo_path, "index.html") or file?(repo_path, "package.json") -> "static"
+      true -> nil
+    end
+  end
+
+  defp rails?(repo_path) do
+    file?(repo_path, "Gemfile") and
+      (file?(repo_path, "config/application.rb") or gemfile_has_rails?(repo_path))
+  end
+
+  defp gemfile_has_rails?(repo_path) do
+    case File.read(Path.join(repo_path, "Gemfile")) do
+      {:ok, contents} -> String.contains?(contents, "rails")
+      _ -> false
+    end
+  end
+
+  defp node_project?(repo_path) do
+    with {:ok, contents} <- File.read(Path.join(repo_path, "package.json")),
+         {:ok, pkg} <- Jason.decode(contents) do
+      deps = Map.merge(pkg["dependencies"] || %{}, pkg["devDependencies"] || %{})
+      Enum.any?(Map.keys(deps), &node_framework?/1)
+    else
+      _ -> false
+    end
+  end
+
+  defp node_framework?("next"), do: true
+
+  defp node_framework?("@" <> rest),
+    do: String.ends_with?(rest, "-start") or String.ends_with?(rest, "/start")
+
+  defp node_framework?(_dep), do: false
+
+  defp file?(repo_path, relative), do: File.exists?(Path.join(repo_path, relative))
 
   @doc false
   def solo_server?(%__MODULE__{solo_server: true}), do: true
