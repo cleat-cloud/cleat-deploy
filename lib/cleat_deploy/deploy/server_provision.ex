@@ -256,14 +256,26 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     append_caddy_site(address, caddy_site)
   end
 
+  # Rewrites the managed site block for `address` on every deploy. The upstream
+  # (app port) can change after creation, so appending only when the address is
+  # new would leave Caddy proxying to the old port.
   defp append_caddy_site(address, caddy_site) do
     """
-    if ! sudo grep -Fq '#{address} {' /etc/caddy/Caddyfile; then
-      log "Adding Caddy site #{address}"
-      sudo tee -a /etc/caddy/Caddyfile > /dev/null <<'PAAS_CADDY_SITE'
+    CADDYFILE="/etc/caddy/Caddyfile"
+    sudo touch "$CADDYFILE"
+    TMPFILE="$(mktemp)"
+    sudo awk -v site=#{shell_escape(address)} '
+      $0 == site " {" { inside = 1; next }
+      inside && $0 == "}" { inside = 0; next }
+      inside { next }
+      { print }
+    ' "$CADDYFILE" > "$TMPFILE"
+    cat >> "$TMPFILE" <<'PAAS_CADDY_SITE'
     #{String.trim_leading(caddy_site)}
     PAAS_CADDY_SITE
-    fi
+    sudo install -m 0644 -o root -g root "$TMPFILE" "$CADDYFILE"
+    rm -f "$TMPFILE"
+    log "Writing Caddy site #{address}"
     """
   end
 
