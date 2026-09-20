@@ -1,21 +1,22 @@
 # Cleat
 
-Control panel for deploying **Phoenix/Elixir** and **Go (Cais)** apps to **Hetzner Cloud** (CX33) or AWS Lightsail via GitHub webhooks.
+Self-hosted PaaS control panel. Deploy **Phoenix/Elixir**, **Go**, **Node (Next.js / TanStack Start)**, **Ruby on Rails** and **static sites** to **Hetzner Cloud** (CX33) or AWS Lightsail over SSH, with GitHub push-to-deploy.
 
 Formerly Phoenix PaaS. OTP app: `cleat_deploy`.
 
-Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and watch builds in a live terminal.
+Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and watch builds in a live terminal. Pair it with the [`cleat` CLI](https://github.com/puppe1990/cleat-cli).
 
 ![Cleat dashboard — Trip Planner deployed on Lightsail](docs/images/dashboard.jpg)
 
 ## Features
 
 - **Servers** — register Hetzner Cloud or Lightsail VMs (IP, location, SSH user)
-- **Apps** — Phoenix OTP releases, Go/Cais binaries, and static sites (detected from `mix.exs` / `go.mod` / `index.html`)
-- **Deployments** — queued → running → success/failed, with build logs
+- **Runtimes** — Phoenix OTP releases, Go/Cais binaries, Node servers (Next.js / TanStack Start), Rails/Puma, and static sites. Auto-detected from the repo or set via `runtime` in `.cleat_deploy/deploy.json`
+- **Deployments** — queued → running → success/failed, with build logs and paginated history
 - **GitHub webhooks** — HMAC-verified `POST /webhooks/github`
 - **Oban queue** — background deploy worker with Mox-tested runner behaviour
 - **SSH deploys** — clone, build on the VM, migrate, restart systemd
+- **CLI** — [`cleat`](https://github.com/puppe1990/cleat-cli) for servers, apps, env vars, deploys and log streaming
 
 ## Requirements
 
