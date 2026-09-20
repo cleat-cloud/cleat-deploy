@@ -191,6 +191,8 @@ defmodule CleatDeploy.Apps do
     attrs = stringify_keys(attrs)
     previous_host = app.host
     previous_repo = app.github_repo
+    previous_runtime = app.runtime
+    previous_unit = app.systemd_unit
 
     app
     |> App.deploy_settings_changeset(
@@ -201,6 +203,7 @@ defmodule CleatDeploy.Apps do
       {:ok, updated} ->
         prune_previous_host(updated, previous_host, attrs)
         sync_repo_change(updated, previous_repo)
+        prune_previous_unit(updated, previous_runtime, previous_unit)
         {:ok, updated}
 
       error ->
@@ -214,6 +217,21 @@ defmodule CleatDeploy.Apps do
   defp sync_repo_change(%App{} = app, previous_repo) do
     if is_binary(app.github_repo) and app.github_repo != "" and app.github_repo != previous_repo do
       _ = sync_github_webhook(Repo.preload(app, :server))
+    end
+
+    :ok
+  end
+
+  # Changing the runtime re-derives the systemd unit. The old unit keeps running
+  # the previous process (and holding the port), so a later deploy of the new
+  # unit can never bind and hits the restart limit. Remove it (best-effort).
+  defp prune_previous_unit(%App{}, _previous_runtime, previous_unit)
+       when previous_unit in [nil, ""],
+       do: :ok
+
+  defp prune_previous_unit(%App{} = app, previous_runtime, previous_unit) do
+    if app.runtime != previous_runtime and app.systemd_unit != previous_unit do
+      _ = CleatDeploy.Deploy.Teardown.remove_unit(Repo.preload(app, :server), previous_unit)
     end
 
     :ok
