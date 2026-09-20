@@ -30,7 +30,8 @@ defmodule CleatDeploy.Deploy.Node do
     """
     set -euo pipefail
 
-    log() { printf '==> %s\\n' "$*"; }
+    SECONDS=0
+    log() { printf '==> [%3ds] %s\\n' "$SECONDS" "$*"; }
 
     if ! swapon --show | grep -q /swapfile; then
       sudo fallocate -l 2G /swapfile || true
@@ -46,6 +47,7 @@ defmodule CleatDeploy.Deploy.Node do
     rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
     trap 'rm -rf "$BUILD_DIR"; rm -f #{remote_tar}' EXIT
+    log "Unpacking source"
     tar -xzf #{remote_tar} -C "$BUILD_DIR"
     cd "$BUILD_DIR"
     #{project_cd(manifest)}
@@ -55,8 +57,19 @@ defmodule CleatDeploy.Deploy.Node do
       exit 1
     fi
 
+    log "Probing environment"
+    if ! command -v node >/dev/null 2>&1; then
+      log "Node missing after install — PATH=${PATH}"
+    else
+      log "Node $(node -v), npm $(npm -v)"
+    fi
+
     log "Installing JS dependencies"
-    npm ci || npm install
+    if [[ -f package-lock.json ]]; then
+      npm ci || npm install
+    else
+      npm install
+    fi
 
     #{build_step(manifest.build_command)}
 
@@ -93,6 +106,8 @@ defmodule CleatDeploy.Deploy.Node do
     fi
 
     #{ServerProvision.reload_caddy_script()}
+
+    log "Done in ${SECONDS}s"
     """
   end
 
