@@ -23,7 +23,7 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
       })
 
     config = App.deploy_config(app)
-    %{app: app, config: config}
+    %{app: app, config: config, scope: scope, server: server}
   end
 
   test "provision_script creates systemd unit, data dir, and caddy site", %{
@@ -37,11 +37,34 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "/etc/systemd/system/phoenix_tts.service"
     assert script =~ "ExecStart=/opt/phoenix_tts/current/bin/phoenix_tts start"
     assert script =~ "sudo mkdir -p '/etc/phoenix_tts' '/var/lib/phoenix_tts'"
+    assert script =~ "Environment=CLEAT_DATA_DIR=/var/lib/phoenix_tts"
     assert script =~ "tts.gestaobem.com {"
     assert script =~ "reverse_proxy 127.0.0.1:4004"
     assert script =~ "Writing Caddy site tts.gestaobem.com"
     assert script =~ "sudo awk -v site='tts.gestaobem.com'"
     assert script =~ ~s|sudo install -m 0644 -o root -g root "$TMPFILE" "$CADDYFILE"|
+  end
+
+  test "node apps get a persistent data dir outside the release", %{
+    scope: scope,
+    server: server
+  } do
+    {:ok, app, _webhook_status} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Leitor",
+        slug: "leitor",
+        github_repo: "owner/leitor",
+        host: "leitor.example.com",
+        runtime: "node",
+        server_id: server.id
+      })
+
+    config = App.deploy_config(app)
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    assert script =~ "Environment=CLEAT_DATA_DIR=/opt/leitor/data"
+    assert script =~ "sudo mkdir -p '/etc/leitor' '/opt/leitor/data'"
   end
 
   test "provision_script rewrites an existing caddy site when the port changes", %{

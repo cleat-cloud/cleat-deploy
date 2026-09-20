@@ -9,7 +9,7 @@ defmodule CleatDeployWeb.Api.Contract do
 
   @resources %{
     "app" => ~w(
-      id name slug github_repo branch host port systemd_unit release_path
+      id name slug github_repo branch host port systemd_unit release_path data_dir
       auto_deploy runtime runtime_apt_packages server inserted_at
     ),
     "server" => ~w(
