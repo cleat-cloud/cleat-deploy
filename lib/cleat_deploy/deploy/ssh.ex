@@ -7,6 +7,7 @@ defmodule CleatDeploy.Deploy.Ssh do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.Golang
+  alias CleatDeploy.Deploy.Node
   alias CleatDeploy.Deploy.Runtime
   alias CleatDeploy.Deploy.ServerProvision
   alias CleatDeploy.Deploy.Static
@@ -324,6 +325,9 @@ defmodule CleatDeploy.Deploy.Ssh do
     cond do
       manifest.runtime == "static" ->
         Static.remote_build_script(server, app, config, sha, remote_tar, manifest)
+
+      manifest.runtime == "node" ->
+        Node.remote_build_script(server, app, config, sha, remote_tar, manifest)
 
       Runtime.kind(work_dir, app) == :golang or manifest.runtime == "golang" ->
         Golang.remote_build_script(server, app, config, sha, remote_tar, manifest)

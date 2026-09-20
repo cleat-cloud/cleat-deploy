@@ -63,4 +63,24 @@ defmodule CleatDeploy.Deploy.RuntimeTest do
 
     assert Runtime.kind(repo_path, app) == :golang
   end
+
+  test "app.runtime node is detected as node", %{
+    scope: scope,
+    server: server,
+    repo_path: repo_path
+  } do
+    File.write!(Path.join(repo_path, "package.json"), ~s({"dependencies": {"next": "15.0.0"}}))
+
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Cleat Web",
+        slug: "cleat-web",
+        github_repo: "puppe1990/cleat-web",
+        host: "web.gestaobem.com",
+        runtime: "node",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :node
+  end
 end

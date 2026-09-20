@@ -13,6 +13,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     static_provision_script(app, config, manifest)
   end
 
+  def provision_script(%App{} = app, config, %AppManifest{runtime: "node"} = manifest) do
+    node_provision_script(app, config, manifest)
+  end
+
   def provision_script(%App{} = app, config, %AppManifest{} = manifest) do
     data_dir = "/var/lib/#{Path.basename(config.release_path)}"
     env_dir = Path.dirname(config.env_file)
@@ -129,6 +133,53 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     """
     log "Provisioning static site #{app.host}"
     sudo mkdir -p #{shell_escape(config.release_path)}
+
+    #{caddy_script}
+    """
+  end
+
+  defp node_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
+    env_dir = Path.dirname(config.env_file)
+    memory_max = manifest.memory_max_mb || 400
+
+    unit = """
+    [Unit]
+    Description=#{escape_unit_description(app.name)}
+    After=network.target
+
+    [Service]
+    Type=exec
+    User=root
+    Group=root
+    WorkingDirectory=#{config.release_path}/current
+    EnvironmentFile=#{config.env_file}
+    Environment=NODE_ENV=production
+    Environment=HOST=127.0.0.1
+    Environment=PORT=#{app.port}
+    ExecStart=/bin/bash #{config.release_path}/current/start.sh
+    Restart=always
+    RestartSec=5
+    MemoryMax=#{memory_max}M
+    LimitNOFILE=65535
+
+    [Install]
+    WantedBy=multi-user.target
+    """
+
+    caddy_script = caddy_provision_script(app, manifest)
+
+    """
+    log "Provisioning Node host #{app.host} on port #{app.port}"
+    sudo mkdir -p #{shell_escape(env_dir)}
+    sudo touch #{shell_escape(config.env_file)}
+    sudo chmod 600 #{shell_escape(config.env_file)}
+
+    sudo tee /etc/systemd/system/#{config.systemd_unit}.service > /dev/null <<'PAAS_SYSTEMD_UNIT'
+    #{String.trim_trailing(unit)}
+    PAAS_SYSTEMD_UNIT
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable #{config.systemd_unit}
 
     #{caddy_script}
     """

@@ -42,9 +42,11 @@ defmodule CleatDeployWeb.AppLive.Layout do
   attr :confirming_cancel?, :boolean, default: false
 
   def shell_hero(assigns) do
-    golang? = assigns.app.runtime == "golang"
-
-    assigns = assign(assigns, golang?: golang?, runtime_badge: if(golang?, do: "GO", else: "PHX"))
+    assigns =
+      assign(assigns,
+        runtime_badge: runtime_badge_label(assigns.app.runtime),
+        runtime_badge_class: runtime_badge_class(assigns.app.runtime)
+      )
 
     ~H"""
     <div class="paas-card flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
@@ -53,8 +55,7 @@ defmodule CleatDeployWeb.AppLive.Layout do
           id="app-runtime-badge"
           class={[
             "inline-flex h-7 w-12 items-center justify-center rounded border font-mono text-[10px] font-bold",
-            @golang? && "border-hd-green/40 bg-hd-green/10 text-hd-green",
-            not @golang? && "border-hd-border bg-hd-aside text-hd-orange"
+            @runtime_badge_class
           ]}
         >
           {@runtime_badge}
@@ -331,6 +332,15 @@ defmodule CleatDeployWeb.AppLive.Layout do
   end
 
   def parse_detail_tab(_), do: :environment
+
+  defp runtime_badge_label("golang"), do: "GO"
+  defp runtime_badge_label("node"), do: "JS"
+  defp runtime_badge_label("static"), do: "HTML"
+  defp runtime_badge_label(_runtime), do: "PHX"
+
+  defp runtime_badge_class("golang"), do: "border-hd-green/40 bg-hd-green/10 text-hd-green"
+  defp runtime_badge_class("node"), do: "border-hd-blue/40 bg-hd-blue/10 text-hd-blue"
+  defp runtime_badge_class(_runtime), do: "border-hd-border bg-hd-aside text-hd-orange"
 
   attr :id, :string, required: true
   attr :repo, :string, required: true

@@ -80,6 +80,18 @@ Plain HTML/CSS/JS folders need no build and work as-is. They can also be
 published without git via `cleat drop`, which uploads a folder to
 `POST /api/v1/apps/:app/drops` and publishes it the same way.
 
+### Node / SSR apps (Next.js, TanStack Start)
+
+Set `runtime: "node"` (or `"runtime": "node"` in `.cleat_deploy/deploy.json`).
+The panel installs Node, runs `npm ci` and `npm run build`, publishes the whole
+project to `/opt/<slug>/current`, and keeps it alive with a `node-<slug>` systemd
+unit behind the Caddy reverse proxy. The start command is resolved at build time:
+`start_command` from the manifest, else `npm run start`, else
+`node .output/server/index.mjs` (TanStack Start / Nitro), else
+`npm exec -- next start` (Next.js). Override the toolchain with `node_version`
+(e.g. `"20"`; defaults to the latest 22.x), `build_command`, and `build_dir` for
+monorepos.
+
 One-off test script (no UI):
 
 ```bash
