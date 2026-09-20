@@ -17,6 +17,86 @@ defmodule CleatDeploy.Servers.HostStats do
     end
   end
 
+  @doc "Disk and memory usage of the local host, each `%{used, total, pct}` or nil."
+  def resources do
+    %{disk: disk(), memory: memory()}
+  end
+
+  def disk do
+    case System.cmd("df", ["-kP", "/"], stderr_to_stdout: true) do
+      {output, 0} -> parse_df(output)
+      _ -> nil
+    end
+  end
+
+  def memory do
+    case File.read("/proc/meminfo") do
+      {:ok, contents} -> parse_meminfo(contents)
+      _ -> nil
+    end
+  end
+
+  @doc false
+  def parse_df(output) when is_binary(output) do
+    case output |> String.split("\n", trim: true) |> List.last() do
+      nil ->
+        nil
+
+      last ->
+        case String.split(last) do
+          [_fs, blocks, used, _avail, capacity | _rest] ->
+            with {total_kb, _} <- Integer.parse(blocks),
+                 {used_kb, _} <- Integer.parse(used),
+                 {pct, _} <- Integer.parse(capacity) do
+              usage(used_kb * 1024, total_kb * 1024, pct)
+            else
+              _ -> nil
+            end
+
+          _ ->
+            nil
+        end
+    end
+  end
+
+  @doc false
+  def parse_meminfo(contents) when is_binary(contents) do
+    values = meminfo_values(contents)
+
+    with total when is_integer(total) and total > 0 <- values["MemTotal"],
+         available when is_integer(available) <- values["MemAvailable"] do
+      used = total - available
+      usage(used * 1024, total * 1024, Float.round(used / total * 100.0, 0))
+    else
+      _ -> nil
+    end
+  end
+
+  defp meminfo_values(contents) do
+    contents
+    |> String.split("\n", trim: true)
+    |> Enum.reduce(%{}, fn line, acc ->
+      case String.split(line, ":", parts: 2) do
+        [key, rest] ->
+          case rest |> String.trim() |> String.split() |> List.first() do
+            nil -> acc
+            number -> Map.put(acc, key, parse_int(number))
+          end
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  # `pct` comes from df's Capacity column (used/(used+avail), excluding the ext4
+  # reserved blocks) so the dashboard matches `df`, or is computed for memory.
+  defp usage(used, total, pct) when total > 0 and is_number(pct) do
+    %{used: used, total: total, pct: pct * 1.0}
+  end
+
+  defp usage(_used, _total, _pct), do: nil
+
   def diff(prev, now, cpu_count)
       when is_map(prev) and is_map(now) and is_integer(cpu_count) and cpu_count > 0 do
     dt_s = max(now.at - prev.at, 1) / 1000

@@ -402,6 +402,7 @@ defmodule CleatDeploy.Deploy.Ssh do
     BUILD_DIR="$HOME/cleat_deploy_build_#{sha}"
     rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
+    trap 'rm -rf "$BUILD_DIR"' EXIT
     tar -xzf #{remote_tar} -C "$BUILD_DIR"
     cd "$BUILD_DIR"
     #{mix_project_cd(manifest)}
