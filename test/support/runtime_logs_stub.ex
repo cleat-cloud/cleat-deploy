@@ -3,6 +3,10 @@ defmodule CleatDeploy.Apps.RuntimeLogsStub do
   @behaviour CleatDeploy.Apps.RuntimeLogs
 
   @impl true
+  def run(%CleatDeploy.Servers.Server{host_ip: _}, _argv) do
+    {:ok, "2026-09-06T12:00:00Z host started\n2026-09-06T12:00:01Z caddy listening\n"}
+  end
+
   def run(app, _argv) do
     unit = app.systemd_unit || "phx-app"
 

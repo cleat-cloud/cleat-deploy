@@ -10,9 +10,9 @@ defmodule CleatDeploy.Logs do
   alias CleatDeploy.Repo
   alias CleatDeploy.Servers.Server
 
-  @unit_pattern ~r/^[A-Za-z0-9:_.@-]+$/
-  @since_iso ~r/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/
-  @since_relative ~r/^\d+(s|m|h|d|w)$/
+  @unit_pattern ~r/^[A-Za-z0-9:_.@-]+\z/
+  @since_iso ~r/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?\z/
+  @since_relative ~r/^\d+(s|m|h|d|w)\z/
   @default_tail 200
   @max_tail 5000
   @max_unit_bytes 128
@@ -35,7 +35,7 @@ defmodule CleatDeploy.Logs do
     app = Repo.preload(app, :server)
     unit = app.systemd_unit || App.default_systemd_unit(app.slug, app.runtime || "phoenix")
 
-    with {:ok, normalized} <- normalize(Keyword.put_new(opts, :unit, unit)) do
+    with {:ok, normalized} <- normalize(put_unit(opts, unit)) do
       do_fetch(app, normalized)
     end
   end
@@ -56,7 +56,9 @@ defmodule CleatDeploy.Logs do
 
   Returns `{:ok, %{unit:, since:, tail:, grep:}}` or `{:error, message}`.
   """
-  @spec normalize(keyword()) :: {:ok, normalized()} | {:error, String.t()}
+  @spec normalize(keyword() | map()) :: {:ok, normalized()} | {:error, String.t()}
+  def normalize(opts) when is_map(opts), do: normalize(Map.to_list(opts))
+
   def normalize(opts) when is_list(opts) do
     with {:ok, unit} <- normalize_unit(Keyword.get(opts, :unit)),
          {:ok, since} <- normalize_since(Keyword.get(opts, :since)),
@@ -97,6 +99,19 @@ defmodule CleatDeploy.Logs do
     Application.get_env(:cleat_deploy, :runtime_logs, CleatDeploy.Apps.RuntimeLogsSsh)
   end
 
+  defp put_unit(opts, unit) do
+    opts = to_keyword(opts)
+
+    if is_nil(Keyword.get(opts, :unit)) do
+      Keyword.put(opts, :unit, unit)
+    else
+      opts
+    end
+  end
+
+  defp to_keyword(opts) when is_map(opts), do: Map.to_list(opts)
+  defp to_keyword(opts) when is_list(opts), do: opts
+
   defp normalize_unit(nil), do: {:ok, nil}
 
   defp normalize_unit(unit) when is_binary(unit) do
@@ -128,7 +143,7 @@ defmodule CleatDeploy.Logs do
   defp normalize_tail(tail) when is_binary(tail) do
     case Integer.parse(tail) do
       {value, ""} -> normalize_tail(value)
-      _ -> {:error, "tail must be between 1 and 5000"}
+      _ -> {:error, "tail must be between 1 and #{@max_tail}"}
     end
   end
 
@@ -136,11 +151,11 @@ defmodule CleatDeploy.Logs do
     if tail >= 1 and tail <= @max_tail do
       {:ok, tail}
     else
-      {:error, "tail must be between 1 and 5000"}
+      {:error, "tail must be between 1 and #{@max_tail}"}
     end
   end
 
-  defp normalize_tail(_), do: {:error, "tail must be between 1 and 5000"}
+  defp normalize_tail(_), do: {:error, "tail must be between 1 and #{@max_tail}"}
 
   defp normalize_grep(nil), do: {:ok, nil}
 
@@ -152,7 +167,7 @@ defmodule CleatDeploy.Logs do
     end
   end
 
-  defp normalize_grep(_), do: {:error, "grep is too long"}
+  defp normalize_grep(_), do: {:error, "grep must be a string"}
 
   defp filter_grep(lines, nil), do: lines
   defp filter_grep(lines, grep), do: Enum.filter(lines, &String.contains?(&1, grep))
