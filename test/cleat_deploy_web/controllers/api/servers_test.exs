@@ -5,14 +5,18 @@ defmodule CleatDeployWeb.Api.ServersTest do
 
   alias CleatDeploy.AWS.Lightsail.InstanceSpec
   alias CleatDeploy.Accounts
+  alias CleatDeploy.Apps.RuntimeLogsMock
   alias CleatDeploy.AWS.LightsailMock
   alias CleatDeploy.Hetzner.Catalog
   alias CleatDeploy.HetznerMock
+  alias CleatDeploy.RuntimeLogsFixtures
   alias CleatDeploy.TenancyFixtures
 
   setup :verify_on_exit!
 
   setup do
+    RuntimeLogsFixtures.stub_success()
+
     scope = TenancyFixtures.scope_fixture()
     {:ok, token, _} = Accounts.create_api_token(scope.user, scope.tenant, %{name: "srv"})
     %{scope: scope, token: token}
@@ -194,6 +198,65 @@ defmodule CleatDeployWeb.Api.ServersTest do
       |> json_post(~p"/api/v1/servers/#{server.id}/resize", %{bundle_id: "cx43"})
 
     assert json_response(conn, 200)["data"]["bundle_id"] == "cx43"
+  end
+
+  test "GET /api/v1/servers/:id/logs returns journal lines", %{scope: scope, token: token} do
+    server = TenancyFixtures.server_fixture(scope)
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/servers/#{server.id}/logs")
+    data = json_response(conn, 200)["data"]
+
+    assert is_list(data["lines"])
+    assert data["fetched_at"]
+  end
+
+  test "GET /api/v1/servers/:id/logs rejects a malicious unit", %{
+    scope: scope,
+    token: token
+  } do
+    server = TenancyFixtures.server_fixture(scope)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/servers/#{server.id}/logs?unit=evil;rm")
+
+    assert json_response(conn, 422)["error"] == "invalid_request"
+  end
+
+  test "GET /api/v1/servers/:id/logs rejects invalid since, tail and grep", %{
+    scope: scope,
+    token: token
+  } do
+    server = TenancyFixtures.server_fixture(scope)
+
+    since = build_conn() |> auth(token) |> get(~p"/api/v1/servers/#{server.id}/logs?since=nope")
+    assert json_response(since, 422)["error"] == "invalid_request"
+
+    tail = build_conn() |> auth(token) |> get(~p"/api/v1/servers/#{server.id}/logs?tail=0")
+    assert json_response(tail, 422)["error"] == "invalid_request"
+
+    grep =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/servers/#{server.id}/logs?grep=#{String.duplicate("a", 201)}")
+
+    assert json_response(grep, 422)["error"] == "invalid_request"
+  end
+
+  test "GET /api/v1/servers/:id/logs is 502 when the journal runner fails", %{
+    scope: scope,
+    token: token
+  } do
+    server = TenancyFixtures.server_fixture(scope)
+
+    expect(RuntimeLogsMock, :run, fn _subject, _argv -> {:error, "boom"} end)
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/servers/#{server.id}/logs")
+    body = json_response(conn, 502)
+
+    assert body["error"] == "runtime_logs_failed"
+    assert body["message"] == "boom"
   end
 
   defp spec(status, bundle_id \\ "nano_3_0", public_ip \\ nil) do

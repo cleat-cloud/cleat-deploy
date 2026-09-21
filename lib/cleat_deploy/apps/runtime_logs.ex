@@ -5,11 +5,12 @@ defmodule CleatDeploy.Apps.RuntimeLogs do
 
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Repo
+  alias CleatDeploy.Servers.Server
 
   @line_count 200
   @unit_pattern ~r/^[A-Za-z0-9:_.@-]+$/
 
-  @callback run(App.t(), [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  @callback run(App.t() | Server.t(), [String.t()]) :: {:ok, String.t()} | {:error, term()}
 
   def fetch(%App{} = app) do
     app = Repo.preload(app, :server)

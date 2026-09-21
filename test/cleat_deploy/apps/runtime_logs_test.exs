@@ -2,9 +2,12 @@ defmodule CleatDeploy.Apps.RuntimeLogsTest do
   use CleatDeploy.DataCase, async: false
 
   alias CleatDeploy.Apps.RuntimeLogs
+  alias CleatDeploy.RuntimeLogsFixtures
   alias CleatDeploy.TenancyFixtures
 
   setup do
+    RuntimeLogsFixtures.stub_success()
+
     scope = TenancyFixtures.scope_fixture()
     server = TenancyFixtures.server_fixture(scope)
     %{scope: scope, server: server}

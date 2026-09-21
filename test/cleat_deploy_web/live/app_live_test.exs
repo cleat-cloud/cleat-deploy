@@ -4,11 +4,14 @@ defmodule CleatDeployWeb.AppLiveTest do
   import Phoenix.LiveViewTest
 
   alias CleatDeploy.{Apps, Deployments}
+  alias CleatDeploy.RuntimeLogsFixtures
   alias CleatDeploy.TenancyFixtures
 
   setup :register_and_log_in_user
 
   setup %{scope: scope} do
+    RuntimeLogsFixtures.stub_success()
+
     server = TenancyFixtures.server_fixture(scope)
     %{server: server}
   end

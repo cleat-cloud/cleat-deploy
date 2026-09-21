@@ -3,7 +3,9 @@ defmodule CleatDeployWeb.Api.ServerController do
 
   use CleatDeployWeb, :controller
 
+  alias CleatDeploy.Logs
   alias CleatDeploy.Servers
+  alias CleatDeployWeb.Api.LogError
   alias CleatDeployWeb.Api.Serializer
 
   def index(conn, _params) do
@@ -17,6 +19,28 @@ defmodule CleatDeployWeb.Api.ServerController do
       {:ok, server} -> json(conn, %{data: Serializer.server(server)})
       :error -> not_found(conn)
     end
+  end
+
+  def logs(conn, %{"id" => id} = params) do
+    case fetch_server(conn.assigns.current_scope, id) do
+      {:ok, server} ->
+        case Logs.fetch_server(server, log_opts(params)) do
+          {:ok, result} ->
+            json(conn, %{
+              data: %{unit: result.unit, lines: result.lines, fetched_at: result.fetched_at}
+            })
+
+          {:error, reason} ->
+            LogError.render(conn, reason)
+        end
+
+      :error ->
+        not_found(conn)
+    end
+  end
+
+  defp log_opts(params) do
+    %{unit: params["unit"], since: params["since"], tail: params["tail"], grep: params["grep"]}
   end
 
   def create(conn, params) do
