@@ -125,10 +125,11 @@ defmodule CleatDeploy.LogsTest do
     end
 
     test "accepts valid ISO and relative since formats" do
-      assert {:ok, %{since: "30m"}} = Logs.normalize(since: "30m")
-      assert {:ok, %{since: "2h"}} = Logs.normalize(since: "2h")
-      assert {:ok, %{since: "1d"}} = Logs.normalize(since: "1d")
-      assert {:ok, %{since: "1w"}} = Logs.normalize(since: "1w")
+      # journalctl rejects a bare "2h"; normalize must hand it "-2h".
+      assert {:ok, %{since: "-30m"}} = Logs.normalize(since: "30m")
+      assert {:ok, %{since: "-2h"}} = Logs.normalize(since: "2h")
+      assert {:ok, %{since: "-1d"}} = Logs.normalize(since: "1d")
+      assert {:ok, %{since: "-1w"}} = Logs.normalize(since: "1w")
       assert {:ok, %{since: "2026-09-21"}} = Logs.normalize(since: "2026-09-21")
       assert {:ok, %{since: "2026-09-21 14:30"}} = Logs.normalize(since: "2026-09-21 14:30")
       assert {:ok, %{since: "2026-09-21T10:30:15"}} = Logs.normalize(since: "2026-09-21T10:30:15")
@@ -171,7 +172,7 @@ defmodule CleatDeploy.LogsTest do
 
   describe "argv_for/1" do
     test "includes unit, tail and since" do
-      normalized = %{unit: "phx-app", since: "2h", tail: 100, grep: "x"}
+      normalized = %{unit: "phx-app", since: "-2h", tail: 100, grep: "x"}
 
       assert Logs.argv_for(normalized) == [
                "sudo",
@@ -181,7 +182,7 @@ defmodule CleatDeploy.LogsTest do
                "-n",
                "100",
                "--since",
-               "2h",
+               "-2h",
                "--no-pager",
                "-o",
                "short-iso",
