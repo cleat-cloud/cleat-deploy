@@ -126,6 +126,20 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "rm -rf node_modules"
   end
 
+  test "build script detects Next standalone and drops node_modules", %{
+    app: app,
+    config: config
+  } do
+    manifest = AppManifest.resolve(nil, app)
+    script = Node.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
+
+    # Next standalone output carries its own node_modules, so the project's is
+    # dropped and the app is started from the standalone server.
+    assert script =~ ".next/standalone/server.js"
+    assert script =~ "node .next/standalone/server.js"
+    assert script =~ "Copying public and static assets into the standalone output"
+  end
+
   test "manifest custom build/start commands and node version win over detection" do
     app = %App{
       name: "Web",
