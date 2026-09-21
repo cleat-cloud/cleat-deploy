@@ -191,6 +191,21 @@ defmodule CleatDeployWeb.Api.ApiTest do
     assert json_response(conn, 422)["error"] == "runtime_logs_unavailable"
   end
 
+  test "GET /api/v1/apps/:app/logs accepts since and tail", %{token: token, app: app} do
+    conn =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/apps/#{app.id}/logs?since=1h&tail=50")
+
+    data = json_response(conn, 200)["data"]
+    assert is_list(data["lines"])
+  end
+
+  test "GET /api/v1/apps/:app/logs rejects an invalid since", %{token: token, app: app} do
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{app.id}/logs?since=nope")
+    assert json_response(conn, 422)["error"] == "invalid_request"
+  end
+
   defp auth(conn, token), do: put_req_header(conn, "authorization", "Bearer #{token}")
 
   defp json_post(conn, path, body) do
