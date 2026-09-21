@@ -3,18 +3,30 @@ defmodule CleatDeploy.Apps.RuntimeLogsSsh do
   @behaviour CleatDeploy.Apps.RuntimeLogs
 
   alias CleatDeploy.Deploy.Ssh
+  alias CleatDeploy.Servers.Server
 
   @impl true
-  def run(app, argv) when is_list(argv) do
-    if local_journal?(app) do
+  def run(subject, argv) when is_list(argv) do
+    server = server_for(subject)
+
+    if local_journal?(server) do
       run_local(argv)
     else
-      Ssh.run(app.server, app, argv)
+      Ssh.run(server, ssh_subject(subject, server), argv)
     end
   end
 
-  defp local_journal?(app) do
-    System.find_executable("journalctl") != nil and local_server?(app.server)
+  # The subject may be an app (which owns a `:server`) or a bare server.
+  defp server_for(%{server: server}), do: server
+  defp server_for(server), do: server
+
+  # `Ssh.run/3` resolves the SSH host from the app's public host. A bare server
+  # has no `:host`, so fall back to its stored IP.
+  defp ssh_subject(%Server{host_ip: host_ip}, _server), do: %{host: host_ip}
+  defp ssh_subject(subject, _server), do: subject
+
+  defp local_journal?(server) do
+    System.find_executable("journalctl") != nil and local_server?(server)
   end
 
   defp local_server?(%{host_ip: host_ip}) when is_binary(host_ip) do
