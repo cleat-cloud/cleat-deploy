@@ -49,7 +49,7 @@ config :cleat_deploy, Oban,
 config :cleat_deploy, :deploy_runner, CleatDeploy.Deploy.RunnerMock
 config :cleat_deploy, :lightsail_client, CleatDeploy.AWS.LightsailMock
 config :cleat_deploy, :hetzner_client, CleatDeploy.HetznerMock
-config :cleat_deploy, :runtime_logs, CleatDeploy.Apps.RuntimeLogsStub
+config :cleat_deploy, :runtime_logs, CleatDeploy.Apps.RuntimeLogsMock
 config :cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeMemoryStub
 
 config :cleat_deploy, CleatDeploy.Vault,

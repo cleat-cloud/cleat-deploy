@@ -1,10 +1,18 @@
 defmodule CleatDeploy.LogsTest do
   use CleatDeploy.DataCase, async: false
 
+  import Mox
+
+  alias CleatDeploy.Apps.RuntimeLogsMock
   alias CleatDeploy.Logs
+  alias CleatDeploy.RuntimeLogsFixtures
   alias CleatDeploy.TenancyFixtures
 
+  setup :verify_on_exit!
+
   setup do
+    RuntimeLogsFixtures.stub_success()
+
     scope = TenancyFixtures.scope_fixture()
     server = TenancyFixtures.server_fixture(scope)
     %{scope: scope, server: server}
@@ -49,11 +57,29 @@ defmodule CleatDeploy.LogsTest do
       assert length(result.lines) == 1
       assert hd(result.lines) =~ "started"
     end
+
+    test "ignores a caller-provided unit override", %{scope: scope, server: server} do
+      app =
+        TenancyFixtures.app_fixture(scope, server, %{
+          slug: "assistente",
+          systemd_unit: "assistente"
+        })
+
+      expect(RuntimeLogsMock, :run, fn _subject, argv ->
+        assert "assistente" in argv
+        refute "other" in argv
+        {:ok, "2026-09-06T12:00:00Z assistente started\n"}
+      end)
+
+      assert {:ok, result} = Logs.fetch_app(app, %{unit: "other"})
+      assert result.unit == "assistente"
+    end
   end
 
   describe "fetch_server/2" do
     test "rejects an invalid unit before calling the runner", %{server: server} do
-      assert {:error, "invalid unit"} = Logs.fetch_server(server, unit: "bad; rm -rf /")
+      assert {:error, {:invalid, "invalid unit"}} =
+               Logs.fetch_server(server, unit: "bad; rm -rf /")
     end
 
     test "fetch_server returns host journal lines", %{server: server} do
@@ -88,11 +114,14 @@ defmodule CleatDeploy.LogsTest do
     end
 
     test "rejects out-of-range or non-numeric tails" do
-      assert {:error, message} = Logs.normalize(tail: 0)
+      assert {:error, {:invalid, message}} = Logs.normalize(tail: 0)
       assert message == "tail must be between 1 and 5000"
 
-      assert {:error, "tail must be between 1 and 5000"} = Logs.normalize(tail: 5001)
-      assert {:error, "tail must be between 1 and 5000"} = Logs.normalize(tail: "abc")
+      assert {:error, {:invalid, "tail must be between 1 and 5000"}} =
+               Logs.normalize(tail: 5001)
+
+      assert {:error, {:invalid, "tail must be between 1 and 5000"}} =
+               Logs.normalize(tail: "abc")
     end
 
     test "accepts valid ISO and relative since formats" do
@@ -106,21 +135,23 @@ defmodule CleatDeploy.LogsTest do
     end
 
     test "rejects invalid since values" do
-      assert {:error, message} = Logs.normalize(since: "yesterday")
+      assert {:error, {:invalid, message}} = Logs.normalize(since: "yesterday")
       assert message =~ "invalid since"
 
-      assert {:error, _} = Logs.normalize(since: "5x")
-      assert {:error, _} = Logs.normalize(since: "2026/09/21")
-      assert {:error, _} = Logs.normalize(since: String.duplicate("1", 33))
+      assert {:error, {:invalid, _}} = Logs.normalize(since: "5x")
+      assert {:error, {:invalid, _}} = Logs.normalize(since: "2026/09/21")
+      assert {:error, {:invalid, _}} = Logs.normalize(since: String.duplicate("1", 33))
     end
 
     test "validates unit against the allowlist" do
       assert {:ok, %{unit: "phx-app_1.2@x:y"}} = Logs.normalize(unit: "phx-app_1.2@x:y")
       assert {:ok, %{unit: unit}} = Logs.normalize(unit: String.duplicate("a", 128))
       assert byte_size(unit) == 128
-      assert {:error, "invalid unit"} = Logs.normalize(unit: "atelie; rm -rf /")
-      assert {:error, "invalid unit"} = Logs.normalize(unit: "")
-      assert {:error, "invalid unit"} = Logs.normalize(unit: String.duplicate("a", 129))
+      assert {:error, {:invalid, "invalid unit"}} = Logs.normalize(unit: "atelie; rm -rf /")
+      assert {:error, {:invalid, "invalid unit"}} = Logs.normalize(unit: "")
+
+      assert {:error, {:invalid, "invalid unit"}} =
+               Logs.normalize(unit: String.duplicate("a", 129))
     end
 
     test "accepts a grep of exactly the maximum length" do
@@ -129,11 +160,12 @@ defmodule CleatDeploy.LogsTest do
     end
 
     test "rejects an over-long grep" do
-      assert {:error, "grep is too long"} = Logs.normalize(grep: String.duplicate("a", 201))
+      assert {:error, {:invalid, "grep is too long"}} =
+               Logs.normalize(grep: String.duplicate("a", 201))
     end
 
     test "rejects a non-binary grep" do
-      assert {:error, "grep must be a string"} = Logs.normalize(grep: 123)
+      assert {:error, {:invalid, "grep must be a string"}} = Logs.normalize(grep: 123)
     end
   end
 

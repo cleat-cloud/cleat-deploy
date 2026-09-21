@@ -26,16 +26,20 @@ defmodule CleatDeploy.Logs do
           grep: String.t() | nil
         }
 
+  @type error :: {:invalid, String.t()} | {:runtime, String.t()}
+
   @doc """
   Fetches journal lines for the app's systemd unit.
 
-  `opts[:unit]` overrides the app's unit when given.
+  The app's systemd unit is always authoritative: any caller-provided `:unit`
+  option is ignored so the API contract cannot be overridden.
   """
+  @spec fetch_app(App.t(), keyword() | map()) :: {:ok, map()} | {:error, error()}
   def fetch_app(%App{} = app, opts \\ []) do
     app = Repo.preload(app, :server)
     unit = app.systemd_unit || App.default_systemd_unit(app.slug, app.runtime || "phoenix")
 
-    with {:ok, normalized} <- normalize(put_unit(opts, unit)) do
+    with {:ok, normalized} <- normalize(Keyword.put(to_keyword(opts), :unit, unit)) do
       do_fetch(app, normalized)
     end
   end
@@ -45,6 +49,7 @@ defmodule CleatDeploy.Logs do
 
   `opts[:unit]` is optional; when absent (`nil`) the whole host journal is read.
   """
+  @spec fetch_server(Server.t(), keyword() | map()) :: {:ok, map()} | {:error, error()}
   def fetch_server(%Server{} = server, opts \\ []) do
     with {:ok, normalized} <- normalize(opts) do
       do_fetch(server, normalized)
@@ -54,9 +59,9 @@ defmodule CleatDeploy.Logs do
   @doc """
   Validates the journal options.
 
-  Returns `{:ok, %{unit:, since:, tail:, grep:}}` or `{:error, message}`.
+  Returns `{:ok, %{unit:, since:, tail:, grep:}}` or `{:error, {:invalid, message}}`.
   """
-  @spec normalize(keyword() | map()) :: {:ok, normalized()} | {:error, String.t()}
+  @spec normalize(keyword() | map()) :: {:ok, normalized()} | {:error, {:invalid, String.t()}}
   def normalize(opts) when is_map(opts), do: normalize(Map.to_list(opts))
 
   def normalize(opts) when is_list(opts) do
@@ -91,22 +96,12 @@ defmodule CleatDeploy.Logs do
         {:ok, %{unit: normalized.unit, lines: lines, fetched_at: DateTime.utc_now(:second)}}
 
       {:error, reason} ->
-        {:error, format_error(reason)}
+        {:error, {:runtime, format_error(reason)}}
     end
   end
 
   defp client do
     Application.get_env(:cleat_deploy, :runtime_logs, CleatDeploy.Apps.RuntimeLogsSsh)
-  end
-
-  defp put_unit(opts, unit) do
-    opts = to_keyword(opts)
-
-    if is_nil(Keyword.get(opts, :unit)) do
-      Keyword.put(opts, :unit, unit)
-    else
-      opts
-    end
   end
 
   defp to_keyword(opts) when is_map(opts), do: Map.to_list(opts)
@@ -119,11 +114,11 @@ defmodule CleatDeploy.Logs do
          Regex.match?(@unit_pattern, unit) do
       {:ok, unit}
     else
-      {:error, "invalid unit"}
+      {:error, {:invalid, "invalid unit"}}
     end
   end
 
-  defp normalize_unit(_), do: {:error, "invalid unit"}
+  defp normalize_unit(_), do: {:error, {:invalid, "invalid unit"}}
 
   defp normalize_since(nil), do: {:ok, nil}
 
@@ -132,18 +127,19 @@ defmodule CleatDeploy.Logs do
          (Regex.match?(@since_iso, since) or Regex.match?(@since_relative, since)) do
       {:ok, since}
     else
-      {:error, "invalid since (use 30m, 2h, 1d or 2026-09-21)"}
+      {:error, {:invalid, "invalid since (use 30m, 2h, 1d or 2026-09-21)"}}
     end
   end
 
-  defp normalize_since(_), do: {:error, "invalid since (use 30m, 2h, 1d or 2026-09-21)"}
+  defp normalize_since(_),
+    do: {:error, {:invalid, "invalid since (use 30m, 2h, 1d or 2026-09-21)"}}
 
   defp normalize_tail(nil), do: {:ok, @default_tail}
 
   defp normalize_tail(tail) when is_binary(tail) do
     case Integer.parse(tail) do
       {value, ""} -> normalize_tail(value)
-      _ -> {:error, "tail must be between 1 and #{@max_tail}"}
+      _ -> {:error, {:invalid, "tail must be between 1 and #{@max_tail}"}}
     end
   end
 
@@ -151,11 +147,11 @@ defmodule CleatDeploy.Logs do
     if tail >= 1 and tail <= @max_tail do
       {:ok, tail}
     else
-      {:error, "tail must be between 1 and #{@max_tail}"}
+      {:error, {:invalid, "tail must be between 1 and #{@max_tail}"}}
     end
   end
 
-  defp normalize_tail(_), do: {:error, "tail must be between 1 and #{@max_tail}"}
+  defp normalize_tail(_), do: {:error, {:invalid, "tail must be between 1 and #{@max_tail}"}}
 
   defp normalize_grep(nil), do: {:ok, nil}
 
@@ -163,11 +159,11 @@ defmodule CleatDeploy.Logs do
     if byte_size(grep) <= @max_grep_bytes do
       {:ok, grep}
     else
-      {:error, "grep is too long"}
+      {:error, {:invalid, "grep is too long"}}
     end
   end
 
-  defp normalize_grep(_), do: {:error, "grep must be a string"}
+  defp normalize_grep(_), do: {:error, {:invalid, "grep must be a string"}}
 
   defp filter_grep(lines, nil), do: lines
   defp filter_grep(lines, grep), do: Enum.filter(lines, &String.contains?(&1, grep))

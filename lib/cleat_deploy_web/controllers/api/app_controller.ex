@@ -5,6 +5,7 @@ defmodule CleatDeployWeb.Api.AppController do
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Logs
+  alias CleatDeployWeb.Api.LogError
   alias CleatDeployWeb.Api.Serializer
 
   def index(conn, params) do
@@ -91,29 +92,13 @@ defmodule CleatDeployWeb.Api.AppController do
           }
         })
 
-      {:error, message} ->
-        log_error(conn, message)
+      {:error, reason} ->
+        LogError.render(conn, reason)
     end
   end
 
   defp log_opts(params) do
-    %{unit: params["unit"], since: params["since"], tail: params["tail"], grep: params["grep"]}
-  end
-
-  defp log_error(conn, message) do
-    validation? = validation_error?(message)
-
-    conn
-    |> put_status(if(validation?, do: :unprocessable_entity, else: :bad_gateway))
-    |> json(%{
-      error: if(validation?, do: "invalid_request", else: "runtime_logs_failed"),
-      message: message
-    })
-  end
-
-  defp validation_error?(message) do
-    String.starts_with?(message, "invalid") or String.starts_with?(message, "tail") or
-      String.starts_with?(message, "grep")
+    %{since: params["since"], tail: params["tail"], grep: params["grep"]}
   end
 
   def delete(conn, %{"id" => id}) do

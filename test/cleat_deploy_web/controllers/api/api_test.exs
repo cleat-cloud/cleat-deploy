@@ -1,11 +1,19 @@
 defmodule CleatDeployWeb.Api.ApiTest do
   use CleatDeployWeb.ConnCase, async: false
 
+  import Mox
+
   alias CleatDeploy.Accounts
+  alias CleatDeploy.Apps.RuntimeLogsMock
   alias CleatDeploy.Deployments
+  alias CleatDeploy.RuntimeLogsFixtures
   alias CleatDeploy.TenancyFixtures
 
+  setup :verify_on_exit!
+
   setup do
+    RuntimeLogsFixtures.stub_success()
+
     scope = TenancyFixtures.scope_fixture()
     server = TenancyFixtures.server_fixture(scope)
     app = TenancyFixtures.app_fixture(scope, server)
@@ -204,6 +212,38 @@ defmodule CleatDeployWeb.Api.ApiTest do
   test "GET /api/v1/apps/:app/logs rejects an invalid since", %{token: token, app: app} do
     conn = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{app.id}/logs?since=nope")
     assert json_response(conn, 422)["error"] == "invalid_request"
+  end
+
+  test "GET /api/v1/apps/:app/logs rejects an invalid tail and grep", %{token: token, app: app} do
+    tail = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{app.id}/logs?tail=0")
+    assert json_response(tail, 422)["error"] == "invalid_request"
+
+    grep =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/apps/#{app.id}/logs?grep=#{String.duplicate("a", 201)}")
+
+    assert json_response(grep, 422)["error"] == "invalid_request"
+  end
+
+  test "GET /api/v1/apps/:app/logs ignores a unit override", %{token: token, app: app} do
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{app.id}/logs?unit=other")
+    data = json_response(conn, 200)["data"]
+
+    assert data["unit"] == app.systemd_unit
+  end
+
+  test "GET /api/v1/apps/:app/logs is 502 when the journal runner fails", %{
+    token: token,
+    app: app
+  } do
+    expect(RuntimeLogsMock, :run, fn _subject, _argv -> {:error, "boom"} end)
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{app.id}/logs")
+    body = json_response(conn, 502)
+
+    assert body["error"] == "runtime_logs_failed"
+    assert body["message"] == "boom"
   end
 
   defp auth(conn, token), do: put_req_header(conn, "authorization", "Bearer #{token}")
