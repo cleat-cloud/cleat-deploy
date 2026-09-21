@@ -39,7 +39,9 @@ defmodule CleatDeploy.Deploy.StaticTest do
 
     assert script =~ "Provisioning static site landing.example.com"
     assert script =~ "root * /var/www/landing/current"
-    assert script =~ "try_files {path} /index.html"
+    # Try the exact path, then the directory's index.html (so /pt/ serves
+    # /pt/index.html), then the root index.html as the SPA fallback.
+    assert script =~ "try_files {path} {path}/index.html /index.html"
     assert script =~ "file_server"
     refute script =~ "reverse_proxy"
     refute script =~ "systemd"
