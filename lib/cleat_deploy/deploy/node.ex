@@ -82,6 +82,8 @@ defmodule CleatDeploy.Deploy.Node do
 
     #{start_command_script(manifest.start_command)}
 
+    #{next_standalone_assets_script()}
+
     #{shrink_release_script()}
 
     RELEASE_DIR="#{config.release_path}/releases/build"
@@ -190,11 +192,33 @@ defmodule CleatDeploy.Deploy.Node do
       START_CMD="npm run start"
     elif [[ -f .output/server/index.mjs ]]; then
       START_CMD="node .output/server/index.mjs"
+    elif [[ -f .next/standalone/server.js ]]; then
+      START_CMD="node .next/standalone/server.js"
     elif [[ -f .next/BUILD_ID ]]; then
       START_CMD="npm exec -- next start"
     else
-      echo "Could not determine a start command. Add a \\"start\\" script, a .output/server/index.mjs, or set start_command in .cleat_deploy/deploy.json." >&2
+      echo "Could not determine a start command. Add a \\"start\\" script, a .output/server/index.mjs, a Next standalone build, or set start_command in .cleat_deploy/deploy.json." >&2
       exit 1
+    fi
+    """
+    |> String.trim()
+  end
+
+  # Next standalone traces its own node_modules (into .next/standalone), but it
+  # does not copy public/ or .next/static — do that so the standalone server can
+  # serve assets, then the project node_modules can be dropped.
+  defp next_standalone_assets_script do
+    """
+    if [[ "$START_CMD" == "node .next/standalone/server.js" ]]; then
+      log "Copying public and static assets into the standalone output"
+      if [[ -d public ]]; then
+        mkdir -p .next/standalone/public
+        cp -a public/. .next/standalone/public/
+      fi
+      if [[ -d .next/static ]]; then
+        mkdir -p .next/standalone/.next/static
+        cp -a .next/static/. .next/standalone/.next/static/
+      fi
     fi
     """
     |> String.trim()
@@ -209,6 +233,9 @@ defmodule CleatDeploy.Deploy.Node do
     """
     if [[ "$START_CMD" == "node .output/server/index.mjs" ]]; then
       log "Self-contained Nitro output; dropping node_modules before publish"
+      rm -rf node_modules
+    elif [[ "$START_CMD" == "node .next/standalone/server.js" ]]; then
+      log "Self-contained Next standalone output; dropping node_modules before publish"
       rm -rf node_modules
     elif [[ -d node_modules ]]; then
       log "Pruning dev dependencies for the release"
