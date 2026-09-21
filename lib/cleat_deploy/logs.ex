@@ -125,7 +125,7 @@ defmodule CleatDeploy.Logs do
   defp normalize_since(since) when is_binary(since) do
     if byte_size(since) <= @max_since_bytes and
          (Regex.match?(@since_iso, since) or Regex.match?(@since_relative, since)) do
-      {:ok, since}
+      {:ok, journal_since(since)}
     else
       {:error, {:invalid, "invalid since (use 30m, 2h, 1d or 2026-09-21)"}}
     end
@@ -133,6 +133,12 @@ defmodule CleatDeploy.Logs do
 
   defp normalize_since(_),
     do: {:error, {:invalid, "invalid since (use 30m, 2h, 1d or 2026-09-21)"}}
+
+  # `journalctl --since` rejects a bare duration like "2h" (it wants "-2h" or a
+  # timestamp), so prefix relative durations with a dash.
+  defp journal_since(since) do
+    if Regex.match?(@since_relative, since), do: "-" <> since, else: since
+  end
 
   defp normalize_tail(nil), do: {:ok, @default_tail}
 
