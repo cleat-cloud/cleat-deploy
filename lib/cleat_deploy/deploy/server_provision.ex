@@ -266,7 +266,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     #{address} {
       encode gzip
       root * #{static_site_root(app)}
-      try_files {path} /index.html
+      try_files {path} {path}/index.html /index.html
       file_server
     }
     """
