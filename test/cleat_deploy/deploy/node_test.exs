@@ -143,6 +143,8 @@ defmodule CleatDeploy.Deploy.NodeTest do
     standalone_pos = :binary.match(script, ".next/standalone/server.js") |> elem(0)
     start_script_pos = :binary.match(script, "s.start?0:1") |> elem(0)
     assert standalone_pos < start_script_pos
+    # the build cache is hundreds of MB and is not needed at runtime
+    assert script =~ "rm -rf .next/cache"
   end
 
   test "manifest custom build/start commands and node version win over detection" do

@@ -234,6 +234,13 @@ defmodule CleatDeploy.Deploy.Node do
   # be dropped entirely.
   defp shrink_release_script do
     """
+    # .next/cache holds the build cache (hundreds of MB); it is not needed to
+    # run the server and should never be published.
+    if [[ -d .next/cache ]]; then
+      log "Dropping the Next build cache before publish"
+      rm -rf .next/cache
+    fi
+
     if [[ "$START_CMD" == "node .output/server/index.mjs" ]]; then
       log "Self-contained Nitro output; dropping node_modules before publish"
       rm -rf node_modules
