@@ -4,6 +4,7 @@ defmodule CleatDeployWeb.Api.AppController do
   use CleatDeployWeb, :controller
 
   alias CleatDeploy.Apps
+  alias CleatDeploy.Logs
   alias CleatDeployWeb.Api.Serializer
 
   def index(conn, params) do
@@ -63,7 +64,7 @@ defmodule CleatDeployWeb.Api.AppController do
     end
   end
 
-  def logs(conn, %{"app_id" => app_id}) do
+  def logs(conn, %{"app_id" => app_id} = params) do
     scope = conn.assigns.current_scope
 
     with {:ok, app} <- resolve_app(scope, app_id) do
@@ -72,15 +73,15 @@ defmodule CleatDeployWeb.Api.AppController do
         |> put_status(:unprocessable_entity)
         |> json(%{error: "runtime_logs_unavailable"})
       else
-        fetch_logs(conn, app)
+        fetch_logs(conn, app, params)
       end
     else
       :error -> not_found(conn)
     end
   end
 
-  defp fetch_logs(conn, app) do
-    case Apps.RuntimeLogs.fetch(app) do
+  defp fetch_logs(conn, app, params) do
+    case Logs.fetch_app(app, log_opts(params)) do
       {:ok, result} ->
         json(conn, %{
           data: %{
@@ -91,10 +92,28 @@ defmodule CleatDeployWeb.Api.AppController do
         })
 
       {:error, message} ->
-        conn
-        |> put_status(:bad_gateway)
-        |> json(%{error: "runtime_logs_failed", message: message})
+        log_error(conn, message)
     end
+  end
+
+  defp log_opts(params) do
+    %{unit: params["unit"], since: params["since"], tail: params["tail"], grep: params["grep"]}
+  end
+
+  defp log_error(conn, message) do
+    validation? = validation_error?(message)
+
+    conn
+    |> put_status(if(validation?, do: :unprocessable_entity, else: :bad_gateway))
+    |> json(%{
+      error: if(validation?, do: "invalid_request", else: "runtime_logs_failed"),
+      message: message
+    })
+  end
+
+  defp validation_error?(message) do
+    String.starts_with?(message, "invalid") or String.starts_with?(message, "tail") or
+      String.starts_with?(message, "grep")
   end
 
   def delete(conn, %{"id" => id}) do

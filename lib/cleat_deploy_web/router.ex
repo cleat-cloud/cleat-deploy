@@ -43,6 +43,7 @@ defmodule CleatDeployWeb.Router do
 
     get "/servers", ServerController, :index
     get "/servers/:id", ServerController, :show
+    get "/servers/:id/logs", ServerController, :logs
     get "/servers/:id/resize-options", ServerController, :resize_options
 
     get "/apps", AppController, :index

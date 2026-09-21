@@ -196,6 +196,30 @@ defmodule CleatDeployWeb.Api.ServersTest do
     assert json_response(conn, 200)["data"]["bundle_id"] == "cx43"
   end
 
+  test "GET /api/v1/servers/:id/logs returns journal lines", %{scope: scope, token: token} do
+    server = TenancyFixtures.server_fixture(scope)
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/servers/#{server.id}/logs")
+    data = json_response(conn, 200)["data"]
+
+    assert is_list(data["lines"])
+    assert data["fetched_at"]
+  end
+
+  test "GET /api/v1/servers/:id/logs rejects a malicious unit", %{
+    scope: scope,
+    token: token
+  } do
+    server = TenancyFixtures.server_fixture(scope)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/servers/#{server.id}/logs?unit=evil;rm")
+
+    assert json_response(conn, 422)["error"] == "invalid_request"
+  end
+
   defp spec(status, bundle_id \\ "nano_3_0", public_ip \\ nil) do
     %InstanceSpec{
       bundle_id: bundle_id,
