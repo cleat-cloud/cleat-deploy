@@ -138,6 +138,11 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ ".next/standalone/server.js"
     assert script =~ "node .next/standalone/server.js"
     assert script =~ "Copying public and static assets into the standalone output"
+    # standalone must win over a `start` script (e.g. `next start`), otherwise
+    # it is never reached and the project node_modules come back.
+    standalone_pos = :binary.match(script, ".next/standalone/server.js") |> elem(0)
+    start_script_pos = :binary.match(script, "s.start?0:1") |> elem(0)
+    assert standalone_pos < start_script_pos
   end
 
   test "manifest custom build/start commands and node version win over detection" do

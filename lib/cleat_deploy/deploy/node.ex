@@ -188,12 +188,15 @@ defmodule CleatDeploy.Deploy.Node do
 
   defp start_command_script(_) do
     """
-    if node -e "const s=(require('./package.json').scripts)||{};process.exit(s.start?0:1)"; then
-      START_CMD="npm run start"
-    elif [[ -f .output/server/index.mjs ]]; then
+    # Self-contained outputs win over a `start` script: a Next standalone build
+    # (or a Nitro `.output`) ships its own server, so `start: next start` would
+    # needlessly pull the project node_modules back in.
+    if [[ -f .output/server/index.mjs ]]; then
       START_CMD="node .output/server/index.mjs"
     elif [[ -f .next/standalone/server.js ]]; then
       START_CMD="node .next/standalone/server.js"
+    elif node -e "const s=(require('./package.json').scripts)||{};process.exit(s.start?0:1)"; then
+      START_CMD="npm run start"
     elif [[ -f .next/BUILD_ID ]]; then
       START_CMD="npm exec -- next start"
     else
