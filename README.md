@@ -11,7 +11,10 @@ Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and w
 ## Features
 
 - **Servers** — register Hetzner Cloud or Lightsail VMs (IP, location, SSH user)
-- **Runtimes** — Phoenix OTP releases, Go/Cais binaries, Node servers (Next.js / TanStack Start), Rails/Puma, and static sites. Auto-detected from the repo or set via `runtime` in `.cleat_deploy/deploy.json`
+- **Runtimes** — Phoenix OTP releases, Go/Cais binaries, Node servers (Next.js / TanStack Start), Rails/Puma, and static sites. Auto-detected from the repo or set via `runtime` in `.cleat_deploy/deploy.json` ([manifest reference](docs/deploy-json.md))
+- **Release phase** — `release_command` runs after publishing and before the restart; a failure keeps the previous release serving
+- **Multi-process apps** — `processes` (web + worker) as one systemd unit each; only `web` binds the port and goes to sleep when idle
+- **Managed addons** — `addons: ["postgres:pgvector", "redis"]` provisions the datastores on the server and injects `DATABASE_URL`/`REDIS_URL`
 - **Deployments** — queued → running → success/failed, with build logs and paginated history
 - **GitHub webhooks** — HMAC-verified `POST /webhooks/github`
 - **Oban queue** — background deploy worker with Mox-tested runner behaviour
@@ -106,6 +109,11 @@ alive with a `rails-<slug>` systemd unit behind the Caddy reverse proxy.
 `DATABASE_URL`, `SECRET_KEY_BASE` and `RAILS_MASTER_KEY` are read from the panel
 env vars. Start command: `start_command` → `bundle exec puma -C config/puma.rb`
 → `bundle exec puma -b tcp://0.0.0.0:$PORT`.
+
+Rails (and Node) apps can also declare a **release phase**, **multiple
+processes** (web + worker) and **managed addons** (Postgres with pgvector,
+Redis) in `.cleat_deploy/deploy.json` — full reference in
+[docs/deploy-json.md](docs/deploy-json.md).
 
 One-off test script (no UI):
 
