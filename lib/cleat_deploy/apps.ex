@@ -84,6 +84,22 @@ defmodule CleatDeploy.Apps do
     Repo.all(from a in App, order_by: [asc: a.slug], preload: [:server])
   end
 
+  @doc """
+  Apps that opted into idle shutdown, for one tenant.
+
+  Static sites have no process to stop, so they are left out.
+  """
+  def list_idle_candidates(tenant_id) when is_integer(tenant_id) do
+    Repo.all(
+      from a in App,
+        where:
+          a.tenant_id == ^tenant_id and a.idle_shutdown_enabled == true and
+            a.runtime != "static",
+        order_by: [asc: a.id],
+        preload: [:server]
+    )
+  end
+
   def count_apps_by_server_id(%Scope{tenant: tenant}) do
     from(a in App,
       where: a.tenant_id == ^tenant.id,
@@ -182,7 +198,8 @@ defmodule CleatDeploy.Apps do
   def update_app(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
 
   @doc """
-  Updates deploy settings (`:branch`, `:auto_deploy`, `:host`, `:port`).
+  Updates deploy settings (`:branch`, `:auto_deploy`, `:idle_shutdown_enabled`,
+  `:host`, `:port`).
 
   Other keys are ignored.
   """
@@ -196,7 +213,15 @@ defmodule CleatDeploy.Apps do
 
     app
     |> App.deploy_settings_changeset(
-      Map.take(attrs, ["branch", "auto_deploy", "host", "port", "github_repo", "runtime"])
+      Map.take(attrs, [
+        "branch",
+        "auto_deploy",
+        "idle_shutdown_enabled",
+        "host",
+        "port",
+        "github_repo",
+        "runtime"
+      ])
     )
     |> Repo.update()
     |> case do
@@ -224,17 +249,39 @@ defmodule CleatDeploy.Apps do
 
   # Changing the runtime re-derives the systemd unit. The old unit keeps running
   # the previous process (and holding the port), so a later deploy of the new
-  # unit can never bind and hits the restart limit. Remove it (best-effort).
+  # unit can never bind and hits the restart limit. Remove it and its extra
+  # process units (best-effort).
   defp prune_previous_unit(%App{}, _previous_runtime, previous_unit)
        when previous_unit in [nil, ""],
        do: :ok
 
   defp prune_previous_unit(%App{} = app, previous_runtime, previous_unit) do
     if app.runtime != previous_runtime and app.systemd_unit != previous_unit do
-      _ = CleatDeploy.Deploy.Teardown.remove_unit(Repo.preload(app, :server), previous_unit)
+      app = Repo.preload(app, :server)
+
+      Enum.each(previous_units(app, previous_unit), fn unit ->
+        _ = CleatDeploy.Deploy.Teardown.remove_unit(app, unit)
+      end)
     end
 
     :ok
+  end
+
+  # The app row already carries the new unit names, so the previous ones are
+  # rebuilt from the unit that was in place before the change.
+  defp previous_units(%App{} = app, previous_unit) do
+    [previous_unit | Enum.map(App.extra_units(app), &"#{previous_unit}-#{&1}")]
+  end
+
+  @doc """
+  Records the manifest summary resolved by the deploy runner (extra units and
+  addons) so the teardown, the systemd probe and the app page know what the last
+  deploy set up.
+  """
+  def record_deploy_manifest(%App{} = app, summary) when is_map(summary) do
+    app
+    |> App.deploy_manifest_changeset(summary)
+    |> Repo.update()
   end
 
   # Changing an app's host provisions a new Caddy site but leaves the old one
@@ -334,9 +381,11 @@ defmodule CleatDeploy.Apps do
   end
 
   def env_map(%App{} = app) do
+    # Force a reload: the deploy path writes env vars (addon credentials) after
+    # the struct was loaded and must see them right away.
     vars =
       app
-      |> Repo.preload(:env_vars)
+      |> Repo.preload(:env_vars, force: true)
       |> Map.fetch!(:env_vars)
       |> Map.new(fn %{key: key, value: value} -> {key, value} end)
 
@@ -344,13 +393,16 @@ defmodule CleatDeploy.Apps do
   end
 
   @sensitive_markers ~w(SECRET TOKEN PASSWORD _KEY)
+  # Connection strings carry the addon password in the userinfo.
+  @sensitive_keys ~w(DATABASE_URL REDIS_URL)
 
   def sensitive_env_key?(key) when is_binary(key) do
     upper = String.upcase(key)
 
-    Enum.any?(@sensitive_markers, fn marker ->
-      String.contains?(upper, marker)
-    end)
+    upper in @sensitive_keys or
+      Enum.any?(@sensitive_markers, fn marker ->
+        String.contains?(upper, marker)
+      end)
   end
 
   def display_env_value(key, value, reveal?) when is_binary(key) and is_binary(value) do
