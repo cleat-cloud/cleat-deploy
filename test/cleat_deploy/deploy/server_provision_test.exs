@@ -302,6 +302,10 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
 
     assert script =~ ~s|CMD_FILE="${1:-start.cmd}"|
     assert script =~ ~s|CMD="$(cat "$(dirname "$0")/$CMD_FILE")"|
+    # Puma (pid), Rails (log, cache) and ActiveStorage (storage) write into
+    # directories git does not carry when empty — a Chatwoot unit crash-looped
+    # with "tmp/pids/server.pid (Errno::ENOENT)" until the launcher created them.
+    assert script =~ "mkdir -p tmp/pids tmp/cache log storage"
   end
 
   defp unit_block(script, unit) do

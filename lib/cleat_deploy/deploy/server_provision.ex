@@ -332,6 +332,11 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     set -euo pipefail
     cd "$(dirname "$0")"
 
+    # Rails (Puma's pid file, the log, the cache, ActiveStorage) writes into
+    # directories that git does not carry when they are empty — the deploy clone
+    # never has them.
+    mkdir -p tmp/pids tmp/cache log storage
+
     CMD_FILE="${1:-start.cmd}"
     CMD="$(cat "$(dirname "$0")/$CMD_FILE")"
     printf '==> starting (%s): %s\\n' "$CMD_FILE" "$CMD" >&2
