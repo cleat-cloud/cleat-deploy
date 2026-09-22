@@ -2,9 +2,9 @@ defmodule CleatDeployWeb.AppLive.Show do
   use CleatDeployWeb, :live_view
 
   alias CleatDeploy.{Apps, Deployments, Settings}
-  alias CleatDeploy.Apps.{App, RuntimeControl, RuntimeLogs, RuntimeMemory}
+  alias CleatDeploy.Apps.{App, AppEnvVar, RuntimeControl, RuntimeLogs, RuntimeMemory}
   alias CleatDeploy.Deploy.{Addons, RuntimePackages}
-  alias CleatDeployWeb.AppLive.Layout
+  alias CleatDeployWeb.AppLive.{Layout, NewInstance}
 
   @poll_ms 1_000
 
@@ -27,6 +27,10 @@ defmodule CleatDeployWeb.AppLive.Show do
       |> assign(:show_secret?, false)
       |> assign(:show_env_values?, false)
       |> assign(:env_vars, Apps.list_env_vars_for_display(app))
+      |> assign(:env_branches, env_branches(app))
+      |> assign(:env_form, to_form(Apps.change_env_var(app), as: :env))
+      |> assign(:env_modal_open?, false)
+      |> assign(:editing_env_var?, false)
       |> assign(:env_file, Apps.App.deploy_config(app).env_file)
       |> assign(:runtime_packages, runtime_packages)
       |> assign(:custom_domain_app?, custom_domain_app?)
@@ -43,6 +47,7 @@ defmodule CleatDeployWeb.AppLive.Show do
       |> assign(:rotating_addon, nil)
       |> assign(:delete_confirm, "")
       |> assign(:delete_form, to_form(%{"confirm" => ""}, as: :delete))
+      |> NewInstance.assigns()
       |> assign(:branch_form, to_form(Apps.change_branch(app), as: :app))
       |> assign(:idle_shutdown_global?, setting.idle_shutdown_enabled)
       |> assign(:idle_shutdown_minutes, setting.idle_shutdown_minutes)
@@ -133,6 +138,98 @@ defmodule CleatDeployWeb.AppLive.Show do
 
   def handle_event("toggle_env_values", _params, socket) do
     {:noreply, assign(socket, :show_env_values?, not socket.assigns.show_env_values?)}
+  end
+
+  def handle_event("open_env_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:env_form, to_form(Apps.change_env_var(socket.assigns.app), as: :env))
+     |> assign(:editing_env_var?, false)
+     |> assign(:env_modal_open?, true)}
+  end
+
+  def handle_event("edit_env_var", %{"key" => key, "branch" => branch}, socket) do
+    case Enum.find(socket.assigns.env_vars, &(&1.key == key and &1.branch == branch)) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "#{key} is no longer configured")}
+
+      env_var ->
+        form =
+          socket.assigns.app
+          |> Apps.change_env_var(%{
+            key: env_var.key,
+            value: env_var.value,
+            branch: env_var.branch
+          })
+          |> to_form(as: :env)
+
+        {:noreply,
+         socket
+         |> assign(:env_form, form)
+         |> assign(:editing_env_var?, true)
+         |> assign(:env_modal_open?, true)}
+    end
+  end
+
+  def handle_event("close_env_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:env_form, to_form(Apps.change_env_var(socket.assigns.app), as: :env))
+     |> assign(:editing_env_var?, false)
+     |> assign(:env_modal_open?, false)}
+  end
+
+  def handle_event("validate_env", %{"env" => params}, socket) do
+    form =
+      socket.assigns.app
+      |> Apps.change_env_var(params)
+      |> Map.put(:action, :validate)
+      |> to_form(as: :env)
+
+    {:noreply, assign(socket, :env_form, form)}
+  end
+
+  def handle_event("save_env_var", %{"env" => params}, socket) do
+    changeset =
+      socket.assigns.app
+      |> Apps.change_env_var(params)
+      |> Map.put(:action, :validate)
+
+    if changeset.valid? do
+      key = Ecto.Changeset.get_field(changeset, :key)
+      value = Ecto.Changeset.get_field(changeset, :value)
+      branch = Ecto.Changeset.get_field(changeset, :branch)
+
+      case Apps.put_env_var(socket.assigns.app, key, value, branch) do
+        {:ok, _env_var} ->
+          {:noreply,
+           socket
+           |> assign(:env_modal_open?, false)
+           |> assign(:editing_env_var?, false)
+           |> refresh_env_vars()
+           |> put_flash(:info, "#{key} saved for #{branch_label(branch)} — deploy to apply")}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not save #{key}")}
+      end
+    else
+      {:noreply, assign(socket, :env_form, to_form(changeset, as: :env))}
+    end
+  end
+
+  def handle_event("delete_env_var", %{"key" => key, "branch" => branch}, socket) do
+    case Apps.delete_env_var(socket.assigns.app, key, branch) do
+      :ok ->
+        {:noreply,
+         socket
+         |> assign(:env_modal_open?, false)
+         |> assign(:editing_env_var?, false)
+         |> refresh_env_vars()
+         |> put_flash(:info, "#{key} removed for #{branch_label(branch)}")}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "#{key} is not configured for that branch")}
+    end
   end
 
   def handle_event("select_app", %{"app_id" => app_id}, socket) do
@@ -296,6 +393,12 @@ defmodule CleatDeployWeb.AppLive.Show do
     end
   end
 
+  # Instance form events live in the shared module, also used by the
+  # deployments page.
+  def handle_event(event, params, socket) do
+    NewInstance.handle_event(event, params, socket)
+  end
+
   @impl true
   def handle_info(:load_app_memory, socket) do
     ref = make_ref()
@@ -373,13 +476,17 @@ defmodule CleatDeployWeb.AppLive.Show do
       app_count={@app_count}
     >
       <div class="space-y-4">
-        <Layout.shell_header app={@app} apps={@apps} />
+        <Layout.shell_header app={@app} apps={@apps} instances={@instances} />
         <Layout.shell_hero
           app={@app}
           deploying?={@deploying?}
           confirming_cancel?={@confirming_cancel?}
           confirming_hibernate?={@confirming_hibernate?}
           confirming_idle_sleep?={@confirming_idle_sleep?}
+          confirming_new_instance?={@confirming_new_instance?}
+          instance_form={@instance_form}
+          instance_defaults={@instance_defaults}
+          instance_errors={@instance_errors}
           global_enabled?={@idle_shutdown_global?}
           minutes={@idle_shutdown_minutes}
           memory={@app_memory}
@@ -516,18 +623,29 @@ defmodule CleatDeployWeb.AppLive.Show do
                   </h3>
                   <p class="text-[11px] text-hd-muted">
                     Synced to <span class="font-mono text-hd-orange">{@env_file}</span>
-                    on every deploy. <span class="text-hd-text">PHX_HOST</span>
+                    on every deploy: variables for all branches plus the ones scoped to the branch
+                    being deployed. <span class="text-hd-text">PHX_HOST</span>
                     is always injected from the app host ({@app.host}).
                   </p>
                 </div>
-                <button
-                  :if={Enum.any?(@env_vars, & &1.sensitive?)}
-                  type="button"
-                  phx-click="toggle_env_values"
-                  class="shrink-0 text-[10px] text-hd-orange hover:underline"
-                >
-                  {if @show_env_values?, do: "Hide secrets", else: "Reveal secrets"}
-                </button>
+                <div class="flex shrink-0 items-center gap-3">
+                  <button
+                    :if={Enum.any?(@env_vars, & &1.sensitive?)}
+                    type="button"
+                    phx-click="toggle_env_values"
+                    class="text-[10px] text-hd-orange hover:underline"
+                  >
+                    {if @show_env_values?, do: "Hide secrets", else: "Reveal secrets"}
+                  </button>
+                  <button
+                    id="manage-env-vars-button"
+                    type="button"
+                    phx-click="open_env_modal"
+                    class="paas-btn-primary uppercase"
+                  >
+                    <.icon name="hero-plus" class="size-3.5" /> Manage variables
+                  </button>
+                </div>
               </div>
 
               <div
@@ -541,21 +659,166 @@ defmodule CleatDeployWeb.AppLive.Show do
                 <table class="paas-table w-full text-left font-mono">
                   <thead>
                     <tr>
-                      <th>Key</th>
+                      <th>Branch</th>
+                      <th>Variable</th>
                       <th>Value</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody id="env-vars-list">
-                    <tr :for={env_var <- @env_vars} id={"env-var-#{env_var.key}"}>
+                    <tr
+                      :for={env_var <- @env_vars}
+                      id={env_var_row_id(env_var)}
+                      data-branch={env_var.branch}
+                    >
+                      <td class="align-top whitespace-nowrap text-[11px] text-hd-muted">
+                        {branch_label(env_var.branch)}
+                      </td>
                       <td class="align-top text-[11px] text-hd-orange">{env_var.key}</td>
                       <td class="max-w-0">
                         <span class="block truncate text-[11px] text-hd-text">
                           {Apps.display_env_value(env_var.key, env_var.value, @show_env_values?)}
                         </span>
                       </td>
+                      <td class="whitespace-nowrap text-right">
+                        <button
+                          type="button"
+                          phx-click="edit_env_var"
+                          phx-value-key={env_var.key}
+                          phx-value-branch={env_var.branch}
+                          class="text-[10px] text-hd-orange hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          phx-click="delete_env_var"
+                          phx-value-key={env_var.key}
+                          phx-value-branch={env_var.branch}
+                          data-confirm={"Remove #{env_var.key} for #{branch_label(env_var.branch)}?"}
+                          class="ml-3 text-[10px] text-rose-400 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              <div
+                :if={@env_modal_open?}
+                id="env-var-modal"
+                class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                phx-window-keydown="close_env_modal"
+                phx-key="Escape"
+                role="presentation"
+              >
+                <button
+                  type="button"
+                  class="paas-modal-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm"
+                  phx-click="close_env_modal"
+                  aria-label="Close environment variable form"
+                />
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="env-var-title"
+                  class="paas-modal-panel relative w-full max-w-lg overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                >
+                  <div class="h-px bg-gradient-to-r from-transparent via-hd-orange/70 to-transparent" />
+                  <div class="space-y-4 p-5 sm:p-6">
+                    <div class="space-y-1">
+                      <h3 id="env-var-title" class="font-display text-base font-semibold text-hd-text">
+                        {if @editing_env_var?, do: "Edit variable", else: "New variable"}
+                      </h3>
+                      <p class="text-[13px] leading-relaxed text-hd-muted">
+                        The value is written to the env file on the next deploy of the branch it is
+                        scoped to.
+                      </p>
+                    </div>
+
+                    <.form
+                      for={@env_form}
+                      id="env-var-form"
+                      phx-change="validate_env"
+                      phx-submit="save_env_var"
+                      class="space-y-3"
+                    >
+                      <.input
+                        field={@env_form[:key]}
+                        id="env-var-key-input"
+                        type="text"
+                        label="Variable"
+                        placeholder="NEXT_PUBLIC_BASE_URL"
+                        class="paas-input w-full font-mono"
+                        spellcheck="false"
+                        autocomplete="off"
+                        required
+                      />
+                      <.input
+                        field={@env_form[:value]}
+                        id="env-var-value-input"
+                        type="textarea"
+                        label="Value"
+                        placeholder="https://example.com"
+                        class="paas-input w-full font-mono"
+                        rows="2"
+                        spellcheck="false"
+                        autocomplete="off"
+                        required
+                      />
+                      <.input
+                        field={@env_form[:branch]}
+                        id="env-var-branch-input"
+                        type="text"
+                        label="Branch"
+                        list="env-branch-options"
+                        placeholder="All branches"
+                        class="paas-input w-full font-mono"
+                        spellcheck="false"
+                        autocomplete="off"
+                      />
+                      <datalist id="env-branch-options">
+                        <option value="All branches"></option>
+                        <option :for={branch <- @env_branches} value={branch}></option>
+                      </datalist>
+                      <p class="text-[11px] text-hd-muted">
+                        Keep <span class="text-hd-text">All branches</span>
+                        to apply everywhere, or use a branch name to override only that branch.
+                      </p>
+
+                      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        <button
+                          :if={@editing_env_var?}
+                          id="delete-env-var-button"
+                          type="button"
+                          phx-click="delete_env_var"
+                          phx-value-key={@env_form[:key].value}
+                          phx-value-branch={@env_form[:branch].value}
+                          class="paas-btn-secondary justify-center text-rose-400"
+                        >
+                          Remove
+                        </button>
+                        <button
+                          type="button"
+                          phx-click="close_env_modal"
+                          class="paas-btn-secondary justify-center"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          id="save-env-var-button"
+                          type="submit"
+                          phx-disable-with="Saving…"
+                          class="paas-btn-primary justify-center"
+                        >
+                          Save variable
+                        </button>
+                      </div>
+                    </.form>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -724,6 +987,41 @@ defmodule CleatDeployWeb.AppLive.Show do
 
   defp webhook_url do
     CleatDeployWeb.Endpoint.url() <> "/webhooks/github"
+  end
+
+  defp refresh_env_vars(socket) do
+    # Re-read the app: the env_vars preloaded in the socket are stale after a
+    # write.
+    app = Apps.get_app!(socket.assigns.current_scope, socket.assigns.app.id)
+
+    socket
+    |> assign(:app, app)
+    |> assign(:env_vars, Apps.list_env_vars_for_display(app))
+    |> assign(:env_branches, env_branches(app))
+  end
+
+  # Branches offered for scoping a variable: the deploy branch plus whatever is
+  # already scoped in this app. "All branches" is the empty/default scope.
+  defp env_branches(app) do
+    app
+    |> Apps.list_env_vars_for_display()
+    |> Enum.map(& &1.branch)
+    |> Kernel.++([app.branch])
+    |> Enum.reject(&AppEnvVar.all_branches?/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp env_var_row_id(%{key: key, branch: branch}) do
+    if AppEnvVar.all_branches?(branch) do
+      "env-var-#{key}"
+    else
+      "env-var-#{key}-#{branch}"
+    end
+  end
+
+  defp branch_label(branch) do
+    if AppEnvVar.all_branches?(branch), do: "All branches", else: branch
   end
 
   defp idle_shutdown_flash(%{idle_shutdown_enabled: true}),

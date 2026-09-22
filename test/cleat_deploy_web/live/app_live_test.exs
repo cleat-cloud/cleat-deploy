@@ -616,6 +616,168 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert render(view) =~ "super-secret"
   end
 
+  test "lists the branch scope of each env var", %{conn: conn, scope: scope, server: server} do
+    app = TenancyFixtures.app_fixture(scope, server, %{branch: "main"})
+
+    {:ok, _} = Apps.put_env_var(app, "BASE_URL", "https://prod.example.com")
+    {:ok, _} = Apps.put_env_var(app, "BASE_URL", "https://staging.example.com", "staging")
+
+    {:ok, view, html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+
+    assert has_element?(view, "#env-var-BASE_URL[data-branch='*']", "All branches")
+    assert has_element?(view, "#env-var-BASE_URL-staging[data-branch='staging']")
+    assert html =~ "https://prod.example.com"
+  end
+
+  test "creates, edits and removes env vars scoped to a branch", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server, %{branch: "main"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+
+    view |> element("#manage-env-vars-button") |> render_click()
+    assert has_element?(view, "#env-var-modal")
+    assert has_element?(view, "#env-branch-options option[value='main']")
+
+    view
+    |> form("#env-var-form",
+      env: %{key: "NEXT_PUBLIC_BASE_URL", value: "https://staging.example.com", branch: "staging"}
+    )
+    |> render_submit()
+
+    assert has_element?(view, "#env-var-NEXT_PUBLIC_BASE_URL-staging")
+    assert Apps.env_map(app, "staging")["NEXT_PUBLIC_BASE_URL"] == "https://staging.example.com"
+    refute Map.has_key?(Apps.env_map(app, "main"), "NEXT_PUBLIC_BASE_URL")
+
+    view |> element("#manage-env-vars-button") |> render_click()
+
+    view
+    |> form("#env-var-form", env: %{key: "SHARED", value: "1", branch: ""})
+    |> render_submit()
+
+    assert has_element?(view, "#env-var-SHARED[data-branch='*']", "All branches")
+    assert Apps.env_map(app, "staging")["SHARED"] == "1"
+
+    view
+    |> element("#env-var-NEXT_PUBLIC_BASE_URL-staging button[phx-click='edit_env_var']")
+    |> render_click()
+
+    assert has_element?(view, "#env-var-modal")
+
+    view
+    |> form("#env-var-form",
+      env: %{
+        key: "NEXT_PUBLIC_BASE_URL",
+        value: "https://staging2.example.com",
+        branch: "staging"
+      }
+    )
+    |> render_submit()
+
+    assert Apps.env_map(app, "staging")["NEXT_PUBLIC_BASE_URL"] == "https://staging2.example.com"
+
+    view
+    |> element("#env-var-NEXT_PUBLIC_BASE_URL-staging button[phx-click='delete_env_var']")
+    |> render_click()
+
+    refute has_element?(view, "#env-var-NEXT_PUBLIC_BASE_URL-staging")
+    refute Map.has_key?(Apps.env_map(app, "staging"), "NEXT_PUBLIC_BASE_URL")
+  end
+
+  test "rejects an invalid env var without touching the stored ones", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+    view |> element("#manage-env-vars-button") |> render_click()
+
+    html =
+      view
+      |> form("#env-var-form", env: %{key: "invalid-key", value: "x", branch: "staging"})
+      |> render_submit()
+
+    assert html =~ "UPPER_SNAKE_CASE"
+    assert Apps.list_env_vars_for_display(app) == []
+  end
+
+  test "registers another instance of the same repo on another branch", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Purple Stock",
+        slug: "purplestock",
+        github_repo: "puppe1990/purplestock",
+        host: "purplestock.gestaobem.com",
+        branch: "main"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+    view |> element("#new-instance-button") |> render_click()
+    assert has_element?(view, "#new-instance-modal")
+
+    # the suggestions follow the branch being typed
+    html =
+      view
+      |> form("#new-instance-form",
+        instance: %{branch: "staging", name: "", slug: "", host: "", port: ""}
+      )
+      |> render_change()
+
+    assert html =~ "purplestock-staging"
+    assert html =~ "purplestock-staging.gestaobem.com"
+
+    assert {:error, {:live_redirect, %{to: path}}} =
+             view
+             |> form("#new-instance-form",
+               instance: %{branch: "staging", name: "", slug: "", host: "", port: ""}
+             )
+             |> render_submit()
+
+    instance = Apps.get_app_by_slug!(scope, "purplestock-staging")
+    assert path == "/apps/#{instance.id}/deployments"
+    assert instance.github_repo == "puppe1990/purplestock"
+    assert instance.branch == "staging"
+    assert instance.host == "purplestock-staging.gestaobem.com"
+    assert instance.server_id == app.server_id
+    assert instance.webhook_secret == app.webhook_secret
+    assert instance.port != app.port
+  end
+
+  test "shows sibling instances of the same project", %{conn: conn, scope: scope, server: server} do
+    repo = "puppe1990/purplestock-#{System.unique_integer()}"
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "purplestock-#{System.unique_integer()}",
+        github_repo: repo,
+        host: "purplestock.gestaobem.com"
+      })
+
+    staging =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "purplestock-staging-#{System.unique_integer()}",
+        github_repo: repo,
+        branch: "staging",
+        host: "purplestock-staging.gestaobem.com"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+
+    assert has_element?(view, "#app-instance-#{staging.slug}", staging.slug)
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{staging.id}/deployments")
+    assert has_element?(view, "#app-instance-#{app.slug}", app.slug)
+  end
+
   test "queues manual deploy", %{conn: conn, scope: scope, server: server} do
     app = TenancyFixtures.app_fixture(scope, server)
 

@@ -64,8 +64,14 @@ defmodule CleatDeploy.Apps do
     )
   end
 
+  @doc """
+  Returns one app of a repository.
+
+  A repository can hold several instances (one per branch), so the oldest app is
+  returned; use `list_apps_by_repo/1` when all of them matter.
+  """
   def get_app_by_repo(github_repo) when is_binary(github_repo) do
-    Repo.get_by(App, github_repo: github_repo)
+    Repo.one(from a in App, where: a.github_repo == ^github_repo, order_by: [asc: a.id], limit: 1)
   end
 
   def get_app_by_slug!(%Scope{tenant: tenant}, slug) when is_binary(slug) do
@@ -77,7 +83,22 @@ defmodule CleatDeploy.Apps do
   end
 
   def list_apps_by_repo(github_repo) when is_binary(github_repo) do
-    Repo.all(from a in App, where: a.github_repo == ^github_repo)
+    Repo.all(from a in App, where: a.github_repo == ^github_repo, order_by: [asc: a.id])
+  end
+
+  @doc """
+  Other instances of the same project: apps of the tenant deploying the same
+  repository from a different branch.
+  """
+  def list_app_instances(%Scope{tenant: tenant}, %App{} = app) do
+    Repo.all(
+      from a in App,
+        where:
+          a.tenant_id == ^tenant.id and a.github_repo == ^app.github_repo and
+            a.github_repo != "" and a.id != ^app.id,
+        order_by: [asc: a.branch],
+        preload: [:server]
+    )
   end
 
   def list_all_with_servers do
@@ -115,6 +136,7 @@ defmodule CleatDeploy.Apps do
       attrs
       |> stringify_keys()
       |> Map.put("tenant_id", tenant.id)
+      |> inherit_webhook_secret(tenant)
       |> assign_free_port()
 
     with {:ok, app} <-
@@ -125,6 +147,30 @@ defmodule CleatDeploy.Apps do
       {:ok, app, status}
     end
   end
+
+  # The push hook lives on the repository, so a second instance of the same repo
+  # signs its pushes with the secret the existing hook already carries.
+  defp inherit_webhook_secret(%{"github_repo" => repo} = attrs, tenant)
+       when is_binary(repo) and repo != "" do
+    case attrs["webhook_secret"] do
+      secret when is_binary(secret) and secret != "" ->
+        attrs
+
+      _ ->
+        secret =
+          Repo.one(
+            from a in App,
+              where: a.tenant_id == ^tenant.id and a.github_repo == ^repo,
+              order_by: [asc: a.id],
+              limit: 1,
+              select: a.webhook_secret
+          )
+
+        if is_binary(secret), do: Map.put(attrs, "webhook_secret", secret), else: attrs
+    end
+  end
+
+  defp inherit_webhook_secret(attrs, _tenant), do: attrs
 
   @doc """
   Returns a port that is free on `server_id`.
@@ -359,34 +405,64 @@ defmodule CleatDeploy.Apps do
     Provisioning.preset_from_repo(github_repo, servers)
   end
 
-  def put_env_var(%App{} = app, key, value) when is_binary(key) and is_binary(value) do
+  def change_env_var(%App{} = app, attrs \\ %{}) do
+    AppEnvVar.changeset(%AppEnvVar{app_id: app.id}, attrs)
+  end
+
+  @doc """
+  Creates or updates a variable, scoped to a branch (`"*"` by default).
+  """
+  def put_env_var(%App{} = app, key, value, branch \\ AppEnvVar.all_branches())
+      when is_binary(key) and is_binary(value) do
+    branch = AppEnvVar.normalize(branch)
+
     %AppEnvVar{}
-    |> AppEnvVar.changeset(%{key: key, value: value, app_id: app.id})
+    |> AppEnvVar.changeset(%{key: key, value: value, app_id: app.id, branch: branch})
     |> Repo.insert(
       on_conflict: {:replace, [:value, :updated_at]},
-      conflict_target: [:app_id, :key]
+      conflict_target: [:app_id, :key, :branch]
     )
   end
 
   @doc """
   Deletes an environment variable from an app.
 
-  Returns `:ok` or `{:error, :not_found}` when the key does not exist.
+  Returns `:ok` or `{:error, :not_found}` when the key does not exist for that
+  branch scope.
   """
-  def delete_env_var(%App{} = app, key) when is_binary(key) do
+  def delete_env_var(%App{} = app, key, branch \\ AppEnvVar.all_branches())
+      when is_binary(key) do
+    branch = AppEnvVar.normalize(branch)
+
     {count, _} =
-      Repo.delete_all(from v in AppEnvVar, where: v.app_id == ^app.id and v.key == ^key)
+      Repo.delete_all(
+        from v in AppEnvVar,
+          where: v.app_id == ^app.id and v.key == ^key and v.branch == ^branch
+      )
 
     if count > 0, do: :ok, else: {:error, :not_found}
   end
 
-  def env_map(%App{} = app) do
+  @doc """
+  Environment of an app as it is written to the server's env file.
+
+  Without a branch every stored variable is returned. With one, the variables
+  scoped to all branches are returned and the branch-specific ones override them
+  by key.
+  """
+  def env_map(%App{} = app), do: env_map(app, nil)
+
+  def env_map(%App{} = app, branch) do
     # Force a reload: the deploy path writes env vars (addon credentials) after
     # the struct was loaded and must see them right away.
     vars =
       app
       |> Repo.preload(:env_vars, force: true)
       |> Map.fetch!(:env_vars)
+      |> Enum.filter(&(branch == nil or AppEnvVar.applies_to?(&1.branch, branch)))
+      |> Enum.sort_by(fn %{branch: scope} ->
+        {if(AppEnvVar.all_branches?(scope), do: 0, else: 1), scope}
+      end)
       |> Map.new(fn %{key: key, value: value} -> {key, value} end)
 
     Map.put(vars, "PHX_HOST", app.host)
@@ -417,10 +493,10 @@ defmodule CleatDeploy.Apps do
     app = Repo.preload(app, :env_vars)
 
     app.env_vars
-    |> Enum.map(fn %{key: key, value: value} ->
-      %{key: key, value: value, sensitive?: sensitive_env_key?(key)}
+    |> Enum.map(fn %{key: key, value: value, branch: branch} ->
+      %{key: key, value: value, branch: branch, sensitive?: sensitive_env_key?(key)}
     end)
-    |> Enum.sort_by(& &1.key)
+    |> Enum.sort_by(fn %{key: key, branch: branch} -> {key, branch} end)
   end
 
   defp mask_env_value(value) do

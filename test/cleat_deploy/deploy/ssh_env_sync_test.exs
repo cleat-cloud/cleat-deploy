@@ -64,4 +64,48 @@ defmodule CleatDeploy.Deploy.SshEnvSyncTest do
 
     assert Ssh.env_sync_script(app, config) == ""
   end
+
+  test "env_file_content of a branch carries the all-branches vars plus its own", %{app: app} do
+    {:ok, _} = Apps.put_env_var(app, "SHARED", "all")
+    {:ok, _} = Apps.put_env_var(app, "STAGING_ONLY", "yes", "staging")
+    app = Apps.get_app!(app.id)
+
+    assert Ssh.env_file_content(app, "main") ==
+             """
+             PHX_HOST=trip.gestaobem.com
+             SHARED=all
+             """
+
+    assert Ssh.env_file_content(app, "staging") ==
+             """
+             PHX_HOST=trip.gestaobem.com
+             SHARED=all
+             STAGING_ONLY=yes
+             """
+  end
+
+  test "a branch-scoped var overrides the same key scoped to all branches", %{app: app} do
+    {:ok, _} = Apps.put_env_var(app, "BASE_URL", "https://prod.example.com")
+    {:ok, _} = Apps.put_env_var(app, "BASE_URL", "https://staging.example.com", "staging")
+    app = Apps.get_app!(app.id)
+
+    staging = Ssh.env_file_content(app, "staging")
+    assert staging =~ "BASE_URL=https://staging.example.com"
+    refute staging =~ "prod.example.com"
+
+    assert Ssh.env_file_content(app, "main") =~ "BASE_URL=https://prod.example.com"
+  end
+
+  test "env_sync_script writes the env file of the branch being deployed", %{app: app} do
+    {:ok, _} = Apps.put_env_var(app, "SHARED", "all")
+    {:ok, _} = Apps.put_env_var(app, "STAGING_ONLY", "yes", "staging")
+    app = Apps.get_app!(app.id)
+
+    staging_config = App.deploy_config(app) |> Map.put(:branch, "staging")
+    script = Ssh.env_sync_script(app, staging_config)
+
+    assert script =~ "/etc/trip_planner_ia/env"
+    assert script =~ Base.encode64(Ssh.env_file_content(app, "staging"))
+    refute script =~ "STAGING_ONLY=yes"
+  end
 end

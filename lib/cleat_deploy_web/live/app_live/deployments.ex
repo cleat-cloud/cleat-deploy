@@ -4,7 +4,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
   alias CleatDeploy.{Apps, Deployments, Settings}
   alias CleatDeploy.Apps.{RuntimeControl, RuntimeMemory}
   alias CleatDeploy.Deploy.RuntimePackages
-  alias CleatDeployWeb.AppLive.Layout
+  alias CleatDeployWeb.AppLive.{Layout, NewInstance}
 
   @poll_ms 1_000
 
@@ -31,6 +31,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
       |> assign(:app_memory, nil)
       |> assign(:memory_ref, nil)
       |> assign(:detail_tabs, Layout.detail_tabs(app.slug == "catalogo", runtime_packages(app)))
+      |> NewInstance.assigns()
       |> refresh_deployments(nil, nil)
       |> schedule_poll()
 
@@ -181,6 +182,12 @@ defmodule CleatDeployWeb.AppLive.Deployments do
      |> refresh_deployments(socket.assigns.selected_deployment_id, socket.assigns.deploying?)}
   end
 
+  # Instance form events live in the shared module, also used by the app detail
+  # view.
+  def handle_event(event, params, socket) do
+    NewInstance.handle_event(event, params, socket)
+  end
+
   @impl true
   def handle_info(:load_app_memory, socket) do
     ref = make_ref()
@@ -219,13 +226,17 @@ defmodule CleatDeployWeb.AppLive.Deployments do
       app_count={@app_count}
     >
       <div class="space-y-4">
-        <Layout.shell_header app={@app} apps={@apps} />
+        <Layout.shell_header app={@app} apps={@apps} instances={@instances} />
         <Layout.shell_hero
           app={@app}
           deploying?={@deploying?}
           confirming_cancel?={@confirming_cancel?}
           confirming_hibernate?={@confirming_hibernate?}
           confirming_idle_sleep?={@confirming_idle_sleep?}
+          confirming_new_instance?={@confirming_new_instance?}
+          instance_form={@instance_form}
+          instance_defaults={@instance_defaults}
+          instance_errors={@instance_errors}
           global_enabled?={@idle_shutdown_global?}
           minutes={@idle_shutdown_minutes}
           memory={@app_memory}

@@ -60,7 +60,7 @@ defmodule CleatDeploy.Apps.App do
     |> put_github_repo_default()
     |> validate_repo()
     |> unique_constraint(:slug, name: :apps_tenant_id_slug_index)
-    |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_index)
+    |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_branch_index)
     |> unique_constraint(:host, name: :apps_server_id_host_index)
     |> unique_constraint(:port, name: :apps_server_id_port_index)
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
@@ -99,7 +99,7 @@ defmodule CleatDeploy.Apps.App do
     |> validate_repo()
     |> unique_constraint(:host, name: :apps_server_id_host_index)
     |> unique_constraint(:port, name: :apps_server_id_port_index)
-    |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_index)
+    |> unique_constraint(:github_repo, name: :apps_tenant_id_github_repo_branch_index)
   end
 
   # Regenerate defaults that are derived from the runtime. Port is untouched.
