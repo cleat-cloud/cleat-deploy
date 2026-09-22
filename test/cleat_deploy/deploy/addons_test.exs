@@ -87,8 +87,10 @@ defmodule CleatDeploy.Deploy.AddonsTest do
     assert script =~ "apt-get install -y redis-server"
     # The `>` that marks a password in the ACL command has to be quoted: bash
     # reads an unquoted one as a redirection and the user ends up without a
-    # password (`WRONGPASS` on every connection).
-    assert script =~ ~s|ACL SETUSER cleat_chatwoot on ">#{redis_password}" ~* +@all|
+    # password (`WRONGPASS` on every connection). `&*` (all channels) needs the
+    # quotes for the same reason — and without it ActionCable dies with NOPERM.
+    assert script =~
+             ~s|ACL SETUSER cleat_chatwoot on ">#{redis_password}" ~* "&*" +@all|
 
     # Nothing happens without addons, or without credentials in the config.
     assert Addons.provision_script(app, config, %AppManifest{}) == ""
@@ -107,6 +109,11 @@ defmodule CleatDeploy.Deploy.AddonsTest do
     # to authenticate, otherwise a user without a password reads as ready.
     assert script =~ ~s|redis-cli -u "redis://cleat_chatwoot:|
     assert script =~ "| grep -q PONG"
+    # "answers PING" is not "the app works": an ACL user starts with
+    # `resetchannels`, so a probe that does not try the channel path reports
+    # ready while websockets (ActionCable) die with NOPERM.
+    assert script =~ "subscribe cleat_probe"
+    assert script =~ "channels-closed"
     refute script =~ "redis-cli ACL LIST"
 
     assert Addons.parse_status("""
