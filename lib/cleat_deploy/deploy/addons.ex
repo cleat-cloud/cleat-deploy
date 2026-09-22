@@ -120,7 +120,7 @@ defmodule CleatDeploy.Deploy.Addons do
     """
     log "Provisioning addon #{@redis} (user #{user})"
     #{redis_install_script()}
-    sudo redis-cli ACL SETUSER #{user} on ">#{password}" ~* +@all > /dev/null
+    sudo redis-cli ACL SETUSER #{user} on ">#{password}" ~* "&*" +@all > /dev/null
     log "Redis user #{user} ready (database #{database})"
     """
   end
@@ -252,7 +252,15 @@ defmodule CleatDeploy.Deploy.Addons do
     """
     REDIS_STATE="$(systemctl is-active redis-server 2>/dev/null || true)"
     if command -v redis-cli >/dev/null 2>&1 && sudo redis-cli -u "#{credential.url}" ping 2>/dev/null | grep -q PONG; then
-      printf 'CLEAT addon %s ready %s\\n' '#{@redis}' '#{user}'
+      # A connection that answers PING can still be unable to publish/subscribe
+      # (ACL users start with `resetchannels`), which is what breaks ActionCable
+      # and any websocket-backed app: check the channel path too.
+      SUB="$(timeout 1 sudo redis-cli -u "#{credential.url}" subscribe cleat_probe 2>&1 | head -1)"
+      if [[ "$SUB" == "subscribe" ]]; then
+        printf 'CLEAT addon %s ready %s\\n' '#{@redis}' '#{user}'
+      else
+        printf 'CLEAT addon %s channels-closed %s\\n' '#{@redis}' '#{user}'
+      fi
     else
       printf 'CLEAT addon %s %s %s\\n' '#{@redis}' "${REDIS_STATE:-missing}" '#{user}'
     fi
