@@ -24,6 +24,7 @@ defmodule CleatDeploy.Deploy.Rails do
   alias CleatDeploy.Deploy.Ssh
 
   @default_ruby_version "3.3.6"
+  @default_node_version "22"
 
   def remote_build_script(
         _server,
@@ -66,11 +67,11 @@ defmodule CleatDeploy.Deploy.Rails do
     bundle config set --local without 'development test'
     bundle install --jobs 4 --retry 3
 
-    #{node_and_js()}
+    #{node_and_js(manifest, config)}
 
-    #{assets_step()}
+    #{assets_step(config)}
 
-    #{migrate_step()}
+    #{migrate_step(manifest)}
 
     #{start_command_script(manifest.start_command)}
 
@@ -87,20 +88,14 @@ defmodule CleatDeploy.Deploy.Rails do
     printf '%s' "$START_CMD" | sudo tee "$RELEASE_DIR/start.cmd" > /dev/null
     echo '#{Base.encode64(ServerProvision.start_script())}' | base64 -d | sudo tee "$RELEASE_DIR/start.sh" > /dev/null
     sudo chmod +x "$RELEASE_DIR/start.sh"
+    #{ServerProvision.extra_start_commands(manifest, config)}
     [[ -n "$TMP_ENV" ]] && rm -f "$TMP_ENV" || true
 
     #{ServerProvision.provision_script(app, config, manifest)}
+    #{CleatDeploy.Deploy.Addons.provision_script(app, config, manifest)}
+    #{ServerProvision.release_command_script(app, config, manifest)}
 
-    log "Restarting #{config.systemd_unit}"
-    sudo systemctl restart #{config.systemd_unit}
-    sleep 3
-
-    if sudo systemctl is-active --quiet #{config.systemd_unit}; then
-      log "Service #{config.systemd_unit} is active"
-    else
-      sudo journalctl -u #{config.systemd_unit} -n 50 --no-pager
-      exit 1
-    fi
+    #{ServerProvision.restart_units_script(config, manifest)}
 
     #{ServerProvision.reload_caddy_script()}
     """
@@ -187,18 +182,47 @@ defmodule CleatDeploy.Deploy.Rails do
     """
   end
 
-  defp node_and_js do
+  # Node for the asset pipeline (Vite/Sprockets both need it). Major comes from
+  # deploy.json `node_version`, then the package.json `engines.node` range, then
+  # the default. The package manager follows the lockfile, and every cache lives
+  # under the app data dir so a redeploy does not re-download the world.
+  defp node_and_js(%AppManifest{} = manifest, config) do
+    build_cache = "#{config.release_path}/data/build-cache"
+
     """
     if [[ -f package.json ]]; then
-      if ! command -v node >/dev/null 2>&1; then
-        log "Installing Node.js"
-        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+      NODE_MAJOR=#{shell_escape(manifest.node_version || "")}
+      if [[ -z "$NODE_MAJOR" ]]; then
+        NODE_MAJOR="$(node -e 'try{const m=String((require("./package.json").engines||{}).node||"").match(/([0-9]+)/);if(m)process.stdout.write(m[1])}catch(_){}' 2>/dev/null || true)"
+      fi
+      NODE_MAJOR="${NODE_MAJOR:-#{@default_node_version}}"
+      INSTALLED_MAJOR="$(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v' || true)"
+
+      if [[ "$INSTALLED_MAJOR" != "$NODE_MAJOR" ]]; then
+        log "Installing Node.js ${NODE_MAJOR}.x"
+        curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | sudo -E bash -
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
       fi
+
+      BUILD_CACHE=#{shell_escape(build_cache)}
+      sudo mkdir -p "$BUILD_CACHE/npm" "$BUILD_CACHE/yarn" "$BUILD_CACHE/pnpm" "$BUILD_CACHE/vite"
+      sudo chown -R "$(id -u):$(id -g)" "$BUILD_CACHE" 2>/dev/null || true
+      export NPM_CONFIG_CACHE="$BUILD_CACHE/npm"
+      export YARN_CACHE_FOLDER="$BUILD_CACHE/yarn"
+      export NPM_CONFIG_STORE_DIR="$BUILD_CACHE/pnpm"
+      export NODE_ENV=production
+
       if [[ -f yarn.lock ]]; then
         corepack enable >/dev/null 2>&1 || true
         log "Installing JS dependencies (yarn)"
         yarn install --frozen-lockfile || yarn install
+      elif [[ -f pnpm-lock.yaml ]]; then
+        corepack enable >/dev/null 2>&1 || true
+        log "Installing JS dependencies (pnpm)"
+        pnpm install --frozen-lockfile || pnpm install
+      elif [[ -f package-lock.json ]]; then
+        log "Installing JS dependencies (npm ci)"
+        npm ci --no-audit --no-fund || npm install
       else
         log "Installing JS dependencies (npm)"
         npm install
@@ -207,9 +231,17 @@ defmodule CleatDeploy.Deploy.Rails do
     """
   end
 
-  defp assets_step do
+  # Keeps Vite's own cache between deploys: without it every deploy rebuilds the
+  # whole asset graph from scratch.
+  defp assets_step(config) do
     """
     if [[ -f app/assets/config/manifest.js || -d app/assets || -d app/javascript || -f config/importmap.rb || -f package.json ]]; then
+      BUILD_CACHE=#{shell_escape("#{config.release_path}/data/build-cache")}
+      if [[ ! -L tmp/cache/vite ]]; then
+        sudo mkdir -p "$BUILD_CACHE/vite" tmp/cache
+        sudo chown -R "$(id -u):$(id -g)" "$BUILD_CACHE/vite" 2>/dev/null || true
+        ln -sfn "$BUILD_CACHE/vite" tmp/cache/vite
+      fi
       log "Precompiling assets"
       run_rails bundle exec rails assets:precompile
     else
@@ -218,15 +250,25 @@ defmodule CleatDeploy.Deploy.Rails do
     """
   end
 
-  defp migrate_step do
-    """
-    if [[ -f config/database.yml ]]; then
-      log "Preparing database (db:prepare)"
-      run_rails bundle exec rails db:prepare
+  # `db:prepare` is the runtime's default migration step; an explicit
+  # release_command replaces it (e.g. `rails db:chatwoot_prepare`).
+  defp migrate_step(%AppManifest{} = manifest) do
+    if AppManifest.release_commands(manifest) == [] do
+      """
+      if [[ -f config/database.yml ]]; then
+        log "Preparing database (db:prepare)"
+        run_rails bundle exec rails db:prepare
+      else
+        log "No database.yml found; skipping db:prepare"
+      fi
+      """
+      |> String.trim()
     else
-      log "No database.yml found; skipping db:prepare"
-    fi
-    """
+      """
+      log "Skipping db:prepare (release_command is set in .cleat_deploy/deploy.json)"
+      """
+      |> String.trim()
+    end
   end
 
   defp start_command_script(command) when is_binary(command) and command != "" do

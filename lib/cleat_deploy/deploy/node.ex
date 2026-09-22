@@ -99,20 +99,14 @@ defmodule CleatDeploy.Deploy.Node do
     printf '%s' "$START_CMD" | sudo tee "$RELEASE_DIR/start.cmd" > /dev/null
     echo '#{Base.encode64(ServerProvision.start_script())}' | base64 -d | sudo tee "$RELEASE_DIR/start.sh" > /dev/null
     sudo chmod +x "$RELEASE_DIR/start.sh"
+    #{ServerProvision.extra_start_commands(manifest, config)}
 
     #{ServerProvision.provision_script(app, config, manifest)}
+    #{CleatDeploy.Deploy.Addons.provision_script(app, config, manifest)}
     #{CleatDeploy.Deploy.Ssh.env_sync_script(app, config)}
+    #{ServerProvision.release_command_script(app, config, manifest)}
 
-    log "Restarting #{config.systemd_unit}"
-    sudo systemctl restart #{config.systemd_unit}
-    sleep 2
-
-    if sudo systemctl is-active --quiet #{config.systemd_unit}; then
-      log "Service #{config.systemd_unit} is active"
-    else
-      sudo journalctl -u #{config.systemd_unit} -n 50 --no-pager
-      exit 1
-    fi
+    #{ServerProvision.restart_units_script(config, manifest)}
 
     #{ServerProvision.reload_caddy_script()}
 

@@ -87,4 +87,63 @@ defmodule CleatDeploy.Deploy.RailsTest do
     assert script =~ ~s|RUBY_VERSION="3.2.2"|
     assert script =~ "START_CMD='bin/rails server -b 0.0.0.0'"
   end
+
+  test "release_command replaces db:prepare and runs before the restart", %{
+    app: app,
+    config: config
+  } do
+    manifest = %AppManifest{
+      runtime: "rails",
+      release_command: ["bundle exec rails db:chatwoot_prepare"],
+      release_timeout_s: 600
+    }
+
+    script = Rails.remote_build_script(nil, app, config, "abc", "/tmp/src.tar.gz", manifest)
+
+    refute script =~ "bundle exec rails db:prepare"
+    assert script =~ "Skipping db:prepare (release_command is set"
+    assert script =~ "Running release command (1/1)"
+    assert script =~ "timeout 600 bash /tmp/cleat_release_cmd.sh"
+    assert script =~ "export RAILS_ENV=production"
+    assert script =~ "source /etc/loja/env"
+
+    assert occurrence(script, "Running release command") <
+             occurrence(script, "Restarting rails-loja")
+  end
+
+  test "keeps db:prepare when there is no release command", %{app: app, config: config} do
+    script =
+      Rails.remote_build_script(nil, app, config, "abc", "/tmp/src.tar.gz", %AppManifest{
+        runtime: "rails"
+      })
+
+    assert script =~ "bundle exec rails db:prepare"
+    refute script =~ "Running release command"
+  end
+
+  test "asset pipeline honours the node version, the lockfiles and a persistent cache", %{
+    app: app,
+    config: config
+  } do
+    script =
+      Rails.remote_build_script(nil, app, config, "abc", "/tmp/src.tar.gz", %AppManifest{
+        runtime: "rails",
+        node_version: "20"
+      })
+
+    assert script =~ ~s|NODE_MAJOR='20'|
+    assert script =~ "setup_${NODE_MAJOR}.x"
+    assert script =~ "engines"
+    assert script =~ "yarn install --frozen-lockfile"
+    assert script =~ "pnpm install --frozen-lockfile"
+    assert script =~ "npm ci --no-audit --no-fund"
+    assert script =~ "export NODE_ENV=production"
+    assert script =~ ~s|BUILD_CACHE='/opt/loja/data/build-cache'|
+    assert script =~ ~s|ln -sfn "$BUILD_CACHE/vite" tmp/cache/vite|
+  end
+
+  defp occurrence(script, snippet) do
+    {position, _length} = :binary.match(script, snippet)
+    position
+  end
 end
