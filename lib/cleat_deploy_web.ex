@@ -17,7 +17,8 @@ defmodule CleatDeployWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico favicon.png robots.txt)
+  def static_paths,
+    do: ~w(assets fonts images favicon.ico favicon.png robots.txt manifest.webmanifest sw.js)
 
   def router do
     quote do
