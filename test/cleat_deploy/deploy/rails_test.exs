@@ -142,6 +142,30 @@ defmodule CleatDeploy.Deploy.RailsTest do
     assert script =~ ~s|ln -sfn "$BUILD_CACHE/vite" tmp/cache/vite|
   end
 
+  test "the node major and the package manager work on a VM that has neither", %{
+    app: app,
+    config: config
+  } do
+    script =
+      Rails.remote_build_script(nil, app, config, "abc", "/tmp/src.tar.gz", %AppManifest{
+        runtime: "rails"
+      })
+
+    # `engines.node` read with node itself never works on a fresh VM (node is the
+    # thing being installed), so it is parsed from the JSON instead.
+    assert script =~ "package_json_node_major()"
+    assert script =~ "python3 -c"
+    refute script =~ "node -e"
+
+    # corepack writes its shims into the Node install dir (root) and is not
+    # always present; a silent failure here is what left `pnpm: command not
+    # found` in the middle of a build.
+    assert script =~ "enable_package_manager pnpm"
+    assert script =~ "enable_package_manager yarn"
+    assert script =~ "sudo corepack enable"
+    assert script =~ ~s|sudo npm install -g "$1"|
+  end
+
   defp occurrence(script, snippet) do
     {position, _length} = :binary.match(script, snippet)
     position
