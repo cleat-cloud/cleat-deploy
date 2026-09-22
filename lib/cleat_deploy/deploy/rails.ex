@@ -191,9 +191,24 @@ defmodule CleatDeploy.Deploy.Rails do
 
     """
     if [[ -f package.json ]]; then
+      # `engines.node` is the only hint a fresh VM has before Node exists, so it
+      # cannot be read with node itself.
+      package_json_node_major() {
+        command -v python3 >/dev/null 2>&1 || return 0
+        python3 -c 'import json,re;e=json.load(open("package.json")).get("engines") or {};m=re.search(r"(\\d+)",str(e.get("node","")));print(m.group(1) if m else "")' 2>/dev/null || true
+      }
+
+      # corepack ships with Node but writes its shims into the Node install dir,
+      # so it needs root; and it is not always there (or the version in
+      # packageManager cannot be fetched) — a global npm install is the fallback.
+      enable_package_manager() {
+        sudo corepack enable >/dev/null 2>&1 || true
+        command -v "$1" >/dev/null 2>&1 || sudo npm install -g "$1" >/dev/null 2>&1 || true
+      }
+
       NODE_MAJOR=#{shell_escape(manifest.node_version || "")}
       if [[ -z "$NODE_MAJOR" ]]; then
-        NODE_MAJOR="$(node -e 'try{const m=String((require("./package.json").engines||{}).node||"").match(/([0-9]+)/);if(m)process.stdout.write(m[1])}catch(_){}' 2>/dev/null || true)"
+        NODE_MAJOR="$(package_json_node_major)"
       fi
       NODE_MAJOR="${NODE_MAJOR:-#{@default_node_version}}"
       INSTALLED_MAJOR="$(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v' || true)"
@@ -213,11 +228,11 @@ defmodule CleatDeploy.Deploy.Rails do
       export NODE_ENV=production
 
       if [[ -f yarn.lock ]]; then
-        corepack enable >/dev/null 2>&1 || true
+        enable_package_manager yarn
         log "Installing JS dependencies (yarn)"
         yarn install --frozen-lockfile || yarn install
       elif [[ -f pnpm-lock.yaml ]]; then
-        corepack enable >/dev/null 2>&1 || true
+        enable_package_manager pnpm
         log "Installing JS dependencies (pnpm)"
         pnpm install --frozen-lockfile || pnpm install
       elif [[ -f package-lock.json ]]; then
