@@ -52,6 +52,76 @@ defmodule CleatDeploy.Apps.RuntimeMemoryTest do
     assert RuntimeMemory.format_disk(memory) == "500 MB"
   end
 
+  test "a hibernated go app reads as stopped even with its worker running", %{
+    scope: scope,
+    server: server
+  } do
+    previous = Application.get_env(:cleat_deploy, :runtime_memory)
+    Application.put_env(:cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeMemoryStoppedStub)
+
+    on_exit(fn ->
+      if previous, do: Application.put_env(:cleat_deploy, :runtime_memory, previous)
+    end)
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "sleeper",
+        systemd_unit: "phx-sleeper",
+        runtime: "golang",
+        release_path: "/opt/sleeper"
+      })
+
+    memory = RuntimeMemory.for_app(app)
+
+    refute memory.active?
+    assert RuntimeMemory.format_status(memory) == "Stopped"
+  end
+
+  test "probe_async/3 answers by message instead of blocking the caller", %{
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "open-drive",
+        systemd_unit: "open_drive",
+        release_path: "/opt/open_drive"
+      })
+
+    ref = make_ref()
+
+    assert {:ok, pid} = RuntimeMemory.probe_async(self(), ref, app)
+    assert is_pid(pid)
+    refute pid == self()
+
+    assert_receive {:app_memory, ^ref, memory}, 2_000
+    assert memory.bytes == 171_200_512
+  end
+
+  test "probes every unit recorded by the last deploy", %{scope: scope, server: server} do
+    previous = Application.get_env(:cleat_deploy, :runtime_memory)
+    Application.put_env(:cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeMemoryStoppedStub)
+
+    on_exit(fn ->
+      if previous, do: Application.put_env(:cleat_deploy, :runtime_memory, previous)
+    end)
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "multi",
+        systemd_unit: "phx-sleeper",
+        runtime: "rails",
+        release_path: "/opt/multi"
+      })
+      |> Map.put(:deploy_manifest, %{"units" => ["worker"], "addons" => []})
+
+    memory = RuntimeMemory.for_app(app)
+
+    # The worker's memory is summed in, but liveness comes from the web unit.
+    assert memory.bytes == 10_416_128
+    refute memory.active?
+  end
+
   test "skips unsafe systemd unit names", %{scope: scope, server: server} do
     app =
       TenancyFixtures.app_fixture(scope, server, %{

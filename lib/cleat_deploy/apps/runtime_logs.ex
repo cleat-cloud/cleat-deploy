@@ -32,6 +32,17 @@ defmodule CleatDeploy.Apps.RuntimeLogs do
     end
   end
 
+  @doc """
+  Runs `fetch/1` in a background task and sends `{:app_logs, ref, result}` to
+  `pid`.
+
+  Reading the journal goes over SSH, so a LiveView must not wait for it inline:
+  that blocks every other event on the page until the call returns.
+  """
+  def probe_async(pid, ref, %App{} = app) when is_pid(pid) do
+    Task.start(fn -> send(pid, {:app_logs, ref, fetch(app)}) end)
+  end
+
   def line_count, do: @line_count
 
   defp client do
