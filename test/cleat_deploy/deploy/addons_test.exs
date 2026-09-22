@@ -85,7 +85,10 @@ defmodule CleatDeploy.Deploy.AddonsTest do
     assert script =~ "CREATE EXTENSION IF NOT EXISTS vector"
     assert script =~ "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"
     assert script =~ "apt-get install -y redis-server"
-    assert script =~ "ACL SETUSER cleat_chatwoot on >#{redis_password} ~* +@all"
+    # The `>` that marks a password in the ACL command has to be quoted: bash
+    # reads an unquoted one as a redirection and the user ends up without a
+    # password (`WRONGPASS` on every connection).
+    assert script =~ ~s|ACL SETUSER cleat_chatwoot on ">#{redis_password}" ~* +@all|
 
     # Nothing happens without addons, or without credentials in the config.
     assert Addons.provision_script(app, config, %AppManifest{}) == ""
@@ -100,7 +103,11 @@ defmodule CleatDeploy.Deploy.AddonsTest do
     assert script =~ "systemctl is-active postgresql"
     assert script =~ "systemctl is-active redis-server"
     assert script =~ "SELECT 1 FROM pg_database WHERE datname = 'cleat_chatwoot'"
-    assert script =~ "redis-cli ACL LIST"
+    # "the user exists" is not the same as "the app can connect": the probe has
+    # to authenticate, otherwise a user without a password reads as ready.
+    assert script =~ ~s|redis-cli -u "redis://cleat_chatwoot:|
+    assert script =~ "| grep -q PONG"
+    refute script =~ "redis-cli ACL LIST"
 
     assert Addons.parse_status("""
              noise from ssh

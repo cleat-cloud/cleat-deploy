@@ -120,10 +120,9 @@ defmodule CleatDeploy.Deploy.Addons do
     """
     log "Provisioning addon #{@redis} (user #{user})"
     #{redis_install_script()}
-    sudo redis-cli ACL SETUSER #{user} on >#{password} ~* +@all > /dev/null
+    sudo redis-cli ACL SETUSER #{user} on ">#{password}" ~* +@all > /dev/null
     log "Redis user #{user} ready (database #{database})"
     """
-    |> String.trim()
   end
 
   defp postgres_install_script do
@@ -249,10 +248,10 @@ defmodule CleatDeploy.Deploy.Addons do
     |> String.trim()
   end
 
-  defp status_step(@redis, %{user: user}) do
+  defp status_step(@redis, %{user: user} = credential) do
     """
     REDIS_STATE="$(systemctl is-active redis-server 2>/dev/null || true)"
-    if command -v redis-cli >/dev/null 2>&1 && sudo redis-cli ACL LIST 2>/dev/null | grep -q '#{user}'; then
+    if command -v redis-cli >/dev/null 2>&1 && sudo redis-cli -u "#{credential.url}" ping 2>/dev/null | grep -q PONG; then
       printf 'CLEAT addon %s ready %s\\n' '#{@redis}' '#{user}'
     else
       printf 'CLEAT addon %s %s %s\\n' '#{@redis}' "${REDIS_STATE:-missing}" '#{user}'
