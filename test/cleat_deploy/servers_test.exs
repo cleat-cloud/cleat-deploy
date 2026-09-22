@@ -172,4 +172,19 @@ defmodule CleatDeploy.ServersTest do
       assert "is invalid" in errors_on(changeset).host_ip
     end
   end
+
+  describe "provision cloud-init" do
+    test "opens every port Caddy needs, HTTP/3 included" do
+      user_data = CleatDeploy.Servers.Provision.user_data("ssh-ed25519 AAAA test@cleat")
+
+      assert user_data =~ "ssh_authorized_keys"
+      assert user_data =~ "- [ufw, allow, OpenSSH]"
+      assert user_data =~ "- [ufw, allow, 80/tcp]"
+      assert user_data =~ "- [ufw, allow, 443/tcp]"
+      # Caddy serves HTTP/3 on UDP 443 and advertises it via `alt-svc`: with the
+      # port closed a browser that takes the offer fails with
+      # ERR_SSL_PROTOCOL_ERROR even though HTTPS over TCP answers fine.
+      assert user_data =~ "- [ufw, allow, 443/udp]"
+    end
+  end
 end
