@@ -3,6 +3,7 @@ defmodule CleatDeploy.Servers.InsightsTest do
 
   alias CleatDeploy.Deployments
   alias CleatDeploy.Servers.Insights
+  alias CleatDeploy.Settings
   alias CleatDeploy.TenancyFixtures
 
   setup do
@@ -54,5 +55,23 @@ defmodule CleatDeploy.Servers.InsightsTest do
     snapshot = Insights.snapshot(scope)
     assert snapshot.runtimes.go == 1
     assert snapshot.runtimes.elixir == 0
+  end
+
+  test "uses the server chosen in the settings", %{scope: scope} do
+    chosen =
+      TenancyFixtures.server_fixture(scope, %{name: "escolhido", instance_status: "stopped"})
+
+    assert {:ok, _} = Settings.put_active_server(scope, chosen.id)
+
+    assert Insights.snapshot(scope).server.id == chosen.id
+  end
+
+  test "ignores a choice that does not belong to the tenant", %{scope: scope, server: server} do
+    other = TenancyFixtures.scope_fixture()
+    foreign = TenancyFixtures.server_fixture(other)
+
+    assert {:ok, _} = Settings.put_active_server(scope, foreign.id)
+
+    assert Insights.snapshot(scope).server.id == server.id
   end
 end

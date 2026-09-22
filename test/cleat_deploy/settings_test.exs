@@ -42,6 +42,30 @@ defmodule CleatDeploy.SettingsTest do
     assert Repo.aggregate(Setting, :count) == 1
   end
 
+  test "put_active_server remembers the choice without touching the idle window" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    other = TenancyFixtures.server_fixture(scope)
+
+    assert {:ok, setting} = Settings.put_active_server(scope, server.id)
+    assert setting.active_server_id == server.id
+    assert Settings.get_setting(scope).active_server_id == server.id
+
+    assert {:ok, _} =
+             Settings.update_setting(scope, %{
+               "idle_shutdown_enabled" => "true",
+               "idle_shutdown_minutes" => "30"
+             })
+
+    assert {:ok, _} = Settings.put_active_server(scope, other.id)
+
+    saved = Settings.get_setting(scope)
+    assert saved.active_server_id == other.id
+    assert saved.idle_shutdown_enabled
+    assert saved.idle_shutdown_minutes == 30
+    assert Repo.aggregate(Setting, :count) == 1
+  end
+
   test "rejects windows outside the supported range" do
     scope = TenancyFixtures.scope_fixture()
 

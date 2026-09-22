@@ -6,6 +6,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
 
   alias CleatDeploy.Deployments
   alias CleatDeploy.HetznerMock
+  alias CleatDeploy.Settings
   alias CleatDeploy.TenancyFixtures
   alias CleatDeployWeb.UserAuth
 
@@ -86,6 +87,63 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     refute has_element?(view, "#dashboard-apps-table")
     refute has_element?(view, "#apps-table")
     refute html =~ "Registered Phoenix Applications"
+  end
+
+  test "shows the active server without a switcher for a single server", %{
+    conn: conn,
+    scope: scope
+  } do
+    TenancyFixtures.server_fixture(scope, %{name: "gestaobem-cx33", instance_status: "running"})
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#active-server-name", "gestaobem-cx33")
+    assert has_element?(view, "#active-server-status", "running")
+    refute has_element?(view, "#active-server-select")
+  end
+
+  test "switches the active server when the tenant has more than one", %{conn: conn, scope: scope} do
+    running =
+      TenancyFixtures.server_fixture(scope, %{name: "aaa-primary", instance_status: "running"})
+
+    stopped =
+      TenancyFixtures.server_fixture(scope, %{name: "zzz-secondary", instance_status: "stopped"})
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    # Without a choice the running server is the active one.
+    assert has_element?(view, "#active-server-select option[selected]", running.name)
+    refute has_element?(view, "#active-server-name")
+
+    view
+    |> element("#active-server-select")
+    |> render_change(%{"server_id" => to_string(stopped.id)})
+
+    assert has_element?(view, "#active-server-select option[selected]", stopped.name)
+    assert has_element?(view, "#active-server-status", "stopped")
+    assert Settings.get_setting(scope).active_server_id == stopped.id
+
+    # The choice survives a reload.
+    {:ok, _view, html} = live(conn, ~p"/")
+    assert html =~ "zzz-secondary"
+  end
+
+  test "ignores a server that is not part of the tenant", %{conn: conn, scope: scope} do
+    mine = TenancyFixtures.server_fixture(scope, %{name: "mine", instance_status: "running"})
+    TenancyFixtures.server_fixture(scope, %{name: "second", instance_status: "stopped"})
+    other = TenancyFixtures.scope_fixture()
+    foreign = TenancyFixtures.server_fixture(other, %{name: "foreign"})
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    html =
+      view
+      |> element("#active-server-select")
+      |> render_change(%{"server_id" => to_string(foreign.id)})
+
+    assert html =~ "Unknown server"
+    assert has_element?(view, "#active-server-select option[selected]", mine.name)
+    assert Settings.get_setting(scope).active_server_id == nil
   end
 
   test "deploy chart hover points skip 0/0 copy on empty days", %{conn: conn} do

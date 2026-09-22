@@ -13,6 +13,7 @@ defmodule CleatDeploy.Settings.Setting do
   schema "settings" do
     field :idle_shutdown_enabled, :boolean, default: false
     field :idle_shutdown_minutes, :integer, default: 60
+    field :active_server_id, :integer
 
     belongs_to :tenant, Tenant
 
@@ -24,11 +25,12 @@ defmodule CleatDeploy.Settings.Setting do
 
   def changeset(setting, attrs) do
     setting
-    |> cast(attrs, [:idle_shutdown_enabled, :idle_shutdown_minutes])
+    |> cast(attrs, [:idle_shutdown_enabled, :idle_shutdown_minutes, :active_server_id])
     |> validate_required([:idle_shutdown_enabled, :idle_shutdown_minutes])
     |> validate_number(:idle_shutdown_minutes,
       greater_than_or_equal_to: @min_minutes,
       less_than_or_equal_to: @max_minutes
     )
+    |> foreign_key_constraint(:active_server_id)
   end
 end
