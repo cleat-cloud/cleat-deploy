@@ -87,11 +87,17 @@ defmodule CleatDeploy.Hetzner.Client do
          {:ok, spec} <- await_public_ip(server) do
       {:ok, spec}
     else
-      {:error, {:hetzner, status, body}} = error ->
+      # A name already in use means the VM exists: return it instead of
+      # creating a second one. Any other uniqueness error (e.g. an SSH key
+      # uploaded under another name) must surface as itself — falling back to
+      # the name lookup would hide it behind a bare `:not_found`.
+      {:error, {:hetzner, _status, body}} = error ->
         if uniqueness_error?(body) do
-          get_instance(location, name)
+          case get_instance(location, name) do
+            {:ok, spec} -> {:ok, spec}
+            {:error, _reason} -> error
+          end
         else
-          _ = status
           error
         end
 
@@ -178,20 +184,50 @@ defmodule CleatDeploy.Hetzner.Client do
   end
 
   defp ensure_ssh_key(public_key) when is_binary(public_key) do
-    name = ssh_key_name(public_key)
+    material = String.trim(public_key)
+    name = ssh_key_name(material)
 
     case request(:get, "/ssh_keys", name: name) do
       {:ok, %{"ssh_keys" => [%{"id" => id} | _]}} ->
         {:ok, id}
 
       {:ok, %{"ssh_keys" => []}} ->
-        case request(:post, "/ssh_keys", %{name: name, public_key: String.trim(public_key)}) do
-          {:ok, %{"ssh_key" => %{"id" => id}}} -> {:ok, id}
-          {:error, reason} -> {:error, reason}
+        case existing_key_id(material) do
+          {:ok, id} -> {:ok, id}
+          :error -> create_ssh_key(name, material)
         end
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp create_ssh_key(name, public_key) do
+    case request(:post, "/ssh_keys", %{name: name, public_key: public_key}) do
+      {:ok, %{"ssh_key" => %{"id" => id}}} -> {:ok, id}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # The same key is often already registered under another name (one created by
+  # hand when the VM was set up, say) and Hetzner rejects a second copy with a
+  # uniqueness error, so the upload has to match on the key material.
+  defp existing_key_id(public_key) do
+    case request(:get, "/ssh_keys", per_page: 50) do
+      {:ok, %{"ssh_keys" => keys}} -> find_key_id(keys, public_key)
+      {:error, _reason} -> :error
+    end
+  end
+
+  @doc """
+  Id of the key whose material matches `public_key`, `:error` when absent.
+  """
+  def find_key_id(keys, public_key) when is_list(keys) and is_binary(public_key) do
+    wanted = String.trim(public_key)
+
+    case Enum.find(keys, &(String.trim(to_string(&1["public_key"])) == wanted)) do
+      %{"id" => id} -> {:ok, id}
+      _ -> :error
     end
   end
 

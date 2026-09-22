@@ -51,4 +51,22 @@ defmodule CleatDeploy.Hetzner.ClientTest do
     assert Client.ssh_key_name(key) == Client.ssh_key_name(key)
     refute Client.ssh_key_name(key) == Client.ssh_key_name(key <> "\n")
   end
+
+  test "find_key_id/2 matches on the key material, not on the name" do
+    key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB cleat-deploy"
+
+    keys = [
+      %{
+        "id" => 1,
+        "name" => "gestaobem-cx33-lightsail",
+        "public_key" => "ssh-rsa AAAAB3Nza other"
+      },
+      %{"id" => 2, "name" => "outro-nome", "public_key" => key <> "\n"}
+    ]
+
+    assert Client.find_key_id(keys, key) == {:ok, 2}
+    assert Client.find_key_id(keys, "ssh-ed25519 AAAA outra") == :error
+    assert Client.find_key_id([], key) == :error
+    assert Client.find_key_id([%{"id" => 3, "name" => "sem material"}], key) == :error
+  end
 end
