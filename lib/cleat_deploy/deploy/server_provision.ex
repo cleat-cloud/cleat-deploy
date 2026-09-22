@@ -559,7 +559,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     """
     echo '#{Base.encode64(command)}' | base64 -d | sudo tee /tmp/cleat_release_cmd.sh > /dev/null
     sudo chmod 700 /tmp/cleat_release_cmd.sh
-    log "Running release command (#{index}/#{total}): $(cat /tmp/cleat_release_cmd.sh)"
+    log "Running release command (#{index}/#{total}): $(sudo cat /tmp/cleat_release_cmd.sh)"
     sudo bash -c 'set -a; source #{config.env_file}; set +a; cd #{config.release_path}/current; export CLEAT_DATA_DIR=#{data_dir}; #{runtime_env}timeout #{timeout} bash /tmp/cleat_release_cmd.sh'
     sudo rm -f /tmp/cleat_release_cmd.sh
     """
