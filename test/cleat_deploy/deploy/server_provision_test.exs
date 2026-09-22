@@ -346,6 +346,10 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "cd /opt/phoenix_tts/current"
     assert script =~ "timeout 900 bash /tmp/cleat_release_cmd.sh"
     assert script =~ "export RAILS_ENV=production"
+    # The command file is root-only on purpose, so even echoing it back for the
+    # log needs sudo — a plain `cat` logs "Permission denied" instead of the
+    # command.
+    assert script =~ "$(sudo cat /tmp/cleat_release_cmd.sh)"
 
     first = :binary.match(script, "Running release command (1/2)") |> elem(0)
     second = :binary.match(script, "Running release command (2/2)") |> elem(0)

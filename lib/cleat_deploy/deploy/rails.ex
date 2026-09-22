@@ -131,6 +131,20 @@ defmodule CleatDeploy.Deploy.Rails do
     mise install "ruby@${RUBY_VERSION}"
     mise use -g "ruby@${RUBY_VERSION}"
 
+    # The app runs as root (the units and the release command) while mise
+    # installs the toolchain under the build user's home, so expose the
+    # interpreter where any user finds it. `bundle` is a ruby script, so ruby
+    # has to be on the PATH as well — the gems themselves live in the release
+    # (`.bundle/config` pins BUNDLE_PATH to vendor/bundle).
+    RUBY_BIN="$(dirname "$(mise which ruby 2>/dev/null || true)")"
+    if [[ -n "$RUBY_BIN" && -d "$RUBY_BIN" ]]; then
+      for bin in ruby gem irb rake bundle bundler; do
+        if [[ -x "$RUBY_BIN/$bin" ]]; then
+          sudo ln -sfn "$RUBY_BIN/$bin" "/usr/local/bin/$bin"
+        fi
+      done
+    fi
+
     command -v bundle >/dev/null 2>&1 || gem install bundler --no-document
     """
   end

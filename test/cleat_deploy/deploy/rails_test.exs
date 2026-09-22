@@ -153,6 +153,20 @@ defmodule CleatDeploy.Deploy.RailsTest do
     assert script =~ ~s|export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"|
   end
 
+  test "exposes the mise ruby to the users that run the app", %{app: app, config: config} do
+    script =
+      Rails.remote_build_script(nil, app, config, "abc", "/tmp/src.tar.gz", %AppManifest{
+        runtime: "rails"
+      })
+
+    # The units and the release command run as root while mise installs Ruby
+    # under the build user's home, which left `bundle: command not found` at
+    # runtime; the interpreter is linked where every user finds it.
+    assert script =~ ~s{RUBY_BIN="$(dirname "$(mise which ruby 2>/dev/null || true)")"}
+    assert script =~ "for bin in ruby gem irb rake bundle bundler"
+    assert script =~ ~s|sudo ln -sfn "$RUBY_BIN/$bin" "/usr/local/bin/$bin"|
+  end
+
   test "the node major and the package manager work on a VM that has neither", %{
     app: app,
     config: config
