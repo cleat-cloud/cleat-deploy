@@ -258,6 +258,12 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     """
   end
 
+  # Caddy's `file_server` sends only `ETag`/`Last-Modified`, so browsers fall
+  # back to heuristic freshness and keep serving a previous deploy's page
+  # without ever revalidating. `no-cache` forces a conditional request on every
+  # load: unchanged files still answer 304, changed ones are refetched. The
+  # filenames published here are not content-hashed, so nothing can be cached
+  # immutably.
   defp caddy_provision_script(%App{} = app, %AppManifest{runtime: "static"}) do
     address = caddy_site_address(app)
 
@@ -267,6 +273,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       encode gzip
       root * #{static_site_root(app)}
       try_files {path} {path}/index.html /index.html
+      header Cache-Control "no-cache"
       file_server
     }
     """
