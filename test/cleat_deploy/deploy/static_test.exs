@@ -42,6 +42,9 @@ defmodule CleatDeploy.Deploy.StaticTest do
     # Try the exact path, then the directory's index.html (so /pt/ serves
     # /pt/index.html), then the root index.html as the SPA fallback.
     assert script =~ "try_files {path} {path}/index.html /index.html"
+    # Without an explicit Cache-Control, browsers apply heuristic freshness to
+    # the ETag/Last-Modified pair and keep serving a previous deploy's page.
+    assert script =~ ~s|header Cache-Control "no-cache"|
     assert script =~ "file_server"
     refute script =~ "reverse_proxy"
     refute script =~ "systemd"
