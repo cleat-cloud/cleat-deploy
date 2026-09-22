@@ -17,13 +17,50 @@ defmodule CleatDeployWeb.Api.EnvTest do
     conn =
       build_conn()
       |> auth(token)
-      |> json_put(~p"/api/v1/apps/#{app.slug}/env", %{key: "DATABASE_URL", value: "postgres://x"})
+      |> json_put(~p"/api/v1/apps/#{app.slug}/env", %{
+        key: "APP_URL",
+        value: "https://x.example.com"
+      })
 
     data = json_response(conn, 200)["data"]
-    assert Enum.any?(data, &(&1["key"] == "DATABASE_URL" and &1["value"] == "postgres://x"))
+
+    assert Enum.any?(
+             data,
+             &(&1["key"] == "APP_URL" and &1["value"] == "https://x.example.com")
+           )
 
     assert data |> hd() |> Map.keys() |> Enum.sort() ==
              CleatDeployWeb.Api.Contract.keys("env_var") |> Enum.sort()
+  end
+
+  test "connection strings are masked unless reveal=true", %{token: token, app: app} do
+    build_conn()
+    |> auth(token)
+    |> json_put(~p"/api/v1/apps/#{app.id}/env", %{
+      key: "DATABASE_URL",
+      value: "postgres://cleat_x:secret@127.0.0.1:5432/cleat_x"
+    })
+    |> json_response(200)
+
+    entry =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/apps/#{app.id}/env")
+      |> json_response(200)
+      |> Map.fetch!("data")
+      |> Enum.find(&(&1["key"] == "DATABASE_URL"))
+
+    assert entry["sensitive"] == true
+    refute entry["value"] =~ "secret"
+
+    revealed =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/apps/#{app.id}/env?reveal=true")
+      |> json_response(200)
+
+    revealed_entry = Enum.find(revealed["data"], &(&1["key"] == "DATABASE_URL"))
+    assert revealed_entry["value"] =~ "secret"
   end
 
   test "sensitive values are masked unless reveal=true", %{token: token, app: app} do

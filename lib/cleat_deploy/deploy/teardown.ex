@@ -6,6 +6,7 @@ defmodule CleatDeploy.Deploy.Teardown do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.Ssh
   alias CleatDeploy.Deploy.SshRunner
+  alias CleatDeploy.Deploy.Wake
 
   def run(%App{} = app) do
     if remote_enabled?() do
@@ -17,27 +18,43 @@ defmodule CleatDeploy.Deploy.Teardown do
 
   def script(%App{} = app) do
     config = App.deploy_config(app)
-    unit = config.systemd_unit
     release_path = config.release_path
     env_file = config.env_file
     host = app.host
 
     """
     set -u
-    UNIT=#{sh_quote(unit)}
     RELEASE=#{sh_quote(release_path)}
     ENVFILE=#{sh_quote(env_file)}
     HOST=#{sh_quote(host)}
 
-    sudo systemctl stop "$UNIT" 2>/dev/null || true
-    sudo systemctl disable "$UNIT" 2>/dev/null || true
-    sudo rm -f "/etc/systemd/system/${UNIT}.service"
-    sudo systemctl daemon-reload 2>/dev/null || true
+    #{remove_units_script(App.unit_names(app))}
     sudo rm -rf "$RELEASE"
     sudo rm -f "$ENVFILE"
 
+    #{addons_teardown_script(app)}
+
     #{remove_host_script(host)}
     """
+  end
+
+  # Managed addons hold the app's database: deleting the app deletes its data.
+  defp addons_teardown_script(%App{} = app) do
+    app
+    |> App.deploy_addons()
+    |> Enum.map_join("\n", &CleatDeploy.Deploy.Addons.teardown_script(app, &1))
+    |> String.trim()
+  end
+
+  @doc """
+  Shell snippet that removes every unit of the app (the HTTP process and its
+  extra processes) plus their wake stamps.
+  """
+  def remove_units_script(units) when is_list(units) do
+    units
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.map_join("\n", &remove_unit_script/1)
+    |> String.trim()
   end
 
   @doc """
@@ -82,6 +99,7 @@ defmodule CleatDeploy.Deploy.Teardown do
     sudo rm -f "/etc/systemd/system/${UNIT}.service"
     sudo systemctl daemon-reload 2>/dev/null || true
     sudo systemctl reset-failed "$UNIT" 2>/dev/null || true
+    sudo rm -f #{sh_quote(Wake.stamp_path(unit))}
     """
   end
 
