@@ -226,6 +226,9 @@ defmodule CleatDeploy.Deploy.Rails do
       export YARN_CACHE_FOLDER="$BUILD_CACHE/yarn"
       export NPM_CONFIG_STORE_DIR="$BUILD_CACHE/pnpm"
       export NODE_ENV=production
+      # The clone has no .git, so a `husky install` in the app's prepare script
+      # only produces a failure nobody can act on.
+      export HUSKY=0
 
       if [[ -f yarn.lock ]]; then
         enable_package_manager yarn
@@ -253,8 +256,12 @@ defmodule CleatDeploy.Deploy.Rails do
     if [[ -f app/assets/config/manifest.js || -d app/assets || -d app/javascript || -f config/importmap.rb || -f package.json ]]; then
       BUILD_CACHE=#{shell_escape("#{config.release_path}/data/build-cache")}
       if [[ ! -L tmp/cache/vite ]]; then
-        sudo mkdir -p "$BUILD_CACHE/vite" tmp/cache
+        # Only the cache in the data dir needs root; creating the one inside the
+        # build tree with sudo would leave it owned by root and break the
+        # symlink below (and the cleanup after the build).
+        sudo mkdir -p "$BUILD_CACHE/vite"
         sudo chown -R "$(id -u):$(id -g)" "$BUILD_CACHE/vite" 2>/dev/null || true
+        mkdir -p tmp/cache
         ln -sfn "$BUILD_CACHE/vite" tmp/cache/vite
       fi
       log "Precompiling assets"
