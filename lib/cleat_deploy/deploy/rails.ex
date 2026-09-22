@@ -264,6 +264,10 @@ defmodule CleatDeploy.Deploy.Rails do
         mkdir -p tmp/cache
         ln -sfn "$BUILD_CACHE/vite" tmp/cache/vite
       fi
+      # Node's default heap (~2 GB) is not enough for a big asset graph: a Vite
+      # build of a large app dies with "JavaScript heap out of memory". An app
+      # that ships its own NODE_OPTIONS in the env keeps it.
+      export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
       log "Precompiling assets"
       run_rails bundle exec rails assets:precompile
     else

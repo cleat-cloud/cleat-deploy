@@ -148,6 +148,9 @@ defmodule CleatDeploy.Deploy.RailsTest do
     refute script =~ ~s|sudo mkdir -p "$BUILD_CACHE/vite" tmp/cache|
     # The clone has no .git, so husky in a prepare script can only fail.
     assert script =~ "export HUSKY=0"
+    # A big Vite graph does not fit in Node's default heap; an app that brings
+    # its own NODE_OPTIONS keeps it.
+    assert script =~ ~s|export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"|
   end
 
   test "the node major and the package manager work on a VM that has neither", %{
