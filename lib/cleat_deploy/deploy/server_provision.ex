@@ -352,6 +352,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
        )
        when is_binary(path) and path != "" do
     """
+    #{ensure_caddy_script()}
+
     log "Installing custom Caddyfile (#{path})"
     if [[ ! -f "$BUILD_DIR/#{path}" ]]; then
       echo "Custom Caddyfile not found at $BUILD_DIR/#{path}" >&2
@@ -429,6 +431,28 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     end
   end
 
+  # A VM created from the panel has nothing installed: the ops bootstrap scripts
+  # put Caddy there, but the panel has to be able to provision a fresh server on
+  # its own. Idempotent (a `command -v` check), so it can be inlined wherever a
+  # Caddyfile is written.
+  defp ensure_caddy_script do
+    """
+    if ! command -v caddy >/dev/null 2>&1; then
+      log "Installing Caddy"
+      sudo apt-get update -qq
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+      curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+      curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
+      sudo apt-get update -qq
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
+    fi
+
+    sudo systemctl enable caddy > /dev/null 2>&1 || true
+    sudo systemctl is-active --quiet caddy || sudo systemctl start caddy
+    """
+    |> String.trim()
+  end
+
   # Rewrites the managed site block for `address` on every deploy. The upstream
   # (app port) can change after creation, so appending only when the address is
   # new would leave Caddy proxying to the old port. Emitted as a shell function
@@ -436,6 +460,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   # strip-and-append dance.
   defp caddy_site_script(address, caddy_site) do
     """
+    #{ensure_caddy_script()}
+
     write_caddy_site() {
       CADDYFILE="/etc/caddy/Caddyfile"
       sudo touch "$CADDYFILE"

@@ -111,6 +111,19 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     refute script =~ "fetch_env!"
   end
 
+  test "installs caddy on a server that has none", %{app: app, config: config} do
+    script =
+      ServerProvision.provision_script(app, config, %AppManifest{runtime: "phoenix"})
+
+    # A VM created from the panel has no Caddy; only the ops bootstrap scripts
+    # installed it, so writing a site on a fresh server failed with
+    # `touch: cannot touch '/etc/caddy/Caddyfile'`.
+    assert script =~ "if ! command -v caddy >/dev/null 2>&1; then"
+    assert script =~ "Installing Caddy"
+    assert script =~ "caddy-stable-archive-keyring.gpg"
+    assert script =~ "sudo systemctl is-active --quiet caddy || sudo systemctl start caddy"
+  end
+
   test "reload_caddy_script reloads or restarts caddy", %{config: _config} do
     script = ServerProvision.reload_caddy_script()
 
