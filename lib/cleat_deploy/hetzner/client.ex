@@ -195,14 +195,19 @@ defmodule CleatDeploy.Hetzner.Client do
     end
   end
 
-  defp ssh_key_name(public_key) do
-    hash =
-      public_key
-      |> :crypto.hash(:sha256)
+  @doc """
+  Name Hetzner stores this public key under.
+
+  Derived from the key itself so the same key is only ever uploaded once; the
+  API rejects duplicate names, not duplicate keys.
+  """
+  def ssh_key_name(public_key) when is_binary(public_key) do
+    digest =
+      :crypto.hash(:sha256, public_key)
       |> Base.encode16(case: :lower)
       |> binary_part(0, 16)
 
-    "paas-#{hash}"
+    "paas-#{digest}"
   end
 
   defp await_public_ip(server, attempts \\ 20) do

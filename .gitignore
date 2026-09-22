@@ -44,3 +44,6 @@ npm-debug.log
 /scripts/deploy/deploy.local.env
 
 .playwright-cli/
+
+# Relatório local do e2e do Chatwoot (aprendizados, não vai pro repo)
+/e2e-chatwoot.html

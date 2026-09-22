@@ -43,4 +43,12 @@ defmodule CleatDeploy.Hetzner.ClientTest do
   test "public_ipv4/1 reads the primary IPv4" do
     assert Client.public_ipv4(@server_payload) == "203.0.113.10"
   end
+
+  test "ssh_key_name/1 derives the uploaded key name from the key itself" do
+    key = "ssh-ed25519 AAAA test@cleat"
+
+    assert Client.ssh_key_name(key) == "paas-774afd795240af98"
+    assert Client.ssh_key_name(key) == Client.ssh_key_name(key)
+    refute Client.ssh_key_name(key) == Client.ssh_key_name(key <> "\n")
+  end
 end
