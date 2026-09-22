@@ -37,6 +37,15 @@ const liveSocket = new LiveSocket("/live", Socket, {
   hooks: {ThemeToggle, ChartTip, ...colocatedHooks},
 })
 
+// Installable PWA: /sw.js is a pass-through worker, it never serves stale
+// assets. Registering it is what lets the panel open fullscreen when added to
+// the home screen.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {})
+  })
+}
+
 // Show progress bar on live navigation and form submits
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))

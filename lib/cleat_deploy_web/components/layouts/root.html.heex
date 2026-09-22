@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
     <meta name="theme-color" content="#0b0e14" />
+    <%!-- Kept as a literal path on purpose: `~p` appends the asset digest, and
+    `Plug.Static` only serves a digested name when its first path segment is in
+    the `:only` list, so `/manifest-<digest>.webmanifest` would answer 404. --%>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Cleat" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <script>
       try {
         const theme = localStorage.getItem("cleat-theme") || localStorage.getItem("phoenix-paas-theme")
