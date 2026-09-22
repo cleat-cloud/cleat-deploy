@@ -250,8 +250,20 @@ defmodule CleatDeployWeb.UserAuthTest do
       %{conn: UserAuth.fetch_current_scope_for_user(conn, [])}
     end
 
-    test "redirects if user is not authenticated", %{conn: conn} do
+    test "sends an anonymous visitor on the root to the public landing", %{conn: conn} do
       conn = conn |> fetch_flash() |> UserAuth.require_authenticated_user([])
+      assert conn.halted
+
+      assert redirected_to(conn) == ~p"/features"
+      refute Phoenix.Flash.get(conn.assigns.flash, :error)
+    end
+
+    test "redirects to log in from any other protected page", %{conn: conn} do
+      conn =
+        %{conn | request_path: "/apps"}
+        |> fetch_flash()
+        |> UserAuth.require_authenticated_user([])
+
       assert conn.halted
 
       assert redirected_to(conn) == ~p"/users/log-in"
