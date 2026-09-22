@@ -140,6 +140,14 @@ defmodule CleatDeploy.Deploy.RailsTest do
     assert script =~ "export NODE_ENV=production"
     assert script =~ ~s|BUILD_CACHE='/opt/loja/data/build-cache'|
     assert script =~ ~s|ln -sfn "$BUILD_CACHE/vite" tmp/cache/vite|
+    # The cache inside the build tree belongs to the build user: creating it
+    # with sudo left it owned by root and the symlink failed ("Permission
+    # denied"), aborting the build before assets:precompile.
+    assert script =~ ~s|sudo mkdir -p "$BUILD_CACHE/vite"|
+    assert script =~ "mkdir -p tmp/cache"
+    refute script =~ ~s|sudo mkdir -p "$BUILD_CACHE/vite" tmp/cache|
+    # The clone has no .git, so husky in a prepare script can only fail.
+    assert script =~ "export HUSKY=0"
   end
 
   test "the node major and the package manager work on a VM that has neither", %{
