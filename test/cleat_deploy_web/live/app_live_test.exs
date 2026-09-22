@@ -1,6 +1,7 @@
 defmodule CleatDeployWeb.AppLiveTest do
   use CleatDeployWeb.ConnCase, async: false
 
+  import Mox
   import Phoenix.LiveViewTest
 
   alias CleatDeploy.{Apps, Deployments}
@@ -8,6 +9,7 @@ defmodule CleatDeployWeb.AppLiveTest do
   alias CleatDeploy.TenancyFixtures
 
   setup :register_and_log_in_user
+  setup :verify_on_exit!
 
   setup %{scope: scope} do
     RuntimeLogsFixtures.stub_success()
@@ -85,6 +87,8 @@ defmodule CleatDeployWeb.AppLiveTest do
     refute html =~ "App 11"
     assert has_element?(view, "#apps-pagination")
     assert has_element?(view, "#apps-page-status", "1-10 of 12")
+    assert has_element?(view, "#apps-page-first[disabled]")
+    refute has_element?(view, "#apps-page-last[disabled]")
 
     html = view |> element("#apps-page-next") |> render_click()
 
@@ -93,6 +97,18 @@ defmodule CleatDeployWeb.AppLiveTest do
     refute html =~ "App 01"
     assert has_element?(view, "#apps-page-status", "11-12 of 12")
     assert has_element?(view, "#apps-page-next[disabled]")
+    refute has_element?(view, "#apps-page-first[disabled]")
+    assert has_element?(view, "#apps-page-last[disabled]")
+
+    view |> element("#apps-page-first") |> render_click()
+
+    assert has_element?(view, "#apps-page-status", "1-10 of 12")
+    assert has_element?(view, "#apps-page-first[disabled]")
+
+    view |> element("#apps-page-last") |> render_click()
+
+    assert has_element?(view, "#apps-page-status", "11-12 of 12")
+    assert has_element?(view, "#apps-page-last[disabled]")
   end
 
   test "lists each app's main language", %{conn: conn, scope: scope, server: server} do
@@ -120,7 +136,7 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#apps-table th", "Main language")
     assert has_element?(view, "#app-#{phoenix_app.id}-language", "Elixir")
     assert has_element?(view, "#app-#{go_app.id}-language", "Go")
-    _ = :sys.get_state(view.pid)
+    wait_for(view, fn -> has_element?(view, "#app-#{phoenix_app.id}-ram", "163 MB") end)
     assert has_element?(view, "#app-#{phoenix_app.id}-ram", "163 MB")
     assert has_element?(view, "#app-#{phoenix_app.id}-cpu", "2.8%")
     assert has_element?(view, "#app-#{phoenix_app.id}-disk", "510 MB")
@@ -357,10 +373,11 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#deployments-history")
     assert html =~ "Deployments Version History"
     assert html =~ "abc123"
-    _ = :sys.get_state(view.pid)
+    wait_for(view, fn -> has_element?(view, "#app-memory-tile", "163 MB") end)
     assert has_element?(view, "#app-memory-tile", "163 MB")
     assert has_element?(view, "#app-cpu-tile", "2.8%")
     assert has_element?(view, "#app-disk-tile", "510 MB")
+    assert has_element?(view, "#app-status-tile", "Active")
     assert has_element?(view, "#app-runtime-badge", "PHX")
   end
 
@@ -450,11 +467,13 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#deploy-branch-form")
     refute has_element?(view, "#app-env-vars")
 
-    {:ok, view, html} = live(conn, ~p"/apps/#{app.id}?tab=logs")
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=logs")
     assert has_element?(view, "#app-detail-tab-logs")
     assert has_element?(view, "#app-runtime-logs")
     assert has_element?(view, "#refresh-app-logs")
-    assert html =~ "2026-09-06T12:00:00Z"
+
+    wait_for(view, fn -> render(view) =~ "2026-09-06T12:00:00Z" end)
+    assert render(view) =~ "2026-09-06T12:00:00Z"
 
     {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=danger")
     assert has_element?(view, "#app-detail-tab-danger")
@@ -564,6 +583,8 @@ defmodule CleatDeployWeb.AppLiveTest do
     app = TenancyFixtures.app_fixture(scope, server)
 
     {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=logs")
+
+    wait_for(view, fn -> has_element?(view, "#log-line-1") end)
 
     assert has_element?(view, "#log-line-1")
     assert has_element?(view, "#log-line-2")
@@ -817,6 +838,8 @@ defmodule CleatDeployWeb.AppLiveTest do
     refute has_element?(view, "#deployments-#{oldest.id}")
     assert has_element?(view, "#deployments-page-prev[disabled]")
     refute has_element?(view, "#deployments-page-next[disabled]")
+    assert has_element?(view, "#deployments-page-first[disabled]")
+    refute has_element?(view, "#deployments-page-last[disabled]")
 
     view |> element("#deployments-page-next") |> render_click()
 
@@ -825,12 +848,504 @@ defmodule CleatDeployWeb.AppLiveTest do
     refute has_element?(view, "#deployments-#{newest.id}")
     refute has_element?(view, "#deployments-page-prev[disabled]")
     assert has_element?(view, "#deployments-page-next[disabled]")
+    assert has_element?(view, "#deployments-page-last[disabled]")
+
+    view |> element("#deployments-page-first") |> render_click()
+
+    assert has_element?(view, "#deployments-page-status", "1-10 of 11")
+    assert has_element?(view, "#deployments-page-first[disabled]")
+
+    view |> element("#deployments-page-last") |> render_click()
+
+    assert has_element?(view, "#deployments-page-status", "11-11 of 11")
+    assert has_element?(view, "#deployments-page-last[disabled]")
 
     view |> element("#deployments-page-prev") |> render_click()
 
     assert has_element?(view, "#deployments-page-status", "1-10 of 11")
     assert has_element?(view, "#deployments-#{newest.id}")
     refute has_element?(view, "#deployments-#{oldest.id}")
+  end
+
+  test "toggles auto sleep from the hero", %{conn: conn, scope: scope, server: server} do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{slug: "sleeper", host: "sleeper.example.com"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+
+    assert has_element?(view, "#app-idle-toggle[data-state=off]")
+    assert has_element?(view, "#app-sleep-global-off")
+    refute has_element?(view, "#idle-sleep-modal")
+    refute Apps.get_app!(scope, app.id).idle_shutdown_enabled
+
+    # Opens the confirmation; cancelling changes nothing.
+    view |> element("#app-idle-toggle") |> render_click()
+
+    assert has_element?(view, "#idle-sleep-modal")
+    assert has_element?(view, "#idle-sleep-title", "Turn on auto sleep?")
+
+    view |> element("#keep-idle-sleep-button") |> render_click()
+
+    refute has_element?(view, "#idle-sleep-modal")
+    refute Apps.get_app!(scope, app.id).idle_shutdown_enabled
+
+    view |> element("#app-idle-toggle") |> render_click()
+    html = view |> element("#confirm-idle-sleep-button") |> render_click()
+
+    assert html =~ "Auto sleep on"
+    assert has_element?(view, "#app-idle-toggle[data-state=on]")
+    assert Apps.get_app!(scope, app.id).idle_shutdown_enabled
+    refute has_element?(view, "#idle-sleep-modal")
+
+    # Turning it off asks for confirmation too.
+    view |> element("#app-idle-toggle") |> render_click()
+
+    assert has_element?(view, "#idle-sleep-title", "Turn off auto sleep?")
+    assert has_element?(view, "#confirm-idle-sleep-button", "Yes, turn it off")
+
+    html = view |> element("#confirm-idle-sleep-button") |> render_click()
+
+    assert html =~ "Auto sleep off"
+    refute Apps.get_app!(scope, app.id).idle_shutdown_enabled
+  end
+
+  test "hibernates and wakes the app from the hero", %{conn: conn, scope: scope, server: server} do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{slug: "sleeper", host: "sleeper.example.com"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+    assert has_element?(view, "#hibernate-button", "Hibernate")
+    refute has_element?(view, "#hibernate-modal")
+
+    view |> element("#hibernate-button") |> render_click()
+
+    assert has_element?(view, "#hibernate-modal")
+    assert has_element?(view, "#hibernate-title", "Hibernate")
+    assert has_element?(view, "#confirm-hibernate-button", "Yes, hibernate")
+
+    html = view |> element("#keep-hibernate-button") |> render_click()
+    refute has_element?(view, "#hibernate-modal")
+    refute html =~ "hibernated"
+
+    expect(CleatDeploy.Apps.RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
+      assert script =~ "sudo systemctl stop"
+      {:ok, "state=inactive\n"}
+    end)
+
+    view |> element("#hibernate-button") |> render_click()
+    html = view |> element("#confirm-hibernate-button") |> render_click()
+
+    assert html =~ "hibernated"
+    refute has_element?(view, "#hibernate-modal")
+
+    expect(CleatDeploy.Apps.RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
+      assert script =~ "sudo systemctl start"
+      {:ok, "state=active\n"}
+    end)
+
+    html = render_hook(view, "wake_app")
+    assert html =~ "is starting"
+  end
+
+  test "the hibernate dialog says how the app actually comes back", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    # The flag alone arms nothing: only a deploy writes the wake agent in front
+    # of the site, and that is what the dialog must say.
+    flagged =
+      TenancyFixtures.app_fixture(scope, server, %{slug: "flagged", host: "flagged.example.com"})
+
+    {:ok, flagged} = Apps.update_app_settings(scope, flagged, %{"idle_shutdown_enabled" => true})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{flagged.id}/deployments")
+    view |> element("#hibernate-button") |> render_click()
+
+    assert has_element?(view, "#hibernate-modal", "only comes back with the Wake up button")
+
+    armed =
+      TenancyFixtures.app_fixture(scope, server, %{slug: "armed", host: "armed.example.com"})
+
+    {:ok, armed} = Apps.record_deploy_manifest(armed, %{wake: true})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{armed.id}/deployments")
+    view |> element("#hibernate-button") |> render_click()
+
+    assert has_element?(
+             view,
+             "#hibernate-modal",
+             "the next request starts it again automatically"
+           )
+  end
+
+  test "shows the failure when hibernating does not stop the unit", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server, %{slug: "sleeper"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+
+    expect(CleatDeploy.Apps.RuntimeControlMock, :run, fn _subject, _argv ->
+      {:ok, "state=active\n"}
+    end)
+
+    view |> element("#hibernate-button") |> render_click()
+    html = view |> element("#confirm-hibernate-button") |> render_click()
+
+    assert html =~ "Could not hibernate: unit phx-sleeper is active"
+    refute has_element?(view, "#hibernate-modal")
+  end
+
+  test "hides the hibernate button for static apps", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "static", github_repo: ""})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+
+    refute has_element?(view, "#hibernate-button")
+  end
+
+  test "shows which apps opted into auto sleep", %{conn: conn, scope: scope, server: server} do
+    sleeper =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "sleeper",
+        idle_shutdown_enabled: true
+      })
+
+    always_on = TenancyFixtures.app_fixture(scope, server, %{slug: "always-on"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    assert has_element?(view, "#apps-table th", "Idle")
+    assert has_element?(view, "#app-#{sleeper.id}-idle", "On")
+    assert has_element?(view, "#app-#{always_on.id}-idle", "Off")
+  end
+
+  test "shows whether each app is running", %{conn: conn, scope: scope, server: server} do
+    running = TenancyFixtures.app_fixture(scope, server, %{slug: "runner"})
+    static = TenancyFixtures.app_fixture(scope, server, %{runtime: "static", github_repo: ""})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+    wait_for(view, fn -> has_element?(view, "#app-#{running.id}-state", "On") end)
+
+    assert has_element?(view, "#apps-table th", "Status")
+    assert has_element?(view, "#app-#{running.id}-state", "On")
+    assert has_element?(view, "#app-#{static.id}-state", "Static")
+
+    headers = table_headers(render(view))
+    idle = Enum.find_index(headers, &(&1 == "Idle"))
+    assert Enum.at(headers, idle + 1) == "Status"
+  end
+
+  defp table_headers(html) do
+    case Regex.run(~r/<thead>(.*?)<\/thead>/s, html) do
+      [_, thead] ->
+        ~r/<th[^>]*>(.*?)<\/th>/s
+        |> Regex.scan(thead)
+        |> Enum.map(fn [_, inner] ->
+          inner |> String.replace(~r/<[^>]*>/, " ") |> String.split() |> Enum.join(" ")
+        end)
+
+      _ ->
+        []
+    end
+  end
+
+  test "filters apps by idle opt-in", %{conn: conn, scope: scope, server: server} do
+    sleeper =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "sleeper",
+        idle_shutdown_enabled: true
+      })
+
+    always_on = TenancyFixtures.app_fixture(scope, server, %{slug: "always-on"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    view |> element("#apps-filter-idle-on") |> render_click()
+
+    html = render(view)
+    assert html =~ sleeper.host
+    refute html =~ always_on.host
+    assert_patch(view, ~p"/apps?idle=on")
+
+    view |> element("#apps-filter-idle-off") |> render_click()
+
+    html = render(view)
+    assert html =~ always_on.host
+    refute html =~ sleeper.host
+    assert_patch(view, ~p"/apps?idle=off")
+
+    view |> element("#apps-filter-idle-all") |> render_click()
+
+    assert_patch(view, ~p"/apps")
+
+    html = render(view)
+    assert html =~ sleeper.host
+    assert html =~ always_on.host
+  end
+
+  test "filters apps by status", %{conn: conn, scope: scope, server: server} do
+    running = TenancyFixtures.app_fixture(scope, server, %{slug: "runner"})
+    static = TenancyFixtures.app_fixture(scope, server, %{runtime: "static", github_repo: ""})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+    wait_for(view, fn -> has_element?(view, "#app-#{running.id}-state", "On") end)
+
+    # The memory stub reports every probed unit as active, so nothing is off.
+    view |> element("#apps-filter-state-off") |> render_click()
+
+    html = render(view)
+    refute html =~ running.host
+    refute html =~ static.host
+    assert html =~ "No applications match this filter."
+    assert_patch(view, ~p"/apps?state=off")
+
+    view |> element("#apps-filter-state-on") |> render_click()
+
+    html = render(view)
+    assert html =~ running.host
+    assert html =~ static.host
+    assert_patch(view, ~p"/apps?state=on")
+  end
+
+  test "applies the new filters from the URL", %{conn: conn, scope: scope, server: server} do
+    sleeper =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "sleeper",
+        idle_shutdown_enabled: true
+      })
+
+    always_on = TenancyFixtures.app_fixture(scope, server, %{slug: "always-on"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps?idle=on")
+
+    html = render(view)
+    assert html =~ sleeper.host
+    refute html =~ always_on.host
+  end
+
+  test "keeps the other filters when one changes", %{conn: conn, scope: scope, server: server} do
+    go_sleeper =
+      TenancyFixtures.app_fixture(scope, server, %{
+        runtime: "golang",
+        idle_shutdown_enabled: true
+      })
+
+    phx_sleeper =
+      TenancyFixtures.app_fixture(scope, server, %{
+        runtime: "phoenix",
+        idle_shutdown_enabled: true
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps?runtime=golang")
+
+    view |> element("#apps-filter-idle-on") |> render_click()
+
+    assert_patch(view, ~p"/apps?idle=on&runtime=golang")
+
+    html = render(view)
+    assert html =~ go_sleeper.host
+    refute html =~ phx_sleeper.host
+  end
+
+  test "hibernates an app from the list after confirming", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server, %{slug: "sleeper"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+    wait_for(view, fn -> has_element?(view, "#app-#{app.id}-state", "On") end)
+
+    assert has_element?(view, "#app-#{app.id}-hibernate")
+    refute has_element?(view, "#apps-hibernate-modal")
+
+    view |> element("#app-#{app.id}-hibernate") |> render_click()
+
+    assert has_element?(view, "#apps-hibernate-modal")
+    assert has_element?(view, "#apps-hibernate-title", "Hibernate")
+    refute has_element?(view, "#app-#{app.id}-wake")
+
+    html = view |> element("#apps-keep-hibernate-button") |> render_click()
+    refute has_element?(view, "#apps-hibernate-modal")
+    refute html =~ "hibernated"
+
+    expect(CleatDeploy.Apps.RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
+      assert script =~ "sudo systemctl stop"
+      {:ok, "state=inactive\n"}
+    end)
+
+    view |> element("#app-#{app.id}-hibernate") |> render_click()
+    html = view |> element("#apps-confirm-hibernate-button") |> render_click()
+
+    assert html =~ "hibernated"
+    refute has_element?(view, "#apps-hibernate-modal")
+  end
+
+  test "wakes a hibernated app from the list", %{conn: conn, scope: scope, server: server} do
+    previous = Application.get_env(:cleat_deploy, :runtime_memory)
+    Application.put_env(:cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeMemoryStoppedStub)
+
+    on_exit(fn ->
+      if previous, do: Application.put_env(:cleat_deploy, :runtime_memory, previous)
+    end)
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{slug: "sleeper", systemd_unit: "phx-sleeper"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+    wait_for(view, fn -> has_element?(view, "#app-#{app.id}-state", "Off") end)
+
+    assert has_element?(view, "#app-#{app.id}-state", "Off")
+    refute has_element?(view, "#app-#{app.id}-hibernate")
+
+    expect(CleatDeploy.Apps.RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
+      assert script =~ "sudo systemctl start"
+      {:ok, "state=active\n"}
+    end)
+
+    html = view |> element("#app-#{app.id}-wake") |> render_click()
+    assert html =~ "is starting"
+  end
+
+  test "hides the power button for static apps", %{conn: conn, scope: scope, server: server} do
+    static = TenancyFixtures.app_fixture(scope, server, %{runtime: "static", github_repo: ""})
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    refute has_element?(view, "#app-#{static.id}-hibernate")
+    refute has_element?(view, "#app-#{static.id}-wake")
+  end
+
+  test "sorts apps by idle opt-in", %{conn: conn, scope: scope, server: server} do
+    TenancyFixtures.app_fixture(scope, server, %{name: "AAA plain", slug: "aaa-plain"})
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      name: "ZZZ sleeper",
+      slug: "zzz-sleeper",
+      idle_shutdown_enabled: true
+    })
+
+    {:ok, view, html} = live(conn, ~p"/apps")
+    assert app_name_order(html) == ["AAA plain", "ZZZ sleeper"]
+
+    html = view |> element("#sort-apps-idle") |> render_click()
+    assert app_name_order(html) == ["AAA plain", "ZZZ sleeper"]
+
+    html = view |> element("#sort-apps-idle") |> render_click()
+    assert app_name_order(html) == ["ZZZ sleeper", "AAA plain"]
+  end
+
+  test "sorts apps by status", %{conn: conn, scope: scope, server: server} do
+    previous = Application.get_env(:cleat_deploy, :runtime_memory)
+    Application.put_env(:cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeMemoryStoppedStub)
+
+    on_exit(fn ->
+      if previous, do: Application.put_env(:cleat_deploy, :runtime_memory, previous)
+    end)
+
+    running =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "AAA running",
+        slug: "aaa-running",
+        systemd_unit: "phx-aaa-running"
+      })
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      name: "ZZZ sleeping",
+      slug: "zzz-sleeping",
+      systemd_unit: "phx-sleeper"
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+    wait_for(view, fn -> has_element?(view, "#app-#{running.id}-state", "On") end)
+
+    html = view |> element("#sort-apps-state") |> render_click()
+    assert app_name_order(html) == ["AAA running", "ZZZ sleeping"]
+
+    html = view |> element("#sort-apps-state") |> render_click()
+    assert app_name_order(html) == ["ZZZ sleeping", "AAA running"]
+  end
+
+  # The systemd probe and the journal read run in background tasks so the page
+  # never blocks on SSH; wait (bounded, without sleeps) for their result before
+  # asserting on it. Each `:sys.get_state` is a barrier that drains the queue.
+  defp wait_for(view, matcher, attempts \\ 200) do
+    Enum.reduce_while(1..attempts, :timeout, fn _, _ ->
+      _ = :sys.get_state(view.pid)
+      if matcher.(), do: {:halt, :ok}, else: {:cont, :timeout}
+    end)
+  end
+
+  test "shows the managed addons, their status and rotates credentials", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server, %{slug: "chatwoot"})
+
+    {:ok, app} =
+      CleatDeploy.Apps.record_deploy_manifest(app, %{
+        units: ["worker"],
+        addons: ["postgres:pgvector", "redis"]
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+
+    wait_for(view, fn -> has_element?(view, "#addon-postgres-pgvector", "Running") end)
+
+    assert has_element?(view, "#app-addons")
+    assert has_element?(view, "#addon-postgres-pgvector", "Running · cleat_chatwoot")
+    assert has_element?(view, "#addon-redis", "Running · cleat_chatwoot")
+
+    # The probe can be re-run without reloading the page.
+    html = view |> element("#refresh-addons") |> render_click()
+
+    assert html =~ "Checking the server…"
+
+    wait_for(view, fn -> has_element?(view, "#addon-redis", "Running · cleat_chatwoot") end)
+
+    # Rotating asks for confirmation first.
+    view |> element("#rotate-postgres-pgvector") |> render_click()
+
+    assert has_element?(view, "#rotate-addon-modal")
+    assert has_element?(view, "#rotate-addon-title", "Rotate Postgres credentials?")
+
+    view |> element("#keep-addon-credentials-button") |> render_click()
+
+    refute has_element?(view, "#rotate-addon-modal")
+    assert CleatDeploy.Apps.env_map(app)["DATABASE_URL"] == nil
+
+    before = CleatDeploy.Apps.env_map(app)["DATABASE_URL"]
+
+    view |> element("#rotate-postgres-pgvector") |> render_click()
+    html = view |> element("#confirm-rotate-addon-button") |> render_click()
+
+    assert html =~ "New credentials stored"
+    refute has_element?(view, "#rotate-addon-modal")
+
+    refute CleatDeploy.Apps.env_map(app)["DATABASE_URL"] == before
+    assert CleatDeploy.Apps.env_map(app)["DATABASE_URL"] =~ "postgres://cleat_chatwoot:"
+  end
+
+  test "hides the addons card for apps without addons", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server, %{slug: "plain"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+
+    refute has_element?(view, "#app-addons")
   end
 
   defp app_name_order(html) do

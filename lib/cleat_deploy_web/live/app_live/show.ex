@@ -1,9 +1,9 @@
 defmodule CleatDeployWeb.AppLive.Show do
   use CleatDeployWeb, :live_view
 
-  alias CleatDeploy.{Apps, Deployments}
-  alias CleatDeploy.Apps.{RuntimeLogs, RuntimeMemory}
-  alias CleatDeploy.Deploy.RuntimePackages
+  alias CleatDeploy.{Apps, Deployments, Settings}
+  alias CleatDeploy.Apps.{App, RuntimeControl, RuntimeLogs, RuntimeMemory}
+  alias CleatDeploy.Deploy.{Addons, RuntimePackages}
   alias CleatDeployWeb.AppLive.Layout
 
   @poll_ms 1_000
@@ -15,6 +15,7 @@ defmodule CleatDeployWeb.AppLive.Show do
     runtime_packages = RuntimePackages.resolve(app).packages
     custom_domain_app? = app.slug == "catalogo"
     deploying? = Deployments.deploying?(scope, app)
+    setting = Settings.get_setting(scope)
 
     socket =
       socket
@@ -34,20 +35,31 @@ defmodule CleatDeployWeb.AppLive.Show do
       |> assign(:runtime_logs, nil)
       |> assign(:logs_error, nil)
       |> assign(:app_memory, nil)
+      |> assign(:memory_ref, nil)
+      |> assign(:logs_ref, nil)
+      |> assign(:addons, [])
+      |> assign(:addon_status, nil)
+      |> assign(:addon_status_ref, nil)
+      |> assign(:rotating_addon, nil)
       |> assign(:delete_confirm, "")
       |> assign(:delete_form, to_form(%{"confirm" => ""}, as: :delete))
       |> assign(:branch_form, to_form(Apps.change_branch(app), as: :app))
+      |> assign(:idle_shutdown_global?, setting.idle_shutdown_enabled)
+      |> assign(:idle_shutdown_minutes, setting.idle_shutdown_minutes)
       |> assign(:deploying?, deploying?)
       |> assign(:confirming_cancel?, false)
+      |> assign(:confirming_hibernate?, false)
+      |> assign(:confirming_idle_sleep?, false)
       |> schedule_poll(deploying?)
 
     socket =
       if connected?(socket) do
         :ok = Deployments.subscribe(app)
         send(self(), :load_app_memory)
-        socket
+        socket = assign(socket, :addons, App.deploy_addons(app))
+        request_addon_status(socket)
       else
-        socket
+        assign(socket, :addons, App.deploy_addons(app))
       end
 
     {:ok, socket}
@@ -128,7 +140,7 @@ defmodule CleatDeployWeb.AppLive.Show do
   end
 
   def handle_event("refresh_logs", _params, socket) do
-    {:noreply, load_logs(socket)}
+    {:noreply, request_logs(socket)}
   end
 
   def handle_event("validate_branch", %{"app" => params}, socket) do
@@ -155,6 +167,98 @@ defmodule CleatDeployWeb.AppLive.Show do
 
       {:error, changeset} ->
         {:noreply, assign(socket, :branch_form, to_form(changeset, as: :app))}
+    end
+  end
+
+  def handle_event("toggle_idle_shutdown", _params, socket) do
+    target = not socket.assigns.app.idle_shutdown_enabled
+
+    case Apps.update_app_settings(socket.assigns.current_scope, socket.assigns.app, %{
+           "idle_shutdown_enabled" => target
+         }) do
+      {:ok, app} ->
+        app = Apps.get_app!(socket.assigns.current_scope, app.id)
+
+        {:noreply,
+         socket
+         |> assign(:app, app)
+         |> assign(:confirming_idle_sleep?, false)
+         |> put_flash(:info, idle_shutdown_flash(app))}
+
+      {:error, _changeset} ->
+        {:noreply,
+         socket
+         |> assign(:confirming_idle_sleep?, false)
+         |> put_flash(:error, "Could not update auto sleep")}
+    end
+  end
+
+  def handle_event("open_idle_sleep", _params, socket) do
+    {:noreply, assign(socket, :confirming_idle_sleep?, true)}
+  end
+
+  def handle_event("close_idle_sleep", _params, socket) do
+    {:noreply, assign(socket, :confirming_idle_sleep?, false)}
+  end
+
+  def handle_event("rotate_addon_prompt", %{"addon" => addon}, socket) do
+    {:noreply, assign(socket, :rotating_addon, addon)}
+  end
+
+  def handle_event("close_rotate_addon", _params, socket) do
+    {:noreply, assign(socket, :rotating_addon, nil)}
+  end
+
+  def handle_event("rotate_addon", %{"addon" => addon}, socket) do
+    {_addons, _credentials} = Addons.rotate(socket.assigns.app, [addon])
+
+    {:noreply,
+     socket
+     |> assign(:rotating_addon, nil)
+     |> put_flash(:info, "New credentials stored — deploy this app to apply them")
+     |> request_addon_status()}
+  end
+
+  def handle_event("refresh_addon_status", _params, socket) do
+    {:noreply, request_addon_status(socket)}
+  end
+
+  def handle_event("open_hibernate", _params, socket) do
+    {:noreply, assign(socket, :confirming_hibernate?, true)}
+  end
+
+  def handle_event("close_hibernate", _params, socket) do
+    {:noreply, assign(socket, :confirming_hibernate?, false)}
+  end
+
+  def handle_event("hibernate_app", _params, socket) do
+    socket = assign(socket, :confirming_hibernate?, false)
+
+    case RuntimeControl.hibernate(socket.assigns.app) do
+      :ok ->
+        {:noreply,
+         socket
+         |> put_flash(
+           :info,
+           "#{socket.assigns.app.name} hibernated — no CPU or RAM until it wakes"
+         )
+         |> refresh_runtime()}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Could not hibernate: #{reason}")}
+    end
+  end
+
+  def handle_event("wake_app", _params, socket) do
+    case RuntimeControl.wake(socket.assigns.app) do
+      :ok ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{socket.assigns.app.name} is starting")
+         |> refresh_runtime()}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Could not wake: #{reason}")}
     end
   end
 
@@ -194,7 +298,57 @@ defmodule CleatDeployWeb.AppLive.Show do
 
   @impl true
   def handle_info(:load_app_memory, socket) do
-    {:noreply, assign(socket, :app_memory, RuntimeMemory.for_app(socket.assigns.app))}
+    ref = make_ref()
+    {:ok, _pid} = RuntimeMemory.probe_async(self(), ref, socket.assigns.app)
+
+    {:noreply, assign(socket, :memory_ref, ref)}
+  end
+
+  def handle_info({:app_memory, ref, memory}, socket) do
+    if ref == socket.assigns.memory_ref do
+      {:noreply, assign(socket, :app_memory, memory)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info(:load_app_logs, socket) do
+    ref = make_ref()
+    {:ok, _pid} = RuntimeLogs.probe_async(self(), ref, socket.assigns.app)
+
+    {:noreply, assign(socket, :logs_ref, ref)}
+  end
+
+  def handle_info({:app_logs, ref, result}, socket) do
+    if ref == socket.assigns.logs_ref do
+      case result do
+        {:ok, logs} ->
+          {:noreply, assign(socket, runtime_logs: logs, logs_error: nil)}
+
+        {:error, message} ->
+          {:noreply, assign(socket, runtime_logs: nil, logs_error: message)}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info(:load_addon_status, socket) do
+    ref = make_ref()
+    {:ok, _pid} = Addons.probe_async(self(), ref, socket.assigns.app, socket.assigns.addons)
+
+    {:noreply, assign(socket, :addon_status_ref, ref)}
+  end
+
+  def handle_info({:addon_status, ref, result}, socket) do
+    if ref == socket.assigns.addon_status_ref do
+      case result do
+        {:ok, status} -> {:noreply, assign(socket, :addon_status, status)}
+        {:error, message} -> {:noreply, assign(socket, :addon_status, %{error: message})}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info(:poll_deployments, socket) do
@@ -224,8 +378,22 @@ defmodule CleatDeployWeb.AppLive.Show do
           app={@app}
           deploying?={@deploying?}
           confirming_cancel?={@confirming_cancel?}
+          confirming_hibernate?={@confirming_hibernate?}
+          confirming_idle_sleep?={@confirming_idle_sleep?}
+          global_enabled?={@idle_shutdown_global?}
+          minutes={@idle_shutdown_minutes}
+          memory={@app_memory}
         />
         <Layout.shell_info_tiles app={@app} memory={@app_memory} />
+
+        <Layout.addons_card
+          :if={@addons != []}
+          app={@app}
+          addons={@addons}
+          status={@addon_status}
+        />
+
+        <Layout.rotate_addon_modal :if={@rotating_addon} addon={@rotating_addon} />
 
         <div id="app-detail-tabs" class="paas-card overflow-hidden">
           <Layout.tab_bar app={@app} active_tab={@app_detail_tab} detail_tabs={@detail_tabs} />
@@ -558,24 +726,40 @@ defmodule CleatDeployWeb.AppLive.Show do
     CleatDeployWeb.Endpoint.url() <> "/webhooks/github"
   end
 
+  defp idle_shutdown_flash(%{idle_shutdown_enabled: true}),
+    do: "Auto sleep on — deploy this app to arm it on the server"
+
+  defp idle_shutdown_flash(_app), do: "Auto sleep off"
+
+  # Re-reads the systemd state so the status tile and the hibernate button
+  # reflect what just happened.
+  defp refresh_runtime(socket) do
+    send(self(), :load_app_memory)
+    socket
+  end
+
   defp maybe_load_logs(socket, :logs) do
-    if connected?(socket), do: load_logs(socket), else: socket
+    if connected?(socket), do: request_logs(socket), else: socket
   end
 
   defp maybe_load_logs(socket, _tab), do: socket
 
-  defp load_logs(socket) do
-    case RuntimeLogs.fetch(socket.assigns.app) do
-      {:ok, result} ->
-        socket
-        |> assign(:runtime_logs, result)
-        |> assign(:logs_error, nil)
-
-      {:error, message} ->
-        socket
-        |> assign(:runtime_logs, nil)
-        |> assign(:logs_error, message)
+  # The addon probe SSHes into the server; only run it when the app declares
+  # addons, and let the card show its "checking" state until it answers.
+  defp request_addon_status(socket) do
+    if socket.assigns.addons == [] do
+      socket
+    else
+      send(self(), :load_addon_status)
+      assign(socket, :addon_status, nil)
     end
+  end
+
+  # The journal read happens in a task; the template shows its "Reading…" state
+  # until the result lands.
+  defp request_logs(socket) do
+    send(self(), :load_app_logs)
+    assign(socket, :runtime_logs, nil)
   end
 
   defp log_unit(_app, %{unit: unit}), do: unit
