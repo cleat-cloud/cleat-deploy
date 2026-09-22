@@ -1,6 +1,7 @@
 defmodule CleatDeploy.Settings do
   @moduledoc """
-  Per-tenant platform settings (currently the idle shutdown / auto-sleep window).
+  Per-tenant platform settings: the idle shutdown / auto-sleep window and which
+  server the panel treats as active.
   """
 
   import Ecto.Query, warn: false
@@ -33,6 +34,25 @@ defmodule CleatDeploy.Settings do
           on_conflict: {:replace, [:idle_shutdown_enabled, :idle_shutdown_minutes, :updated_at]},
           conflict_target: :tenant_id
         )
+    end
+  end
+
+  @doc """
+  Remembers the server the tenant is looking at.
+
+  Only the preference is written: the idle shutdown values already stored are
+  left untouched.
+  """
+  def put_active_server(%Scope{} = scope, server_id) when is_integer(server_id) do
+    changeset = Setting.changeset(get_setting(scope), %{active_server_id: server_id})
+
+    if changeset.valid? do
+      Repo.insert(changeset,
+        on_conflict: {:replace, [:active_server_id, :updated_at]},
+        conflict_target: :tenant_id
+      )
+    else
+      {:error, changeset}
     end
   end
 

@@ -9,12 +9,13 @@ defmodule CleatDeploy.Servers.Insights do
   alias CleatDeploy.Hetzner
   alias CleatDeploy.Repo
   alias CleatDeploy.Servers.Server
+  alias CleatDeploy.Settings
 
   @deploy_days 14
   @metric_points 48
 
   def snapshot(%Scope{} = scope, opts \\ []) do
-    server = primary_server(scope)
+    server = active_server(scope)
     runtimes = Apps.count_by_runtime(scope)
     deploys = fill_deploy_days(Deployments.daily_status_counts(scope, @deploy_days), @deploy_days)
 
@@ -34,6 +35,19 @@ defmodule CleatDeploy.Servers.Insights do
       net_in_now: last_value(metrics.network_in),
       net_out_now: last_value(metrics.network_out)
     }
+  end
+
+  # The server chosen on the dashboard wins while it still belongs to the
+  # tenant; otherwise fall back to the running/oldest one.
+  defp active_server(%Scope{} = scope) do
+    case Settings.get_setting(scope).active_server_id do
+      nil -> primary_server(scope)
+      server_id -> get_tenant_server(scope, server_id) || primary_server(scope)
+    end
+  end
+
+  defp get_tenant_server(%Scope{tenant: tenant}, server_id) do
+    Repo.get_by(Server, id: server_id, tenant_id: tenant.id)
   end
 
   defp primary_server(%Scope{tenant: tenant}) do

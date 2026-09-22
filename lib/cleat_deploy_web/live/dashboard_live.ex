@@ -1,6 +1,7 @@
 defmodule CleatDeployWeb.DashboardLive do
   use CleatDeployWeb, :live_view
 
+  alias CleatDeploy.{Servers, Settings}
   alias CleatDeploy.Servers.{HostStats, Insights}
 
   @live_ms 5_000
@@ -14,6 +15,7 @@ defmodule CleatDeployWeb.DashboardLive do
       |> assign(:active_tab, :dashboard)
       |> assign(:host_sample, nil)
       |> assign(:live_host?, false)
+      |> assign(:servers, Servers.list_servers(socket.assigns.current_scope))
       |> load_insights(metrics: connected?(socket))
       |> refresh_resources()
 
@@ -45,6 +47,27 @@ defmodule CleatDeployWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("select_active_server", %{"server_id" => server_id}, socket) do
+    case Enum.find(socket.assigns.servers, &(to_string(&1.id) == server_id)) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Unknown server")}
+
+      server ->
+        case Settings.put_active_server(socket.assigns.current_scope, server.id) do
+          {:ok, _setting} ->
+            {:noreply,
+             socket
+             |> load_insights(metrics: connected?(socket))
+             |> refresh_resources()
+             |> arm_live()}
+
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "Could not switch the active server")}
+        end
+    end
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app
@@ -64,17 +87,40 @@ defmodule CleatDeployWeb.DashboardLive do
             <p class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
               Active server
             </p>
-            <h2 class="font-display text-lg font-semibold tracking-tight text-hd-text">
+            <select
+              :if={length(@servers) > 1}
+              id="active-server-select"
+              class="paas-select mt-0.5 max-w-[18rem]"
+              name="server_id"
+              phx-change="select_active_server"
+              aria-label="Active server"
+            >
+              <option
+                :for={server <- @servers}
+                value={server.id}
+                selected={server.id == @insights.server.id}
+              >
+                {server.name}
+              </option>
+            </select>
+            <h2
+              :if={length(@servers) <= 1}
+              id="active-server-name"
+              class="font-display text-lg font-semibold tracking-tight text-hd-text"
+            >
               {@insights.server.name}
             </h2>
             <p class="font-mono text-[11px] text-hd-muted">
               {server_spec(@insights.server)}
             </p>
           </div>
-          <span class={[
-            "rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
-            status_class(@insights.server.instance_status)
-          ]}>
+          <span
+            id="active-server-status"
+            class={[
+              "rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
+              status_class(@insights.server.instance_status)
+            ]}
+          >
             {@insights.server.instance_status || "unknown"}
           </span>
         </div>
