@@ -1,7 +1,7 @@
 defmodule CleatDeployWeb.GithubWebhookControllerTest do
   use CleatDeployWeb.ConnCase, async: false
 
-  alias CleatDeploy.TenancyFixtures
+  alias CleatDeploy.{Deployments, TenancyFixtures}
 
   setup do
     scope = TenancyFixtures.scope_fixture()
@@ -127,6 +127,54 @@ defmodule CleatDeployWeb.GithubWebhookControllerTest do
 
     assert response(conn, 202) == "queued"
     assert_enqueued(worker: CleatDeploy.Workers.DeployWorker)
+  end
+
+  test "deploys only the instance that owns the pushed branch" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    repo = "puppe1990/purplestock-#{System.unique_integer()}"
+
+    production =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Purple Stock",
+        slug: "purplestock-#{System.unique_integer()}",
+        github_repo: repo,
+        branch: "main",
+        host: "purplestock.gestaobem.com"
+      })
+
+    staging =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Purple Stock Staging",
+        slug: "purplestock-staging-#{System.unique_integer()}",
+        github_repo: repo,
+        branch: "staging",
+        host: "purplestock-staging.gestaobem.com"
+      })
+
+    assert staging.webhook_secret == production.webhook_secret
+
+    payload =
+      Jason.encode!(%{
+        "ref" => "refs/heads/staging",
+        "after" => "abc123def456",
+        "repository" => %{"full_name" => repo}
+      })
+
+    conn =
+      build_conn()
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("x-hub-signature-256", sign(payload, production.webhook_secret))
+      |> post(~p"/webhooks/github", payload)
+
+    assert response(conn, 202) == "queued"
+
+    assert [job] = all_enqueued(worker: CleatDeploy.Workers.DeployWorker)
+    deployment = Deployments.get_deployment!(job.args["deployment_id"])
+
+    assert deployment.app_id == staging.id
+    assert deployment.git_ref == "staging"
+    assert deployment.git_sha == "abc123def456"
   end
 
   defp sign(body, secret) do

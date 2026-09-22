@@ -2,10 +2,11 @@ defmodule CleatDeployWeb.AppLive.Layout do
   @moduledoc false
   use CleatDeployWeb, :html
 
-  import CleatDeployWeb.CoreComponents, only: [icon: 1]
+  import CleatDeployWeb.CoreComponents, only: [icon: 1, input: 1]
 
   attr :app, :map, required: true
   attr :apps, :list, required: true
+  attr :instances, :list, default: []
 
   def shell_header(assigns) do
     ~H"""
@@ -25,13 +26,28 @@ defmodule CleatDeployWeb.AppLive.Layout do
           </option>
         </select>
       </div>
-      <div class="text-xs text-hd-muted">
-        Repository mapping:
-        <.repo_link
-          id="app-repo-mapping"
-          repo={@app.github_repo}
-          class="font-mono text-hd-orange hover:text-hd-orange-dark"
-        />
+      <div class="flex flex-wrap items-center gap-3 text-xs text-hd-muted">
+        <div :if={@instances != []} id="app-instances" class="flex items-center gap-2">
+          <span class="font-mono text-[10px] uppercase tracking-wider text-hd-muted">
+            Instances:
+          </span>
+          <.link
+            :for={instance <- @instances}
+            id={"app-instance-#{instance.slug}"}
+            navigate={~p"/apps/#{instance.id}/deployments"}
+            class="font-mono text-[11px] text-hd-orange hover:underline"
+          >
+            {instance.slug} ({instance.branch})
+          </.link>
+        </div>
+        <div>
+          Repository mapping:
+          <.repo_link
+            id="app-repo-mapping"
+            repo={@app.github_repo}
+            class="font-mono text-hd-orange hover:text-hd-orange-dark"
+          />
+        </div>
       </div>
     </div>
     """
@@ -42,6 +58,10 @@ defmodule CleatDeployWeb.AppLive.Layout do
   attr :confirming_cancel?, :boolean, default: false
   attr :confirming_hibernate?, :boolean, default: false
   attr :confirming_idle_sleep?, :boolean, default: false
+  attr :confirming_new_instance?, :boolean, default: false
+  attr :instance_form, :any, default: nil
+  attr :instance_defaults, :map, default: %{name: "", slug: "", host: ""}
+  attr :instance_errors, :list, default: []
   attr :global_enabled?, :boolean, default: false
   attr :minutes, :integer, default: nil
   attr :memory, :any, default: nil
@@ -129,6 +149,16 @@ defmodule CleatDeployWeb.AppLive.Layout do
             ]}
           >
             <.icon name="hero-moon" class="size-3" /> auto sleep {if @idle_on?, do: "on", else: "off"}
+          </button>
+          <button
+            :if={@app.github_repo not in [nil, ""]}
+            id="new-instance-button"
+            type="button"
+            phx-click="open_new_instance"
+            class="paas-btn-secondary uppercase"
+            title="Register another instance of this repository on a different branch"
+          >
+            <.icon name="hero-square-2-stack" class="size-3.5" /> New instance
           </button>
           <button
             id="deploy-button"
@@ -361,6 +391,133 @@ defmodule CleatDeployWeb.AppLive.Layout do
         <.link navigate={~p"/settings"} class="underline">open Settings</.link>
         — the per-app flag only hibernates once the platform switch is on.
       </p>
+
+      <div
+        :if={@confirming_new_instance?}
+        id="new-instance-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        phx-window-keydown="close_new_instance"
+        phx-key="Escape"
+        role="presentation"
+      >
+        <button
+          type="button"
+          class="paas-modal-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm"
+          phx-click="close_new_instance"
+          aria-label="Close new instance form"
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-instance-title"
+          class="paas-modal-panel relative w-full max-w-lg overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        >
+          <div class="h-px bg-gradient-to-r from-transparent via-hd-blue/70 to-transparent" />
+          <div class="space-y-4 p-5 sm:p-6">
+            <div class="space-y-1">
+              <h3 id="new-instance-title" class="font-display text-base font-semibold text-hd-text">
+                New instance
+              </h3>
+              <p class="text-[13px] leading-relaxed text-hd-muted">
+                Registers another instance of
+                <span class="font-mono text-hd-orange">{@app.github_repo}</span>
+                on a different branch, with its own slug, host, port, systemd unit and environment
+                variables. Pushes keep deploying both instances.
+              </p>
+            </div>
+
+            <div
+              :if={@instance_errors != []}
+              id="new-instance-errors"
+              class="space-y-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300"
+            >
+              <p :for={error <- @instance_errors}>{error}</p>
+            </div>
+
+            <.form
+              for={@instance_form}
+              id="new-instance-form"
+              phx-change="validate_new_instance"
+              phx-submit="save_new_instance"
+              class="space-y-3"
+            >
+              <.input
+                field={@instance_form[:branch]}
+                id="instance-branch-input"
+                type="text"
+                label="Branch"
+                placeholder="staging"
+                class="paas-input w-full font-mono"
+                spellcheck="false"
+                autocomplete="off"
+                required
+              />
+              <.input
+                field={@instance_form[:name]}
+                id="instance-name-input"
+                type="text"
+                label="Name"
+                placeholder={@instance_defaults.name}
+                class="paas-input w-full"
+                autocomplete="off"
+              />
+              <div class="grid gap-3 sm:grid-cols-2">
+                <.input
+                  field={@instance_form[:slug]}
+                  id="instance-slug-input"
+                  type="text"
+                  label="Slug"
+                  placeholder={@instance_defaults.slug}
+                  class="paas-input w-full font-mono"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+                <.input
+                  field={@instance_form[:port]}
+                  id="instance-port-input"
+                  type="number"
+                  label="Port"
+                  placeholder="first free port"
+                  class="paas-input w-full font-mono"
+                />
+              </div>
+              <.input
+                field={@instance_form[:host]}
+                id="instance-host-input"
+                type="text"
+                label="Host"
+                placeholder={@instance_defaults.host}
+                class="paas-input w-full font-mono"
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <p class="text-[11px] text-hd-muted">
+                Blank fields use the suggestion shown in grey. Deployed to
+                <span class="text-hd-text">{@app.server.name}</span>
+                with the {@app.runtime} runtime, same as this instance.
+              </p>
+
+              <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  phx-click="close_new_instance"
+                  class="paas-btn-secondary justify-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  id="save-new-instance-button"
+                  type="submit"
+                  phx-disable-with="Creating…"
+                  class="paas-btn-primary justify-center"
+                >
+                  Create instance
+                </button>
+              </div>
+            </.form>
+          </div>
+        </div>
+      </div>
     </div>
     """
   end

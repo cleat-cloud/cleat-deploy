@@ -35,24 +35,35 @@ defmodule CleatDeploy.Github do
   def verify_signature(_, _, _), do: :error
 
   @doc """
+  Parses push event payload into the branch and commit it refers to.
+
+  Deleted refs (all-zero sha) are ignored, as are payloads that are not a branch
+  push.
+  """
+  def push_ref(%{"ref" => "refs/heads/" <> ref, "after" => sha})
+      when is_binary(sha) and sha != "" do
+    if sha == String.duplicate("0", 40) do
+      {:ignore, :deleted_ref}
+    else
+      {:ok, {ref, sha}}
+    end
+  end
+
+  def push_ref(_payload), do: {:ignore, :invalid_payload}
+
+  @doc """
   Parses push event payload and returns deploy attrs when branch matches.
   """
   def push_deploy_attrs(payload, branch \\ "main") do
-    case payload do
-      %{"ref" => "refs/heads/" <> ref, "after" => sha} when is_binary(sha) and sha != "" ->
-        cond do
-          sha == String.duplicate("0", 40) ->
-            {:ignore, :deleted_ref}
+    case push_ref(payload) do
+      {:ok, {^branch, sha}} ->
+        {:ok, %{git_sha: sha, git_ref: branch, triggered_by: "webhook"}}
 
-          ref != branch ->
-            {:ignore, {:wrong_branch, ref}}
+      {:ok, {ref, _sha}} ->
+        {:ignore, {:wrong_branch, ref}}
 
-          true ->
-            {:ok, %{git_sha: sha, git_ref: ref, triggered_by: "webhook"}}
-        end
-
-      _ ->
-        {:ignore, :invalid_payload}
+      {:ignore, reason} ->
+        {:ignore, reason}
     end
   end
 

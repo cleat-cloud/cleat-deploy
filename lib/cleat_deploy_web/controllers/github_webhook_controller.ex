@@ -12,63 +12,96 @@ defmodule CleatDeployWeb.GithubWebhookController do
     result =
       with {:ok, payload} <- decode_payload(raw_body),
            repo when is_binary(repo) <- Github.repo_full_name(payload) || :missing_repo,
-           %{} = app <- find_app_by_repo_and_signature(repo, raw_body, signature),
-           {:ok, attrs} <- normalize_push_attrs(payload, app),
-           true <- app.auto_deploy || :auto_deploy_off,
-           {:ok, job} <- Deployments.enqueue(app, attrs) do
-        {:queued, app, job}
+           {:ok, apps} <- find_repo_apps(repo, raw_body, signature),
+           {:ok, {ref, sha}} <- Github.push_ref(payload) do
+        handle_push(apps, ref, sha)
       end
 
-    case result do
-      {:queued, app, job} ->
-        Logger.info(
-          "github webhook queued deploy app=#{app.slug} job=#{job.id} repo=#{app.github_repo}"
-        )
+    respond(conn, result)
+  end
 
-        send_resp(conn, :accepted, "queued")
+  defp respond(conn, {:queued, queued}) do
+    Enum.each(queued, fn {app, job} ->
+      Logger.info(
+        "github webhook queued deploy app=#{app.slug} job=#{job.id} repo=#{app.github_repo} ref=#{app.branch}"
+      )
+    end)
 
-      :not_found ->
-        Logger.warning("github webhook unknown repo")
-        send_resp(conn, :not_found, "unknown repo")
+    send_resp(conn, :accepted, "queued")
+  end
 
-      :missing_repo ->
-        Logger.warning("github webhook payload missing repository.full_name")
-        send_resp(conn, :bad_request, "missing repository")
+  defp respond(conn, {:ignored, apps, ref}) do
+    branches = apps |> Enum.map(& &1.branch) |> Enum.uniq() |> Enum.join(", ")
 
-      {:ignore, app, {:wrong_branch, ref}} ->
-        Logger.info(
-          "github webhook ignored app=#{app.slug} ref=#{ref} expected_branch=#{app.branch}"
-        )
+    Logger.info("github webhook ignored ref=#{ref} instances_deploy=#{branches}")
 
-        send_resp(
-          conn,
-          :ok,
-          "ignored: push to #{ref}, app #{app.slug} auto-deploys #{app.branch}"
-        )
+    send_resp(conn, :ok, "ignored: push to #{ref}, instances deploy #{branches}")
+  end
 
-      {:ignore, app, reason} ->
-        Logger.info("github webhook ignored app=#{app.slug} reason=#{inspect(reason)}")
-        send_resp(conn, :ok, "ignored")
+  defp respond(conn, {:auto_deploy_off, apps}) do
+    Logger.info("github webhook auto_deploy disabled for #{length(apps)} instance(s)")
+    send_resp(conn, :ok, "auto deploy disabled")
+  end
 
-      :auto_deploy_off ->
-        Logger.info("github webhook auto_deploy disabled")
-        send_resp(conn, :ok, "auto deploy disabled")
+  defp respond(conn, {:enqueue_failed, failed}) do
+    Enum.each(failed, fn {app, reason} ->
+      Logger.error("github webhook enqueue failed app=#{app.slug}: #{inspect(reason)}")
+    end)
 
-      false ->
-        # legacy path if auto_deploy check returns false without atom
-        send_resp(conn, :ok, "auto deploy disabled")
+    send_resp(conn, :bad_request, "enqueue failed")
+  end
 
-      :error ->
-        Logger.warning("github webhook invalid signature")
-        send_resp(conn, :unauthorized, "invalid signature")
+  defp respond(conn, :not_found) do
+    Logger.warning("github webhook unknown repo")
+    send_resp(conn, :not_found, "unknown repo")
+  end
 
-      {:error, reason} ->
-        Logger.error("github webhook enqueue failed: #{inspect(reason)}")
-        send_resp(conn, :bad_request, "invalid payload")
+  defp respond(conn, :missing_repo) do
+    Logger.warning("github webhook payload missing repository.full_name")
+    send_resp(conn, :bad_request, "missing repository")
+  end
+
+  defp respond(conn, :error) do
+    Logger.warning("github webhook invalid signature")
+    send_resp(conn, :unauthorized, "invalid signature")
+  end
+
+  defp respond(conn, {:ignore, reason}) do
+    Logger.info("github webhook ignored push: #{inspect(reason)}")
+    send_resp(conn, :ok, "ignored")
+  end
+
+  defp respond(conn, {:error, reason}) do
+    Logger.error("github webhook invalid payload: #{inspect(reason)}")
+    send_resp(conn, :bad_request, "invalid payload")
+  end
+
+  # Every instance of the repository that deploys the pushed branch is queued, so
+  # a push to `staging` reaches the staging instance only.
+  defp handle_push(apps, ref, sha) do
+    attrs = %{git_sha: sha, git_ref: ref, triggered_by: "webhook"}
+
+    {queued, failed} =
+      apps
+      |> Enum.filter(&(&1.branch == ref and &1.auto_deploy))
+      |> Enum.reduce({[], []}, fn app, {queued, failed} ->
+        case Deployments.enqueue(app, attrs) do
+          {:ok, job} -> {[{app, job} | queued], failed}
+          {:error, reason} -> {queued, [{app, reason} | failed]}
+        end
+      end)
+
+    cond do
+      queued != [] -> {:queued, Enum.reverse(queued)}
+      failed != [] -> {:enqueue_failed, Enum.reverse(failed)}
+      Enum.any?(apps, &(&1.branch == ref)) -> {:auto_deploy_off, apps}
+      true -> {:ignored, apps, ref}
     end
   end
 
-  defp find_app_by_repo_and_signature(repo, raw_body, signature) do
+  # The push hook lives on the repository, not on the app, so any instance of
+  # that repo that validates the signature authenticates the payload.
+  defp find_repo_apps(repo, raw_body, signature) do
     apps = Apps.list_apps_by_repo(repo)
 
     cond do
@@ -79,12 +112,12 @@ defmodule CleatDeployWeb.GithubWebhookController do
         :error
 
       true ->
-        Enum.find_value(apps, :error, fn app ->
-          case Github.verify_signature(raw_body, signature, app.webhook_secret) do
-            :ok -> app
-            :error -> nil
-          end
-        end)
+        verified? =
+          Enum.any?(apps, fn app ->
+            Github.verify_signature(raw_body, signature, app.webhook_secret) == :ok
+          end)
+
+        if verified?, do: {:ok, apps}, else: :error
     end
   end
 
@@ -96,11 +129,4 @@ defmodule CleatDeployWeb.GithubWebhookController do
   end
 
   defp decode_payload(_), do: {:error, :empty_body}
-
-  defp normalize_push_attrs(payload, app) do
-    case Github.push_deploy_attrs(payload, app.branch) do
-      {:ok, attrs} -> {:ok, attrs}
-      {:ignore, reason} -> {:ignore, app, reason}
-    end
-  end
 end

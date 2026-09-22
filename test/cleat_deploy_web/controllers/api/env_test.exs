@@ -148,6 +148,106 @@ defmodule CleatDeployWeb.Api.EnvTest do
     assert json_response(conn, 404)["error"] == "not_found"
   end
 
+  test "PUT with a branch scopes the var", %{token: token, app: app} do
+    build_conn()
+    |> auth(token)
+    |> json_put(~p"/api/v1/apps/#{app.id}/env", %{
+      branch: "staging",
+      vars: %{"BASE_URL" => "https://staging.example.com"}
+    })
+    |> json_response(200)
+
+    build_conn()
+    |> auth(token)
+    |> json_put(~p"/api/v1/apps/#{app.id}/env", %{
+      vars: %{"BASE_URL" => "https://prod.example.com"}
+    })
+    |> json_response(200)
+
+    all = list_env(token, app)
+    assert Enum.map(all, & &1["branch"]) |> Enum.sort() == ["*", "staging"]
+
+    # ?branch= returns the effective set: all branches plus that branch
+    assert [
+             %{"key" => "BASE_URL", "branch" => "*", "value" => "https://prod.example.com"},
+             %{
+               "key" => "BASE_URL",
+               "branch" => "staging",
+               "value" => "https://staging.example.com"
+             }
+           ] = list_env(token, app, "staging")
+
+    assert [%{"key" => "BASE_URL", "branch" => "*", "value" => "https://prod.example.com"}] =
+             list_env(token, app, "main")
+  end
+
+  test "PUT accepts the all-branches spellings", %{token: token, app: app} do
+    build_conn()
+    |> auth(token)
+    |> json_put(~p"/api/v1/apps/#{app.id}/env", %{
+      branch: "all branches",
+      vars: %{"SHARED" => "1"}
+    })
+    |> json_response(200)
+
+    assert [%{"branch" => "*", "value" => "1"}] = list_env(token, app, "any-branch")
+  end
+
+  test "DELETE only removes the scope it was asked for", %{token: token, app: app} do
+    for {branch, value} <- [{nil, "prod"}, {"staging", "staging"}] do
+      body = %{vars: %{"BASE_URL" => value}}
+      body = if branch, do: Map.put(body, :branch, branch), else: body
+
+      build_conn()
+      |> auth(token)
+      |> json_put(~p"/api/v1/apps/#{app.id}/env", body)
+      |> json_response(200)
+    end
+
+    assert build_conn()
+           |> auth(token)
+           |> delete(~p"/api/v1/apps/#{app.id}/env/BASE_URL?branch=staging")
+           |> response(204) == ""
+
+    # the all-branches value is still there for the staging deploy
+    assert [%{"value" => "prod", "branch" => "*"}] = list_env(token, app, "staging")
+
+    assert build_conn()
+           |> auth(token)
+           |> delete(~p"/api/v1/apps/#{app.id}/env/BASE_URL")
+           |> response(204) == ""
+
+    assert list_env(token, app, "staging") == []
+
+    assert (build_conn()
+            |> auth(token)
+            |> delete(~p"/api/v1/apps/#{app.id}/env/BASE_URL?branch=staging")
+            |> json_response(404))["error"] == "not_found"
+  end
+
+  test "an invalid branch is rejected with 422", %{token: token, app: app} do
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_put(~p"/api/v1/apps/#{app.id}/env", %{
+        branch: "feat..broken",
+        vars: %{"BASE_URL" => "x"}
+      })
+
+    assert json_response(conn, 422)["error"] == "invalid_request"
+    assert list_env(token, app) == []
+  end
+
+  defp list_env(token, app, branch \\ nil) do
+    path = "/api/v1/apps/#{app.id}/env" <> if(branch, do: "?branch=#{branch}", else: "")
+
+    build_conn()
+    |> auth(token)
+    |> get(path)
+    |> json_response(200)
+    |> Map.fetch!("data")
+  end
+
   defp auth(conn, token), do: put_req_header(conn, "authorization", "Bearer #{token}")
 
   defp json_put(conn, path, body) do

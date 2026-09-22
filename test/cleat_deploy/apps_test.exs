@@ -309,6 +309,120 @@ defmodule CleatDeploy.AppsTest do
                "GEMINI_API_KEY" => "gemini-key"
              }
     end
+
+    test "with a branch, keeps the all-branches vars and overrides by key", %{
+      scope: scope,
+      server: server
+    } do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Purple Stock",
+          slug: "purple-stock",
+          github_repo: "puppe1990/purple-stock",
+          host: "purplestock.gestaobem.com",
+          server_id: server.id
+        })
+
+      {:ok, _} = Apps.put_env_var(app, "BASE_URL", "https://purplestock.com.br")
+      {:ok, _} = Apps.put_env_var(app, "GA_ID", "G-PROD")
+
+      {:ok, _} =
+        Apps.put_env_var(app, "BASE_URL", "https://staging.purplestock.com.br", "staging")
+
+      assert Apps.env_map(app, "main") == %{
+               "PHX_HOST" => "purplestock.gestaobem.com",
+               "BASE_URL" => "https://purplestock.com.br",
+               "GA_ID" => "G-PROD"
+             }
+
+      assert Apps.env_map(app, "staging") == %{
+               "PHX_HOST" => "purplestock.gestaobem.com",
+               "BASE_URL" => "https://staging.purplestock.com.br",
+               "GA_ID" => "G-PROD"
+             }
+
+      # Without a branch every scope is returned: the more specific one is the
+      # decisive value (branch order, so it is deterministic).
+      assert Apps.env_map(app)["BASE_URL"] == "https://staging.purplestock.com.br"
+    end
+  end
+
+  describe "delete_env_var/3" do
+    test "only deletes the scope it was asked for", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, app_attrs(server, %{slug: "scoped-#{System.unique_integer()}"}))
+
+      {:ok, _} = Apps.put_env_var(app, "BASE_URL", "https://prod.example.com")
+      {:ok, _} = Apps.put_env_var(app, "BASE_URL", "https://staging.example.com", "staging")
+
+      assert :ok = Apps.delete_env_var(app, "BASE_URL", "staging")
+      assert Apps.env_map(app, "staging")["BASE_URL"] == "https://prod.example.com"
+
+      assert :ok = Apps.delete_env_var(app, "BASE_URL")
+      refute Map.has_key?(Apps.env_map(app, "main"), "BASE_URL")
+
+      assert {:error, :not_found} = Apps.delete_env_var(app, "BASE_URL")
+    end
+  end
+
+  describe "instances" do
+    test "the same repo can be registered once per branch", %{scope: scope, server: server} do
+      repo = "puppe1990/purple-stock-#{System.unique_integer()}"
+
+      {:ok, app, _} =
+        Apps.create_app(scope, app_attrs(server, %{slug: "purplestock", github_repo: repo}))
+
+      {:ok, staging, _} =
+        Apps.create_app(
+          scope,
+          app_attrs(server, %{
+            slug: "purplestock-staging",
+            github_repo: repo,
+            branch: "staging",
+            host: "purplestock-staging.gestaobem.com"
+          })
+        )
+
+      assert staging.branch == "staging"
+      assert staging.github_repo == repo
+      assert staging.webhook_secret == app.webhook_secret
+
+      assert [%{slug: "purplestock-staging"}] = Apps.list_app_instances(scope, app)
+      assert [%{slug: "purplestock"}] = Apps.list_app_instances(scope, staging)
+      assert Apps.get_app_by_repo(repo).id == app.id
+    end
+
+    test "the same repo on the same branch is rejected", %{scope: scope, server: server} do
+      repo = "puppe1990/purple-stock-#{System.unique_integer()}"
+
+      {:ok, _app, _} =
+        Apps.create_app(scope, app_attrs(server, %{slug: "purplestock", github_repo: repo}))
+
+      assert {:error, changeset} =
+               Apps.create_app(
+                 scope,
+                 app_attrs(server, %{
+                   slug: "purplestock-again",
+                   github_repo: repo,
+                   host: "purplestock-again.gestaobem.com"
+                 })
+               )
+
+      assert %{github_repo: ["has already been taken"]} = errors_on(changeset)
+    end
+  end
+
+  defp app_attrs(server, overrides) do
+    Map.merge(
+      %{
+        name: "Purple Stock",
+        slug: "purplestock",
+        github_repo: "puppe1990/purple-stock",
+        host: "purplestock.gestaobem.com",
+        server_id: server.id
+      },
+      overrides
+    )
   end
 
   describe "update_app/3" do

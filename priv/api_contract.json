@@ -47,6 +47,7 @@
   "env_var": [
     "key",
     "value",
+    "branch",
     "sensitive",
     "revealed"
   ],

@@ -25,7 +25,7 @@ defmodule CleatDeployWeb.Api.Contract do
       id app_id git_sha git_ref status triggered_by started_at finished_at
       inserted_at updated_at log
     ),
-    "env_var" => ~w(key value sensitive revealed),
+    "env_var" => ~w(key value branch sensitive revealed),
     "user" => ~w(id email),
     "tenant" => ~w(id name slug),
     "me" => ~w(user tenant role),

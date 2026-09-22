@@ -44,8 +44,8 @@ defmodule CleatDeploy.Deploy.Ssh do
   end
 
   def run_deploy(deployment, app, server) do
-    config = CleatDeploy.Apps.App.deploy_config(app)
     branch = deployment.git_ref || app.branch
+    config = app |> CleatDeploy.Apps.App.deploy_config() |> Map.put(:branch, branch)
     sha = short_sha(deployment.git_sha)
 
     with :ok <- ensure_commands(["git", "ssh", "scp", "tar"]),
@@ -186,7 +186,7 @@ defmodule CleatDeploy.Deploy.Ssh do
            remote_build(remote_tar, key_path, target, server, app, config, sha, runtime, work_dir) do
       log =
         [
-          "==> Cloning #{app.github_repo} (branch #{app.branch})",
+          "==> Cloning #{app.github_repo} (branch #{config.branch})",
           target_note,
           "==> Uploading source to #{target}",
           trim(upload_out),
@@ -218,7 +218,7 @@ defmodule CleatDeploy.Deploy.Ssh do
   Publishes a git-less drop: uploads the stored artifact and serves its contents.
   """
   def run_drop(deployment, app, server) do
-    config = CleatDeploy.Apps.App.deploy_config(app)
+    config = app |> CleatDeploy.Apps.App.deploy_config() |> Map.put(:branch, app.branch)
     manifest = AppManifest.resolve(nil, app)
     artifact = deployment.artifact_path
 
@@ -305,10 +305,15 @@ defmodule CleatDeploy.Deploy.Ssh do
   def env_sync_enabled?(%{env_vars: vars}) when is_list(vars), do: vars != []
   def env_sync_enabled?(_), do: false
 
-  @doc false
-  def env_file_content(app) do
+  @doc """
+  Contents of the env file for a deploy.
+
+  Env vars are scoped to a branch: everything written for all branches plus the
+  variables of the branch being deployed.
+  """
+  def env_file_content(app, branch \\ nil) do
     app
-    |> Apps.env_map()
+    |> Apps.env_map(branch)
     |> format_env_file()
   end
 
@@ -322,7 +327,10 @@ defmodule CleatDeploy.Deploy.Ssh do
   @doc false
   def env_sync_script(app, config) do
     if env_sync_enabled?(app) do
-      content_b64 = app |> env_file_content() |> Base.encode64()
+      content_b64 =
+        app
+        |> env_file_content(config[:branch] || app.branch)
+        |> Base.encode64()
 
       """
       log "Syncing environment from panel"
