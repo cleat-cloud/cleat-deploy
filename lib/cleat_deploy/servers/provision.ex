@@ -67,6 +67,10 @@ defmodule CleatDeploy.Servers.Provision do
       - [ufw, allow, OpenSSH]
       - [ufw, allow, 80/tcp]
       - [ufw, allow, 443/tcp]
+      # Caddy serves HTTP/3 on UDP 443 and advertises it with `alt-svc`; a
+      # browser that takes the offer against a closed port fails the page with
+      # ERR_SSL_PROTOCOL_ERROR even though TCP works.
+      - [ufw, allow, 443/udp]
       - [ufw, --force, enable]
     """
   end
