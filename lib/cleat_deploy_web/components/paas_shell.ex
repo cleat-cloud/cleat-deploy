@@ -43,8 +43,8 @@ defmodule CleatDeployWeb.PaasShell do
             <span class="hidden rounded-md border border-hd-border bg-hd-card px-2.5 py-1.5 text-hd-muted sm:inline">
               {@current_scope.user.email}
             </span>
-            <.link href={~p"/users/settings"} class="paas-btn-secondary px-3 py-1.5">
-              Settings
+            <.link href={~p"/settings?tab=account"} class="paas-btn-secondary px-3 py-1.5">
+              Account
             </.link>
             <.link href={~p"/users/log-out"} method="delete" class="paas-btn-secondary px-3 py-1.5">
               Log out
@@ -93,6 +93,13 @@ defmodule CleatDeployWeb.PaasShell do
             label="App Details"
             count={@app_count}
           />
+          <.nav_link
+            id="nav-settings"
+            navigate={~p"/settings"}
+            active?={@active_tab == :settings}
+            icon="hero-cog-6-tooth"
+            label="Settings"
+          />
         </nav>
         <div
           id="app-sidebar-actions"
@@ -137,6 +144,14 @@ defmodule CleatDeployWeb.PaasShell do
               icon="hero-globe-alt"
               label="Apps"
               count={@app_count}
+              compact
+            />
+            <.nav_link
+              id="nav-settings-mobile"
+              navigate={~p"/settings"}
+              active?={@active_tab == :settings}
+              icon="hero-cog-6-tooth"
+              label="Settings"
               compact
             />
           </nav>

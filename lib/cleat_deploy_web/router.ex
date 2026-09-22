@@ -101,6 +101,17 @@ defmodule CleatDeployWeb.Router do
       live "/apps/new", AppLive.Index, :new
       live "/apps/:id", AppLive.Show, :show
       live "/apps/:app_id/deployments", AppLive.Deployments, :index
+      live "/settings", SettingsLive, :index
+    end
+  end
+
+  # Public landing page: what Cleat does, reachable without an account (the
+  # root sends anonymous visitors here instead of straight to the login form).
+  scope "/", CleatDeployWeb do
+    pipe_through :browser
+
+    live_session :public, on_mount: [{CleatDeployWeb.UserAuth, :mount_current_scope}] do
+      live "/features", FeaturesLive, :index
     end
   end
 
@@ -127,7 +138,6 @@ defmodule CleatDeployWeb.Router do
     pipe_through [:browser, :require_authenticated_user]
 
     get "/users/settings", UserSettingsController, :edit
-    put "/users/settings", UserSettingsController, :update
     get "/users/settings/confirm-email/:token", UserSettingsController, :confirm_email
   end
 

@@ -12,7 +12,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
   setup :register_and_log_in_user
 
   test "redirects when not logged in" do
-    assert {:error, {:redirect, %{to: "/users/log-in"}}} = live(build_conn(), ~p"/")
+    assert {:error, {:redirect, %{to: "/features"}}} = live(build_conn(), ~p"/")
   end
 
   test "renders dashboard when only remember-me cookie is present", %{user: user} do

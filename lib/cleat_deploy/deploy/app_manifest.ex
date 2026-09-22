@@ -2,8 +2,12 @@ defmodule CleatDeploy.Deploy.AppManifest do
   @moduledoc false
 
   alias CleatDeploy.Apps.App
+  alias CleatDeploy.Deploy.Addons
 
   @manifest_path ".cleat_deploy/deploy.json"
+  @process_name ~r/^[a-z][a-z0-9_-]*$/
+  # Declaring an addon without a profile picks its default one.
+  @addon_aliases %{"postgres" => "postgres:pgvector"}
 
   defstruct solo_server: false,
             caddyfile: nil,
@@ -20,6 +24,10 @@ defmodule CleatDeploy.Deploy.AppManifest do
             start_command: nil,
             node_version: nil,
             ruby_version: nil,
+            release_command: [],
+            release_timeout_s: 300,
+            processes: %{},
+            addons: [],
             domain_checklist?: false
 
   @type t :: %__MODULE__{
@@ -38,6 +46,10 @@ defmodule CleatDeploy.Deploy.AppManifest do
           start_command: String.t() | nil,
           node_version: String.t() | nil,
           ruby_version: String.t() | nil,
+          release_command: [String.t()],
+          release_timeout_s: integer(),
+          processes: %{String.t() => String.t()},
+          addons: [String.t()],
           domain_checklist?: boolean()
         }
 
@@ -118,10 +130,119 @@ defmodule CleatDeploy.Deploy.AppManifest do
   def custom_caddy?(%__MODULE__{caddy_mode: "replace"}), do: true
   def custom_caddy?(_), do: false
 
+  @doc "Commands to run after publishing the release and before the restart."
+  def release_commands(%__MODULE__{release_command: commands}) when is_list(commands),
+    do: commands
+
+  def release_commands(_manifest), do: []
+
+  @doc "Timeout for each release command, in seconds."
+  def release_timeout_s(%__MODULE__{release_timeout_s: seconds})
+      when is_integer(seconds) and seconds >= 30,
+      do: seconds
+
+  def release_timeout_s(_manifest), do: 300
+
+  @doc """
+  Extra systemd units of this app, as suffixes of the base unit.
+
+  Go apps derive them from `binaries` (the `server` binary owns the base unit);
+  node/rails with `processes` from the process names (`web` owns the base unit).
+  """
+  def extra_units(%__MODULE__{runtime: "golang", binaries: binaries}) when is_list(binaries),
+    do: Enum.reject(binaries, &(&1 == "server"))
+
+  def extra_units(%__MODULE__{processes: processes})
+      when is_map(processes) and map_size(processes) > 0 do
+    processes
+    |> Map.keys()
+    |> Enum.reject(&(&1 == "web"))
+    |> Enum.sort()
+  end
+
+  def extra_units(_manifest), do: []
+
+  @doc "Long-lived processes declared in deploy.json (empty for single-process apps)."
+  def processes(%__MODULE__{processes: processes}) when is_map(processes), do: processes
+  def processes(_manifest), do: %{}
+
+  @doc "Declared addons, canonical names, deduplicated."
+  def addons(%__MODULE__{addons: addons}) when is_list(addons) do
+    addons
+    |> Enum.map(&normalize_addon/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  def addons(_manifest), do: []
+
+  @doc "Canonical addon name (`postgres` → `postgres:pgvector`), nil when unknown."
+  def normalize_addon(name) when is_binary(name) do
+    candidate = name |> String.trim() |> String.downcase()
+    candidate = Map.get(@addon_aliases, candidate, candidate)
+
+    if candidate in Addons.known(), do: candidate
+  end
+
+  def normalize_addon(_name), do: nil
+
   @doc false
   def validate_for_server(%__MODULE__{} = manifest, server, apps_on_server, %App{} = app) do
-    validate_solo_server(manifest, server, apps_on_server, app)
+    with :ok <- validate_solo_server(manifest, server, apps_on_server, app),
+         :ok <- validate_processes(manifest),
+         :ok <- validate_addons(manifest) do
+      validate_release_timeout(manifest)
+    end
   end
+
+  # `processes` must name the HTTP one: it is the process that binds the app port
+  # and the one Caddy, the wake agent and the idle sweeper talk to.
+  defp validate_processes(%__MODULE__{processes: processes}) when map_size(processes) == 0,
+    do: :ok
+
+  defp validate_processes(%__MODULE__{processes: processes}) do
+    cond do
+      not Map.has_key?(processes, "web") ->
+        {:error,
+         "processes must declare a \"web\" process: it is the one that binds the app port (in .cleat_deploy/deploy.json)"}
+
+      name = Enum.find(Map.keys(processes), &(not Regex.match?(@process_name, &1))) ->
+        {:error,
+         "invalid process name #{inspect(name)} in .cleat_deploy/deploy.json (use lower-case letters, digits, - and _)"}
+
+      name = Enum.find(Map.keys(processes), &blank_command?(processes[&1])) ->
+        {:error, "process #{inspect(name)} has an empty command in .cleat_deploy/deploy.json"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_addons(%__MODULE__{addons: []}), do: :ok
+
+  defp validate_addons(%__MODULE__{addons: addons}) do
+    case Enum.find(addons, &(normalize_addon(&1) == nil)) do
+      nil ->
+        :ok
+
+      unknown ->
+        {:error,
+         "unknown addon #{inspect(unknown)} in .cleat_deploy/deploy.json (known: #{Enum.join(Addons.known(), ", ")})"}
+    end
+  end
+
+  defp validate_release_timeout(%__MODULE__{release_command: []}), do: :ok
+
+  defp validate_release_timeout(%__MODULE__{release_timeout_s: seconds})
+       when is_integer(seconds) and seconds >= 30,
+       do: :ok
+
+  defp validate_release_timeout(_manifest) do
+    {:error, "release_timeout_s must be at least 30 seconds in .cleat_deploy/deploy.json"}
+  end
+
+  defp blank_command?(command) when is_binary(command), do: String.trim(command) == ""
+  defp blank_command?(_command), do: true
 
   defp validate_solo_server(%__MODULE__{solo_server: false}, _server, _apps, _app), do: :ok
 
@@ -152,6 +273,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       memory_max_mb: 400,
       systemd_unit: nil,
       release_path: nil,
+      release_name: nil,
       build_dir: nil,
       runtime: "phoenix",
       binaries: ["server"],
@@ -159,6 +281,10 @@ defmodule CleatDeploy.Deploy.AppManifest do
       start_command: nil,
       node_version: nil,
       ruby_version: nil,
+      release_command: [],
+      release_timeout_s: 300,
+      processes: %{},
+      addons: [],
       domain_checklist?: false
     }
   end
@@ -237,11 +363,47 @@ defmodule CleatDeploy.Deploy.AppManifest do
       start_command: blank_to_nil(Map.get(map, "start_command")),
       node_version: blank_to_nil(Map.get(map, "node_version")),
       ruby_version: blank_to_nil(Map.get(map, "ruby_version")),
+      release_command: parse_release_command(Map.get(map, "release_command")),
+      release_timeout_s: parse_int(Map.get(map, "release_timeout_s")),
+      processes: parse_processes(Map.get(map, "processes")),
+      addons: parse_addons(Map.get(map, "addons")),
       domain_checklist?: Map.get(map, "caddy_mode") == "replace"
     }
     |> Enum.reject(fn {_k, v} -> v in [nil, []] end)
     |> Map.new()
   end
+
+  # deploy.json accepts a single command or a list; both normalize to a list.
+  defp parse_release_command(command) when is_binary(command),
+    do: parse_release_command([command])
+
+  defp parse_release_command(list) when is_list(list) do
+    list
+    |> Enum.filter(&is_binary/1)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp parse_release_command(_command), do: nil
+
+  defp parse_processes(map) when is_map(map) and map_size(map) > 0 do
+    map
+    |> Enum.filter(fn {name, command} ->
+      is_binary(name) and is_binary(command) and String.trim(command) != ""
+    end)
+    |> Map.new(fn {name, command} -> {String.trim(name), String.trim(command)} end)
+  end
+
+  defp parse_processes(_map), do: nil
+
+  defp parse_addons(list) when is_list(list) do
+    list
+    |> Enum.filter(&is_binary/1)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp parse_addons(_list), do: nil
 
   defp parse_runtime("golang"), do: "golang"
   defp parse_runtime("phoenix"), do: "phoenix"

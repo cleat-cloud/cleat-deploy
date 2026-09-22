@@ -28,6 +28,8 @@ config :cleat_deploy, :lightsail_client, CleatDeploy.AWS.Lightsail.Stub
 config :cleat_deploy, :hetzner_client, CleatDeploy.Hetzner.Stub
 config :cleat_deploy, :runtime_logs, CleatDeploy.Apps.RuntimeLogsSsh
 config :cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeLogsSsh
+config :cleat_deploy, :idle_shutdown_runner, CleatDeploy.Apps.IdleShutdownSsh
+config :cleat_deploy, :runtime_control_runner, CleatDeploy.Apps.RuntimeControlSsh
 
 config :cleat_deploy, :auto_deploy_health_on_boot, true
 
@@ -50,7 +52,8 @@ config :cleat_deploy, Oban,
     Oban.Plugins.Pruner,
     {Oban.Plugins.Cron,
      crontab: [
-       {"*/15 * * * *", CleatDeploy.Workers.AutoDeployHealthWorker}
+       {"*/15 * * * *", CleatDeploy.Workers.AutoDeployHealthWorker},
+       {"*/5 * * * *", CleatDeploy.Workers.IdleShutdownWorker}
      ]}
   ],
   shutdown_grace_period: :timer.minutes(15)

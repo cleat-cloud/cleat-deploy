@@ -4,5 +4,12 @@
 
 {$DEPLOY_HOST} {
 	encode gzip
-	reverse_proxy 127.0.0.1:4000
+	# Deploying the panel stops this upstream for a few seconds. Without retries
+	# Caddy answers 502 to anyone browsing at that moment; lb_try_duration holds
+	# the request until the new release is up (Caddy retries a failed dial even
+	# for POST/longpoll requests).
+	reverse_proxy 127.0.0.1:4000 {
+		lb_try_duration 15s
+		lb_try_interval 250ms
+	}
 }

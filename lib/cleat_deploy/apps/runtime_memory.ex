@@ -16,6 +16,21 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
 
   def for_app(%App{} = app), do: Map.get(for_apps([app]), app.id)
 
+  @doc """
+  Runs the probe in a background task and sends `{:app_memory, ref, result}` to
+  `pid`.
+
+  The probe SSHes into the server and can take seconds, so a LiveView must never
+  run it inline: doing that blocks every other event (buttons, filters) until the
+  SSH call returns.
+  """
+  def probe_async(pid, ref, subject) when is_pid(pid) do
+    Task.start(fn -> send(pid, {:app_memory, ref, probe(subject)}) end)
+  end
+
+  defp probe(%App{} = app), do: for_app(app)
+  defp probe(apps) when is_list(apps), do: for_apps(apps)
+
   def for_apps(apps) when is_list(apps) do
     apps
     |> Enum.filter(& &1.server)
@@ -49,6 +64,16 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
     do: format_bytes(bytes)
 
   def format_disk(_), do: "—"
+
+  @doc """
+  Live systemd state of the app's unit(s).
+
+  `Stopped` is how a slept app shows up (the sweeper stops the unit); a crashed
+  one is usually restarting instead of stopped.
+  """
+  def format_status(%{active?: true}), do: "Active"
+  def format_status(%{active?: false}), do: "Stopped"
+  def format_status(_), do: "—"
 
   def format_bytes(bytes) when is_integer(bytes) and bytes < 1024, do: "#{bytes} B"
 
@@ -110,18 +135,9 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
     )
   end
 
-  defp units(%App{} = app) do
-    unit = unit_name(app)
-
-    case app.runtime do
-      "golang" -> [unit, "#{unit}-worker"]
-      _ -> [unit]
-    end
-  end
-
-  defp unit_name(%App{} = app) do
-    app.systemd_unit || App.default_systemd_unit(app.slug, app.runtime || "phoenix")
-  end
+  # The base unit (HTTP process) plus one per extra process; `combine/2` reads
+  # liveness from the base unit only.
+  defp units(%App{} = app), do: App.unit_names(app)
 
   defp disk_paths(%App{} = app) do
     release = app.release_path || App.default_release_path(app.slug, app.runtime || "phoenix")
@@ -310,8 +326,18 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
         peak_bytes: if(peaks == [], do: nil, else: Enum.sum(peaks)),
         cpu_pct: if(cpu == [], do: nil, else: Float.round(Enum.sum(cpu), 1)),
         disk_bytes: if(disk == [], do: nil, else: Enum.sum(disk)),
-        active?: Enum.any?(parts, & &1.active?)
+        active?: main_unit_active?(app, parsed)
       }
+    end
+  end
+
+  # Whether the unit the panel starts and stops is running. A Go app keeps its
+  # `-worker` unit alive while hibernating, so "any unit active" would report a
+  # sleeping app as On and never offer the Wake up button.
+  defp main_unit_active?(%App{} = app, parsed) do
+    case app |> units() |> List.first() |> then(&Map.get(parsed.by_unit, &1)) do
+      %{active?: active?} -> active?
+      _ -> false
     end
   end
 

@@ -36,6 +36,100 @@ defmodule CleatDeployWeb.PaasComponents do
   defp language_badge_classes("rails"), do: "border-hd-red/40 bg-hd-red/10 text-hd-red"
   defp language_badge_classes(_runtime), do: "border-hd-orange/40 bg-hd-orange/10 text-hd-orange"
 
+  @doc """
+  Whether the app opted into idle shutdown (auto sleep).
+
+  The flag alone does not hibernate anything: the app also has to be deployed
+  after it was turned on, which is what arms the wake agent.
+  """
+  attr :app, App, required: true
+
+  def idle_badge(assigns) do
+    assigns =
+      assign(assigns,
+        idle_label: if(assigns.app.idle_shutdown_enabled, do: "On", else: "Off"),
+        idle_hint:
+          if(assigns.app.idle_shutdown_enabled,
+            do: "Auto sleep on — stops after the platform idle window, wakes on the next request",
+            else: "Auto sleep off — this app never hibernates on its own"
+          )
+      )
+
+    ~H"""
+    <span
+      id={"app-#{@app.id}-idle"}
+      title={@idle_hint}
+      class={[
+        "inline-flex items-center gap-1 rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
+        @app.idle_shutdown_enabled && "border-hd-green/40 bg-hd-green/10 text-hd-green",
+        !@app.idle_shutdown_enabled && "border-hd-border bg-hd-aside text-hd-muted"
+      ]}
+    >
+      <.icon :if={@app.idle_shutdown_enabled} name="hero-moon" class="size-3" />
+      {@idle_label}
+    </span>
+    """
+  end
+
+  attr :app, App, required: true
+  attr :memory, :any, default: nil
+
+  @doc """
+  Whether the app's unit is running (`On`) or stopped (`Off`).
+
+  Comes from the same systemd probe that feeds the RAM/CPU columns. Static
+  sites have no unit to probe, and a probe that has not answered yet reads as
+  `—`.
+  """
+  def status_cell(assigns) do
+    assigns = assign(assigns, state: status_state(assigns.app, assigns.memory))
+
+    ~H"""
+    <span
+      id={"app-#{@app.id}-state"}
+      title={@state.hint}
+      class={[
+        "inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide",
+        @state.class
+      ]}
+    >
+      <span class={["size-1.5 rounded-full", @state.dot]} />
+      {@state.label}
+    </span>
+    """
+  end
+
+  defp status_state(%App{runtime: "static"}, _memory) do
+    %{
+      label: "Static",
+      hint: "Static site: served by Caddy, there is no process to stop",
+      class: "text-hd-muted",
+      dot: "bg-hd-muted/50"
+    }
+  end
+
+  defp status_state(_app, %{active?: true}) do
+    %{label: "On", hint: "Unit is running", class: "text-hd-green", dot: "bg-hd-green"}
+  end
+
+  defp status_state(_app, %{active?: false}) do
+    %{
+      label: "Off",
+      hint: "Unit is stopped (auto sleep or hibernate) — the next request wakes it",
+      class: "text-hd-blue",
+      dot: "bg-hd-blue"
+    }
+  end
+
+  defp status_state(_app, _memory) do
+    %{
+      label: "—",
+      hint: "Reading systemd state",
+      class: "text-hd-muted/60",
+      dot: "bg-hd-muted/30"
+    }
+  end
+
   attr :app, App, required: true
   attr :memory, :any, default: nil
 

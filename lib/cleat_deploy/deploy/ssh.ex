@@ -58,6 +58,8 @@ defmodule CleatDeploy.Deploy.Ssh do
         with {:ok, work_dir} <- clone_repo(app.github_repo, branch) do
           try do
             with :ok <- validate_manifest_for_server(work_dir, app, server),
+                 :ok <- record_manifest(app, work_dir),
+                 config <- config_with_addons(app, config, work_dir),
                  {:ok, tarball} <- create_tarball(work_dir) do
               try do
                 upload_and_build(tarball, key_path, server, app, config, sha, work_dir)
@@ -73,6 +75,31 @@ defmodule CleatDeploy.Deploy.Ssh do
         File.rm(key_path)
       end
     end
+  end
+
+  # The panel has no repo of its own, so the deploy is the only moment where the
+  # manifest is known: remember which extra units and addons it declared.
+  defp record_manifest(%App{} = app, work_dir) do
+    manifest = AppManifest.resolve(work_dir, app)
+
+    _ =
+      CleatDeploy.Apps.record_deploy_manifest(app, %{
+        units: AppManifest.extra_units(manifest),
+        addons: AppManifest.addons(manifest),
+        wake: CleatDeploy.Deploy.Wake.enabled?(app, manifest)
+      })
+
+    :ok
+  end
+
+  # Addons (managed Postgres/Redis) need their credentials before the env file is
+  # built, so they are resolved here and threaded through the runtime config for
+  # the provision script.
+  defp config_with_addons(%App{} = app, config, work_dir) do
+    manifest = AppManifest.resolve(work_dir, app)
+    {addons, credentials} = CleatDeploy.Deploy.Addons.ensure(app, manifest)
+
+    Map.merge(config, %{addons: addons, addon_credentials: credentials})
   end
 
   defp target_log(stored_ip, host_ip, app_host) when stored_ip == host_ip do
@@ -444,8 +471,10 @@ defmodule CleatDeploy.Deploy.Ssh do
     #{ServerProvision.prune_releases_script(config.release_path)}
 
     #{ServerProvision.provision_script(app, config, manifest)}
+    #{CleatDeploy.Deploy.Addons.provision_script(app, config, manifest)}
     #{env_sync_script(app, config)}
-    #{ServerProvision.migrate_script(config)}
+    #{migrate_script(app, config, manifest)}
+    #{ServerProvision.release_command_script(app, config, manifest)}
 
     log "Restarting #{config.systemd_unit}"
     sudo systemctl restart #{config.systemd_unit}
@@ -460,6 +489,16 @@ defmodule CleatDeploy.Deploy.Ssh do
 
     #{ServerProvision.reload_caddy_script()}
     """
+  end
+
+  # A release_command takes over the migration slot: it is the app's own
+  # post-publish step, so the built-in Ecto migrate must not run as well.
+  defp migrate_script(_app, config, %AppManifest{} = manifest) do
+    if AppManifest.release_commands(manifest) == [] do
+      ServerProvision.migrate_script(config)
+    else
+      ""
+    end
   end
 
   defp mix_project_cd(%AppManifest{build_dir: dir}) when is_binary(dir) and dir != "" do

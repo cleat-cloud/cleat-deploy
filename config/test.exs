@@ -51,6 +51,9 @@ config :cleat_deploy, :lightsail_client, CleatDeploy.AWS.LightsailMock
 config :cleat_deploy, :hetzner_client, CleatDeploy.HetznerMock
 config :cleat_deploy, :runtime_logs, CleatDeploy.Apps.RuntimeLogsMock
 config :cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeMemoryStub
+config :cleat_deploy, :addons, CleatDeploy.Deploy.AddonsStub
+config :cleat_deploy, :idle_shutdown_runner, CleatDeploy.Apps.IdleShutdownMock
+config :cleat_deploy, :runtime_control_runner, CleatDeploy.Apps.RuntimeControlMock
 
 config :cleat_deploy, CleatDeploy.Vault,
   ciphers: [

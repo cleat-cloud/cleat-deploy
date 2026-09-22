@@ -420,4 +420,59 @@ defmodule CleatDeploy.AppsTest do
                Apps.delete_app(TenancyFixtures.scope_fixture(), app)
     end
   end
+
+  describe "deploy manifest summary" do
+    test "records the extra units and addons the deploy resolved", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{slug: "chatwoot"})
+
+      assert App.extra_units(app) == []
+      assert App.deploy_addons(app) == []
+
+      {:ok, app} =
+        Apps.record_deploy_manifest(app, %{
+          units: ["worker", "scheduler"],
+          addons: ["postgres:pgvector", "redis"]
+        })
+
+      assert App.extra_units(app) == ["worker", "scheduler"]
+      assert App.deploy_addons(app) == ["postgres:pgvector", "redis"]
+
+      assert App.unit_names(app) == [
+               "phx-chatwoot",
+               "phx-chatwoot-worker",
+               "phx-chatwoot-scheduler"
+             ]
+
+      # Reloaded from the database, not just the in-memory struct.
+      reloaded = Apps.get_app!(scope, app.id)
+      assert App.extra_units(reloaded) == ["worker", "scheduler"]
+      assert App.unit_names(reloaded) == App.unit_names(app)
+    end
+
+    test "go apps deployed before the manifest was recorded still expose -worker", %{
+      scope: scope,
+      server: server
+    } do
+      app = TenancyFixtures.app_fixture(scope, server, %{slug: "atelie", runtime: "golang"})
+
+      assert App.extra_units(app) == ["worker"]
+      assert App.unit_names(app) == ["atelie", "atelie-worker"]
+    end
+
+    test "records whether the deploy armed wake-on-request", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{slug: "chatwoot"})
+
+      # Nothing is armed before the first deploy records a manifest.
+      refute App.wake_armed?(app)
+
+      {:ok, app} = Apps.record_deploy_manifest(app, %{units: ["worker"], wake: true})
+      assert App.wake_armed?(app)
+
+      # A later deploy that does not arm it overwrites the summary.
+      {:ok, app} = Apps.record_deploy_manifest(app, %{units: ["worker"], wake: false})
+
+      refute App.wake_armed?(app)
+      refute App.wake_armed?(Apps.get_app!(scope, app.id))
+    end
+  end
 end

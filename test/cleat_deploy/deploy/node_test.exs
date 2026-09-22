@@ -58,7 +58,7 @@ defmodule CleatDeploy.Deploy.NodeTest do
     # `exec cmd` with no wrapper made a crashing app look like a clean exit
     refute script =~ "exec bash -c"
     # the launcher logs the command and the exit status, then propagates it
-    assert script =~ "starting:"
+    assert script =~ "==> starting"
     assert script =~ "exited with status"
     assert script =~ ~s|exit "$code"|
   end
@@ -172,5 +172,35 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "pnpm build"
     assert script =~ "START_CMD='pnpm start'"
     assert script =~ ~s|NODE_MAJOR="20"|
+  end
+
+  test "release command runs after the env sync and before the restart" do
+    app = %App{
+      name: "Web",
+      slug: "web",
+      host: "web.example.com",
+      runtime: "node",
+      port: 3000,
+      release_path: "/opt/web",
+      systemd_unit: "node-web"
+    }
+
+    config = App.deploy_config(app)
+
+    manifest = %AppManifest{runtime: "node", release_command: ["npm run db:migrate"]}
+
+    script = Node.remote_build_script(nil, app, config, "abc", "/tmp/src.tar.gz", manifest)
+
+    assert script =~ "Running release command (1/1)"
+    assert script =~ "export NODE_ENV=production"
+    assert script =~ "timeout 300 bash /tmp/cleat_release_cmd.sh"
+
+    assert occurrence(script, "Running release command") <
+             occurrence(script, "Restarting node-web")
+  end
+
+  defp occurrence(script, snippet) do
+    {position, _length} = :binary.match(script, snippet)
+    position
   end
 end

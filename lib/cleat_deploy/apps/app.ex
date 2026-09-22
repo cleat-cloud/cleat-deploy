@@ -18,6 +18,8 @@ defmodule CleatDeploy.Apps.App do
     field :release_path, :string
     field :webhook_secret, :string
     field :auto_deploy, :boolean, default: true
+    field :idle_shutdown_enabled, :boolean, default: false
+    field :deploy_manifest, :map, default: %{}
     field :runtime, :string, default: "phoenix"
     field :runtime_apt_packages, {:array, :string}, default: []
     field :runtime_packages_text, :string, virtual: true
@@ -42,6 +44,7 @@ defmodule CleatDeploy.Apps.App do
       :release_path,
       :webhook_secret,
       :auto_deploy,
+      :idle_shutdown_enabled,
       :runtime,
       :runtime_apt_packages,
       :runtime_packages_text,
@@ -82,7 +85,9 @@ defmodule CleatDeploy.Apps.App do
   """
   def deploy_settings_changeset(app, attrs) do
     app
-    |> cast(attrs, [:branch, :auto_deploy, :host, :port, :github_repo, :runtime],
+    |> cast(
+      attrs,
+      [:branch, :auto_deploy, :idle_shutdown_enabled, :host, :port, :github_repo, :runtime],
       empty_values: []
     )
     |> update_change(:host, &normalize_host/1)
@@ -160,6 +165,81 @@ defmodule CleatDeploy.Apps.App do
       env_file: "/etc/#{basename}/env"
     }
   end
+
+  @doc """
+  systemd unit this app runs under, derived from the slug when the column is
+  blank.
+  """
+  def unit_name(%__MODULE__{systemd_unit: unit}) when is_binary(unit) and unit != "", do: unit
+
+  def unit_name(%__MODULE__{} = app) do
+    default_systemd_unit(app.slug, app.runtime || "phoenix")
+  end
+
+  @doc """
+  Every systemd unit of this app: the base one (the HTTP process) plus one per
+  extra process recorded by the last deploy (`<unit>-<process>`).
+  """
+  def unit_names(%__MODULE__{} = app) do
+    base = unit_name(app)
+
+    case base do
+      nil -> []
+      base -> [base | Enum.map(extra_units(app), &"#{base}-#{&1}")]
+    end
+  end
+
+  @doc """
+  Extra process suffixes of this app, as recorded by the last deploy.
+
+  Go apps deployed before the manifest was recorded fall back to the `-worker`
+  convention of the Go runtime.
+  """
+  def extra_units(%__MODULE__{deploy_manifest: manifest} = app) when is_map(manifest) do
+    case Map.get(manifest, "units") do
+      [_ | _] = units -> Enum.filter(units, &is_binary/1)
+      _ -> legacy_extra_units(app)
+    end
+  end
+
+  def extra_units(%__MODULE__{} = app), do: legacy_extra_units(app)
+
+  defp legacy_extra_units(%__MODULE__{runtime: "golang"}), do: ["worker"]
+  defp legacy_extra_units(%__MODULE__{}), do: []
+
+  @doc """
+  Changeset for the manifest summary the deploy runner records: which extra
+  units exist and which addons are declared.
+  """
+  def deploy_manifest_changeset(%__MODULE__{} = app, summary) when is_map(summary) do
+    manifest = %{
+      "units" => summary |> Map.get(:units, []) |> Enum.filter(&is_binary/1),
+      "addons" => summary |> Map.get(:addons, []) |> Enum.filter(&is_binary/1),
+      "wake" => summary[:wake] == true
+    }
+
+    change(app, deploy_manifest: manifest)
+  end
+
+  @doc """
+  Whether the last deploy armed wake-on-request for this app.
+
+  A deploy only arms it when the app has the flag on, is not a static site and
+  does not bring its own Caddyfile, so the flag alone says nothing about how a
+  hibernated app comes back.
+  """
+  def wake_armed?(%__MODULE__{deploy_manifest: manifest}) when is_map(manifest) do
+    Map.get(manifest, "wake") == true
+  end
+
+  def wake_armed?(%__MODULE__{}), do: false
+
+  @doc "Addons declared by the last deploy (canonical names)."
+  def deploy_addons(%__MODULE__{deploy_manifest: manifest}) when is_map(manifest) do
+    manifest |> Map.get("addons", []) |> Enum.filter(&is_binary/1)
+  end
+
+  def deploy_addons(%__MODULE__{}), do: []
 
   @doc """
   Persistent directory for runtime data (e.g. an embedded SQLite database).

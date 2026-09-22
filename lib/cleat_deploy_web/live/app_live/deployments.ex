@@ -1,8 +1,8 @@
 defmodule CleatDeployWeb.AppLive.Deployments do
   use CleatDeployWeb, :live_view
 
-  alias CleatDeploy.{Apps, Deployments}
-  alias CleatDeploy.Apps.RuntimeMemory
+  alias CleatDeploy.{Apps, Deployments, Settings}
+  alias CleatDeploy.Apps.{RuntimeControl, RuntimeMemory}
   alias CleatDeploy.Deploy.RuntimePackages
   alias CleatDeployWeb.AppLive.Layout
 
@@ -12,6 +12,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
   def mount(%{"app_id" => app_id}, _session, socket) do
     scope = socket.assigns.current_scope
     app = Apps.get_app!(scope, app_id)
+    setting = Settings.get_setting(scope)
 
     socket =
       socket
@@ -22,8 +23,13 @@ defmodule CleatDeployWeb.AppLive.Deployments do
       |> assign(:apps, Apps.list_app_choices(scope))
       |> assign(:selected_deployment_id, nil)
       |> assign(:confirming_cancel?, false)
+      |> assign(:confirming_hibernate?, false)
+      |> assign(:confirming_idle_sleep?, false)
+      |> assign(:idle_shutdown_global?, setting.idle_shutdown_enabled)
+      |> assign(:idle_shutdown_minutes, setting.idle_shutdown_minutes)
       |> assign(:history_page, 1)
       |> assign(:app_memory, nil)
+      |> assign(:memory_ref, nil)
       |> assign(:detail_tabs, Layout.detail_tabs(app.slug == "catalogo", runtime_packages(app)))
       |> refresh_deployments(nil, nil)
       |> schedule_poll()
@@ -85,6 +91,76 @@ defmodule CleatDeployWeb.AppLive.Deployments do
     end
   end
 
+  def handle_event("toggle_idle_shutdown", _params, socket) do
+    target = not socket.assigns.app.idle_shutdown_enabled
+
+    case Apps.update_app_settings(socket.assigns.current_scope, socket.assigns.app, %{
+           "idle_shutdown_enabled" => target
+         }) do
+      {:ok, app} ->
+        app = Apps.get_app!(socket.assigns.current_scope, app.id)
+
+        {:noreply,
+         socket
+         |> assign(:app, app)
+         |> assign(:confirming_idle_sleep?, false)
+         |> put_flash(:info, idle_shutdown_flash(app))}
+
+      {:error, _changeset} ->
+        {:noreply,
+         socket
+         |> assign(:confirming_idle_sleep?, false)
+         |> put_flash(:error, "Could not update auto sleep")}
+    end
+  end
+
+  def handle_event("open_idle_sleep", _params, socket) do
+    {:noreply, assign(socket, :confirming_idle_sleep?, true)}
+  end
+
+  def handle_event("close_idle_sleep", _params, socket) do
+    {:noreply, assign(socket, :confirming_idle_sleep?, false)}
+  end
+
+  def handle_event("open_hibernate", _params, socket) do
+    {:noreply, assign(socket, :confirming_hibernate?, true)}
+  end
+
+  def handle_event("close_hibernate", _params, socket) do
+    {:noreply, assign(socket, :confirming_hibernate?, false)}
+  end
+
+  def handle_event("hibernate_app", _params, socket) do
+    socket = assign(socket, :confirming_hibernate?, false)
+
+    case RuntimeControl.hibernate(socket.assigns.app) do
+      :ok ->
+        {:noreply,
+         socket
+         |> put_flash(
+           :info,
+           "#{socket.assigns.app.name} hibernated — no CPU or RAM until it wakes"
+         )
+         |> refresh_runtime()}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Could not hibernate: #{reason}")}
+    end
+  end
+
+  def handle_event("wake_app", _params, socket) do
+    case RuntimeControl.wake(socket.assigns.app) do
+      :ok ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{socket.assigns.app.name} is starting")
+         |> refresh_runtime()}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Could not wake: #{reason}")}
+    end
+  end
+
   def handle_event("select_app", %{"app_id" => app_id}, socket) do
     {:noreply, push_navigate(socket, to: ~p"/apps/#{app_id}/deployments")}
   end
@@ -107,7 +183,18 @@ defmodule CleatDeployWeb.AppLive.Deployments do
 
   @impl true
   def handle_info(:load_app_memory, socket) do
-    {:noreply, assign(socket, :app_memory, RuntimeMemory.for_app(socket.assigns.app))}
+    ref = make_ref()
+    {:ok, _pid} = RuntimeMemory.probe_async(self(), ref, socket.assigns.app)
+
+    {:noreply, assign(socket, :memory_ref, ref)}
+  end
+
+  def handle_info({:app_memory, ref, memory}, socket) do
+    if ref == socket.assigns.memory_ref do
+      {:noreply, assign(socket, :app_memory, memory)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info(:poll_deployments, socket) do
@@ -137,6 +224,11 @@ defmodule CleatDeployWeb.AppLive.Deployments do
           app={@app}
           deploying?={@deploying?}
           confirming_cancel?={@confirming_cancel?}
+          confirming_hibernate?={@confirming_hibernate?}
+          confirming_idle_sleep?={@confirming_idle_sleep?}
+          global_enabled?={@idle_shutdown_global?}
+          minutes={@idle_shutdown_minutes}
+          memory={@app_memory}
         />
         <Layout.shell_info_tiles app={@app} memory={@app_memory} />
 
@@ -270,6 +362,17 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                 </span>
                 <div class="flex items-center gap-2">
                   <button
+                    id="deployments-page-first"
+                    type="button"
+                    phx-click="paginate"
+                    phx-value-page={1}
+                    disabled={@history_page <= 1}
+                    title="First page"
+                    class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <.icon name="hero-chevron-double-left" class="size-3.5" />
+                  </button>
+                  <button
                     id="deployments-page-prev"
                     type="button"
                     phx-click="paginate"
@@ -292,6 +395,17 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                   >
                     Next <.icon name="hero-chevron-right" class="size-3.5" />
                   </button>
+                  <button
+                    id="deployments-page-last"
+                    type="button"
+                    phx-click="paginate"
+                    phx-value-page={@history_total_pages}
+                    disabled={@history_page >= @history_total_pages}
+                    title="Last page"
+                    class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <.icon name="hero-chevron-double-right" class="size-3.5" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -310,6 +424,18 @@ defmodule CleatDeployWeb.AppLive.Deployments do
     |> refresh_deployments(selected_id, deploying?)
     |> schedule_poll()
   end
+
+  # Re-reads the systemd state so the status tile and the hibernate button
+  # reflect what just happened.
+  defp refresh_runtime(socket) do
+    send(self(), :load_app_memory)
+    socket
+  end
+
+  defp idle_shutdown_flash(%{idle_shutdown_enabled: true}),
+    do: "Auto sleep on — deploy this app to arm it on the server"
+
+  defp idle_shutdown_flash(_app), do: "Auto sleep off"
 
   defp refresh_deployments(socket, selected_id, deploying?) do
     scope = socket.assigns.current_scope

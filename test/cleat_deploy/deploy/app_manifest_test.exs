@@ -180,6 +180,85 @@ defmodule CleatDeploy.Deploy.AppManifestTest do
     assert AppManifest.resolve(repo_path, app).runtime == "node"
   end
 
+  test "resolve reads the release phase, processes and addons", %{app: app, repo_path: repo_path} do
+    File.write!(
+      Path.join(repo_path, ".cleat_deploy/deploy.json"),
+      ~s({
+        "runtime": "rails",
+        "release_command": ["bundle exec rails db:chatwoot_prepare", "bundle exec rails runner 'puts 1'"],
+        "release_timeout_s": "900",
+        "processes": {"web": "bundle exec rails server", "worker": "bundle exec sidekiq"},
+        "addons": ["postgres:pgvector", "redis"]
+      })
+    )
+
+    manifest = AppManifest.resolve(repo_path, app)
+
+    assert AppManifest.release_commands(manifest) == [
+             "bundle exec rails db:chatwoot_prepare",
+             "bundle exec rails runner 'puts 1'"
+           ]
+
+    assert AppManifest.release_timeout_s(manifest) == 900
+    assert AppManifest.processes(manifest)["web"] == "bundle exec rails server"
+    assert AppManifest.extra_units(manifest) == ["worker"]
+    assert AppManifest.addons(manifest) == ["postgres:pgvector", "redis"]
+  end
+
+  test "a single release command string and the postgres alias are normalized", %{
+    app: app,
+    repo_path: repo_path
+  } do
+    File.write!(
+      Path.join(repo_path, ".cleat_deploy/deploy.json"),
+      ~s({"runtime": "node", "release_command": "npm run db:migrate", "addons": ["Postgres"]})
+    )
+
+    manifest = AppManifest.resolve(repo_path, app)
+
+    assert AppManifest.release_commands(manifest) == ["npm run db:migrate"]
+    assert AppManifest.release_timeout_s(manifest) == 300
+    assert AppManifest.addons(manifest) == ["postgres:pgvector"]
+    assert AppManifest.extra_units(manifest) == []
+    assert AppManifest.processes(manifest) == %{}
+  end
+
+  test "validation accepts a well-formed manifest", %{app: app, server: server} do
+    manifest = %AppManifest{
+      processes: %{"web" => "bundle exec rails s", "worker" => "bundle exec sidekiq"},
+      release_command: ["bundle exec rails db:chatwoot_prepare"],
+      release_timeout_s: 600,
+      addons: ["postgres:pgvector", "redis"]
+    }
+
+    assert :ok = AppManifest.validate_for_server(manifest, server, [], app)
+  end
+
+  test "validation rejects bad processes, unknown addons and a short timeout", %{
+    app: app,
+    server: server
+  } do
+    missing_web = %AppManifest{processes: %{"worker" => "bundle exec sidekiq"}}
+    assert {:error, message} = AppManifest.validate_for_server(missing_web, server, [], app)
+    assert message =~ ~s(declare a "web" process)
+
+    bad_name = %AppManifest{processes: %{"web" => "bundle exec rails s", "Worker" => "x"}}
+    assert {:error, message} = AppManifest.validate_for_server(bad_name, server, [], app)
+    assert message =~ "invalid process name"
+
+    empty_command = %AppManifest{processes: %{"web" => "bundle exec rails s", "worker" => "  "}}
+    assert {:error, message} = AppManifest.validate_for_server(empty_command, server, [], app)
+    assert message =~ "empty command"
+
+    unknown_addon = %AppManifest{addons: ["mongo"]}
+    assert {:error, message} = AppManifest.validate_for_server(unknown_addon, server, [], app)
+    assert message =~ "unknown addon"
+
+    short_timeout = %AppManifest{release_command: ["echo 1"], release_timeout_s: 10}
+    assert {:error, message} = AppManifest.validate_for_server(short_timeout, server, [], app)
+    assert message =~ "release_timeout_s"
+  end
+
   defp tmp_repo(files) do
     path = Path.join(System.tmp_dir!(), "manifest_detect_#{:erlang.unique_integer([:positive])}")
     File.mkdir_p!(path)

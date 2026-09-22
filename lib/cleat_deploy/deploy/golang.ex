@@ -104,7 +104,9 @@ defmodule CleatDeploy.Deploy.Golang do
     #{ServerProvision.prune_releases_script(config.release_path)}
 
     #{ServerProvision.provision_script(app, config, manifest)}
+    #{CleatDeploy.Deploy.Addons.provision_script(app, config, manifest)}
     #{CleatDeploy.Deploy.Ssh.env_sync_script(app, config)}
+    #{ServerProvision.release_command_script(app, config, manifest)}
 
     #{restart_cmds}
     #{ServerProvision.reload_caddy_script()}

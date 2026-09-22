@@ -74,4 +74,28 @@ defmodule CleatDeploy.Deploy.GolangTest do
     assert script =~ "systemctl restart atelie-worker"
     refute script =~ "mix release"
   end
+
+  test "release command runs after publishing and before the units restart", %{
+    app: app,
+    config: config,
+    server: server
+  } do
+    manifest = %{
+      AppManifest.resolve(nil, app)
+      | runtime: "golang",
+        binaries: ["server", "worker"],
+        release_command: ["/opt/atelie/current/bin/server migrate"]
+    }
+
+    script =
+      Golang.remote_build_script(server, app, config, "abc1234", "/tmp/src.tar.gz", manifest)
+
+    assert script =~ "Running release command (1/1)"
+    assert occurrence(script, "Running release command") < occurrence(script, "Restarting atelie")
+  end
+
+  defp occurrence(script, snippet) do
+    {position, _length} = :binary.match(script, snippet)
+    position
+  end
 end
