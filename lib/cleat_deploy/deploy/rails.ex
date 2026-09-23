@@ -127,7 +127,7 @@ defmodule CleatDeploy.Deploy.Rails do
     sudo apt-get update
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \\
       libssl-dev libyaml-dev libreadline-dev zlib1g-dev libncurses-dev \\
-      libffi-dev libgdbm-dev libgmp-dev libpq-dev libsqlite3-dev
+      libffi-dev libgdbm-dev libgmp-dev libpq-dev libsqlite3-dev pkg-config
     mise install "ruby@${RUBY_VERSION}"
     mise use -g "ruby@${RUBY_VERSION}"
 
