@@ -165,16 +165,36 @@ defmodule CleatDeploy.Deployments do
   end
 
   def daily_status_counts(%Scope{tenant: tenant}, days) when is_integer(days) and days > 0 do
+    daily_status_counts_query(tenant.id, days, nil)
+  end
+
+  def daily_status_counts(%Scope{}, days, nil) when is_integer(days) and days > 0, do: []
+
+  def daily_status_counts(%Scope{tenant: tenant}, days, %{id: server_id})
+      when is_integer(days) and days > 0 and is_integer(server_id) do
+    daily_status_counts_query(tenant.id, days, server_id)
+  end
+
+  defp daily_status_counts_query(tenant_id, days, server_id) do
     since = DateTime.add(DateTime.utc_now(:second), -days * 86_400, :second)
 
-    from(d in Deployment,
-      join: a in App,
-      on: a.id == d.app_id,
-      where: a.tenant_id == ^tenant.id and d.inserted_at >= ^since,
-      group_by: [fragment("date(?)", d.inserted_at), d.status],
-      select: {fragment("date(?)", d.inserted_at), d.status, count(d.id)}
-    )
-    |> Repo.all()
+    query =
+      from(d in Deployment,
+        join: a in App,
+        on: a.id == d.app_id,
+        where: a.tenant_id == ^tenant_id and d.inserted_at >= ^since,
+        group_by: [fragment("date(?)", d.inserted_at), d.status],
+        select: {fragment("date(?)", d.inserted_at), d.status, count(d.id)}
+      )
+
+    query =
+      if is_integer(server_id) do
+        from([d, a] in query, where: a.server_id == ^server_id)
+      else
+        query
+      end
+
+    Repo.all(query)
   end
 
   defp list_for_app(%App{} = app) do

@@ -135,10 +135,10 @@ defmodule CleatDeployWeb.DashboardLive do
             />
           </.link>
 
-          <.link navigate={~p"/apps"} class="block">
+          <.link navigate={~p"/apps"} id="metric-apps" class="block">
             <.metric_card
               title="Configured apps"
-              value={Integer.to_string(@app_count)}
+              value={Integer.to_string(@insights.app_count)}
               hint="Live Routes"
               icon="hero-globe-alt"
             />

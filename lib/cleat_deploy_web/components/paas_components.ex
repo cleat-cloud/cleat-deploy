@@ -456,7 +456,7 @@ defmodule CleatDeployWeb.PaasComponents do
       <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
         Apps by language
       </h3>
-      <p class="text-[11px] text-hd-muted">{@total} registered on this tenant</p>
+      <p class="text-[11px] text-hd-muted">{@total} registered on this server</p>
       <div class="mt-5 space-y-4">
         <div>
           <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
@@ -571,7 +571,7 @@ defmodule CleatDeployWeb.PaasComponents do
       <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
         Deploys · 14 days
       </h3>
-      <p class="text-[11px] text-hd-muted">Success vs failed across all apps</p>
+      <p class="text-[11px] text-hd-muted">Success vs failed on this server</p>
       <.chart_hover_layer id={"#{@id}-plot"} points={@points} view_width={@width}>
         <svg
           viewBox={"0 0 #{@width} #{@height}"}
