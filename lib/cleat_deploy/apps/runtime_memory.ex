@@ -20,23 +20,48 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
   Runs the probe in a background task and sends `{:app_memory, ref, result}` to
   `pid`.
 
-  The probe SSHes into the server and can take seconds, so a LiveView must never
-  run it inline: doing that blocks every other event (buttons, filters) until the
-  SSH call returns.
+  Live systemd/ps stats go out first; disk (`du`) is a second message once it
+  finishes. `du` of release dirs can take seconds, and a LiveView must never
+  wait for it before showing RAM, CPU, or status.
   """
-  def probe_async(pid, ref, subject) when is_pid(pid) do
-    Task.start(fn -> send(pid, {:app_memory, ref, probe(subject)}) end)
+  def probe_async(pid, ref, %App{} = app) when is_pid(pid) do
+    Task.start(fn ->
+      live = collect([app], :live)
+      send(pid, {:app_memory, ref, Map.get(live, app.id)})
+
+      disk = collect([app], :disk)
+      merged = merge_maps(live, disk)
+
+      if merged != live do
+        send(pid, {:app_memory, ref, Map.get(merged, app.id)})
+      end
+    end)
   end
 
-  defp probe(%App{} = app), do: for_app(app)
-  defp probe(apps) when is_list(apps), do: for_apps(apps)
+  def probe_async(pid, ref, apps) when is_pid(pid) and is_list(apps) do
+    Task.start(fn ->
+      live = collect(apps, :live)
+      send(pid, {:app_memory, ref, live})
+
+      disk = collect(apps, :disk)
+      merged = merge_maps(live, disk)
+
+      if merged != live do
+        send(pid, {:app_memory, ref, merged})
+      end
+    end)
+  end
 
   def for_apps(apps) when is_list(apps) do
+    merge_maps(collect(apps, :live), collect(apps, :disk))
+  end
+
+  defp collect(apps, kind) do
     apps
     |> Enum.filter(& &1.server)
     |> Enum.group_by(& &1.server_id)
     |> Map.values()
-    |> Task.async_stream(&fetch_server/1,
+    |> Task.async_stream(&fetch_server(&1, kind),
       timeout: @ssh_timeout_ms,
       on_timeout: :kill_task,
       ordered: false
@@ -94,9 +119,9 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
     end
   end
 
-  defp fetch_server([]), do: %{}
+  defp fetch_server([], _kind), do: %{}
 
-  defp fetch_server([%App{} = app | _] = apps) do
+  defp fetch_server([%App{} = app | _] = apps, kind) do
     units =
       apps
       |> Enum.flat_map(&units/1)
@@ -109,21 +134,26 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
       |> Enum.filter(&valid_path?/1)
       |> Enum.uniq()
 
-    if units == [] do
-      %{}
-    else
-      case client().run(app, stats_argv(units, paths)) do
-        {:ok, output} ->
-          parsed = parse_output(output)
+    cond do
+      units == [] ->
+        %{}
 
-          Map.new(apps, fn item ->
-            {item.id, combine(item, parsed)}
-          end)
+      kind == :disk and paths == [] ->
+        %{}
 
-        {:error, reason} ->
-          Logger.warning("runtime stats fetch failed for #{app.slug}: #{format_error(reason)}")
-          %{}
-      end
+      true ->
+        case client().run(app, stats_argv(units, paths, kind)) do
+          {:ok, output} ->
+            parsed = parse_output(output)
+
+            Map.new(apps, fn item ->
+              {item.id, combine(item, parsed)}
+            end)
+
+          {:error, reason} ->
+            Logger.warning("runtime stats fetch failed for #{app.slug}: #{format_error(reason)}")
+            %{}
+        end
     end
   end
 
@@ -162,16 +192,9 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
   defp valid_path?(path) when is_binary(path), do: Regex.match?(@path_pattern, path)
   defp valid_path?(_), do: false
 
-  defp stats_argv(units, paths) do
+  defp stats_argv(units, _paths, :live) do
     show =
       "sudo systemctl show #{join_escaped(units)} -p Id -p MemoryCurrent -p MemoryPeak -p ActiveState"
-
-    du =
-      if paths == [] do
-        "true"
-      else
-        "timeout 12s sudo du -sb #{join_escaped(paths)} 2>/dev/null"
-      end
 
     script = """
     set +e
@@ -179,11 +202,38 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
     printf '%s\\n' '__PAAS_PS__'
     ps -eo pcpu=,unit= --no-headers 2>/dev/null
     printf '%s\\n' '__PAAS_DU__'
+    :
+    """
+
+    ["bash", "-c", script]
+  end
+
+  defp stats_argv(_units, paths, :disk) do
+    du = "timeout 12s sudo du -sb #{join_escaped(paths)} 2>/dev/null"
+
+    script = """
+    set +e
+    printf '%s\\n' '__PAAS_PS__'
+    printf '%s\\n' '__PAAS_DU__'
     #{du}
     :
     """
 
     ["bash", "-c", script]
+  end
+
+  defp merge_maps(live, disk) do
+    Map.merge(live, disk, fn _id, a, b -> merge_one(a, b) end)
+  end
+
+  defp merge_one(nil, disk), do: disk
+  defp merge_one(live, nil), do: live
+
+  defp merge_one(live, disk) when is_map(live) and is_map(disk) do
+    case Map.get(disk, :disk_bytes) do
+      bytes when is_integer(bytes) -> Map.put(live, :disk_bytes, bytes)
+      _ -> live
+    end
   end
 
   defp join_escaped(values), do: Enum.map_join(values, " ", &shell_escape/1)
