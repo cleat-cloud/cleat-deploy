@@ -55,6 +55,8 @@ defmodule CleatDeploy.Deploy.RailsTest do
     script = Rails.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
 
     assert script =~ "mise install \"ruby@${RUBY_VERSION}\""
+    # sqlite3's native extension needs pkg-config to find the system library.
+    assert script =~ "libsqlite3-dev pkg-config"
     assert script =~ "bundle install"
     assert script =~ "bundle exec rails assets:precompile"
     assert script =~ "bundle exec rails db:prepare"
