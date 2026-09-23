@@ -45,9 +45,8 @@ config :cleat_deploy, Oban,
   prefix: false,
   notifier: Oban.Notifiers.Isolated,
   peer: Oban.Peers.Isolated,
-  # Keep modest concurrency so different Lightsail hosts can deploy in parallel.
-  # Same-host deploys are serialized in DeployWorker via claim_running/snooze.
-  queues: [deploys: 2, maintenance: 1],
+  # Two hosts × two concurrent builds each. Same-host cap lives in claim_running.
+  queues: [deploys: 4, maintenance: 1],
   plugins: [
     Oban.Plugins.Pruner,
     {Oban.Plugins.Cron,

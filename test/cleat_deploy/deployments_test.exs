@@ -76,7 +76,61 @@ defmodule CleatDeploy.DeploymentsTest do
       assert other_running.status == :running
     end
 
-    test "claim_running/1 enforces FIFO for queued deploys on the same server", %{
+    test "claim_running/1 runs two different apps on the same server at once", %{
+      scope: scope,
+      app: app,
+      deployment: first
+    } do
+      {:ok, running} = Deployments.claim_running(first)
+      assert running.status == :running
+
+      {:ok, other_app, _} =
+        Apps.create_app(scope, %{
+          name: "Second App",
+          slug: "second-app",
+          github_repo: "puppe1990/second-app",
+          host: "second.gestaobem.com",
+          server_id: app.server_id
+        })
+
+      {:ok, second} = Deployments.create_deployment(other_app, %{git_sha: "parallel"})
+      assert {:ok, second_running} = Deployments.claim_running(second)
+      assert second_running.status == :running
+    end
+
+    test "claim_running/1 caps concurrent deploys on one server at two", %{
+      scope: scope,
+      app: app,
+      deployment: first
+    } do
+      {:ok, _} = Deployments.claim_running(first)
+
+      {:ok, second_app, _} =
+        Apps.create_app(scope, %{
+          name: "Second App",
+          slug: "second-app",
+          github_repo: "puppe1990/second-app",
+          host: "second.gestaobem.com",
+          server_id: app.server_id
+        })
+
+      {:ok, third_app, _} =
+        Apps.create_app(scope, %{
+          name: "Third App",
+          slug: "third-app",
+          github_repo: "puppe1990/third-app",
+          host: "third.gestaobem.com",
+          server_id: app.server_id
+        })
+
+      {:ok, second} = Deployments.create_deployment(second_app, %{git_sha: "two"})
+      {:ok, third} = Deployments.create_deployment(third_app, %{git_sha: "three"})
+
+      assert {:ok, _} = Deployments.claim_running(second)
+      assert {:error, :server_busy} = Deployments.claim_running(third)
+    end
+
+    test "claim_running/1 enforces FIFO for queued deploys of the same app", %{
       app: app,
       deployment: older
     } do

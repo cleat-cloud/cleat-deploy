@@ -4,7 +4,8 @@ defmodule CleatDeploy.Workers.DeployWorker do
 
   alias CleatDeploy.Deployments
 
-  # Wait between attempts when another deploy is using the same Lightsail host.
+  # Wait between attempts when this app is already deploying, or the host is at
+  # its concurrent-build cap.
   @server_busy_snooze_seconds 20
 
   @impl Oban.Worker

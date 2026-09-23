@@ -246,13 +246,17 @@ defmodule CleatDeploy.Deployments do
     }
   end
 
+  # Two mix/npm builds on a CX33 is tight but usable; a third tends to OOM.
+  @max_running_per_server 2
+
   @doc """
-  Transitions a queued deployment to running when the target server is free.
+  Transitions a queued deployment to running when a slot is free.
 
   Returns:
   - `{:ok, deployment}` when claimed
-  - `{:error, :server_busy}` when another deploy is already running on the same
-    server, or an older queued deploy is still waiting (FIFO per server)
+  - `{:error, :server_busy}` when this app already has a running/older queued
+    deploy (FIFO per app), or the server is already at
+    `#{@max_running_per_server}` concurrent deploys
   - `{:error, :invalid_status}` when the deployment is not queued
   """
   def claim_running(%Deployment{id: id}) do
@@ -285,7 +289,10 @@ defmodule CleatDeploy.Deployments do
       deployment.status != :queued ->
         Repo.rollback(:invalid_status)
 
-      server_has_blocking_deploy?(deployment) ->
+      app_has_blocking_deploy?(deployment) ->
+        Repo.rollback(:server_busy)
+
+      concurrent_running_on_server_count(deployment) >= @max_running_per_server ->
         Repo.rollback(:server_busy)
 
       true ->
@@ -296,7 +303,7 @@ defmodule CleatDeploy.Deployments do
              })
              |> Repo.update() do
           {:ok, running} ->
-            if concurrent_running_on_server_count(running) > 1 do
+            if concurrent_running_on_server_count(running) > @max_running_per_server do
               _ =
                 running
                 |> Deployment.changeset(%{status: :queued, started_at: nil})
@@ -313,22 +320,12 @@ defmodule CleatDeploy.Deployments do
     end
   end
 
-  @doc false
-  def server_has_blocking_deploy?(%Deployment{id: id, app: %App{server_id: server_id}}) do
+  defp app_has_blocking_deploy?(%Deployment{id: id, app_id: app_id}) do
     Repo.exists?(
       from d in Deployment,
-        join: a in App,
-        on: a.id == d.app_id,
-        where: a.server_id == ^server_id and d.id != ^id,
+        where: d.app_id == ^app_id and d.id != ^id,
         where: d.status == :running or (d.status == :queued and d.id < ^id)
     )
-  end
-
-  def server_has_blocking_deploy?(%Deployment{id: id}) do
-    id
-    |> then(&Repo.get!(Deployment, &1))
-    |> Repo.preload(:app)
-    |> server_has_blocking_deploy?()
   end
 
   defp concurrent_running_on_server_count(%Deployment{app_id: app_id}) do
