@@ -136,7 +136,7 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#apps-table th", "Main language")
     assert has_element?(view, "#app-#{phoenix_app.id}-language", "Elixir")
     assert has_element?(view, "#app-#{go_app.id}-language", "Go")
-    wait_for(view, fn -> has_element?(view, "#app-#{phoenix_app.id}-ram", "163 MB") end)
+    wait_for(view, fn -> has_element?(view, "#app-#{phoenix_app.id}-disk", "510 MB") end)
     assert has_element?(view, "#app-#{phoenix_app.id}-ram", "163 MB")
     assert has_element?(view, "#app-#{phoenix_app.id}-cpu", "2.8%")
     assert has_element?(view, "#app-#{phoenix_app.id}-disk", "510 MB")
@@ -373,7 +373,7 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#deployments-history")
     assert html =~ "Deployments Version History"
     assert html =~ "abc123"
-    wait_for(view, fn -> has_element?(view, "#app-memory-tile", "163 MB") end)
+    wait_for(view, fn -> has_element?(view, "#app-disk-tile", "510 MB") end)
     assert has_element?(view, "#app-memory-tile", "163 MB")
     assert has_element?(view, "#app-cpu-tile", "2.8%")
     assert has_element?(view, "#app-disk-tile", "510 MB")

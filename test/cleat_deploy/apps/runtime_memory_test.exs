@@ -98,6 +98,46 @@ defmodule CleatDeploy.Apps.RuntimeMemoryTest do
     assert memory.bytes == 171_200_512
   end
 
+  test "probe_async/3 reports live stats before disk finishes", %{
+    scope: scope,
+    server: server
+  } do
+    previous = Application.get_env(:cleat_deploy, :runtime_memory)
+
+    Application.put_env(
+      :cleat_deploy,
+      :runtime_memory,
+      CleatDeploy.Apps.RuntimeMemorySlowDiskStub
+    )
+
+    on_exit(fn ->
+      if previous, do: Application.put_env(:cleat_deploy, :runtime_memory, previous)
+    end)
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "open-drive",
+        systemd_unit: "open_drive",
+        release_path: "/opt/open_drive"
+      })
+
+    ref = make_ref()
+    started = System.monotonic_time(:millisecond)
+
+    assert {:ok, _pid} = RuntimeMemory.probe_async(self(), ref, app)
+
+    assert_receive {:app_memory, ^ref, live}, 400
+    assert System.monotonic_time(:millisecond) - started < 400
+    assert live.bytes == 171_200_512
+    assert live.cpu_pct == 2.8
+    assert live.active?
+    assert live.disk_bytes == nil
+
+    assert_receive {:app_memory, ^ref, complete}, 2_000
+    assert complete.bytes == 171_200_512
+    assert complete.disk_bytes == 524_288_000 + 10_485_760
+  end
+
   test "probes every unit recorded by the last deploy", %{scope: scope, server: server} do
     previous = Application.get_env(:cleat_deploy, :runtime_memory)
     Application.put_env(:cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeMemoryStoppedStub)
