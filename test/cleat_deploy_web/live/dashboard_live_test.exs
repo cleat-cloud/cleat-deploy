@@ -146,6 +146,47 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert Settings.get_setting(scope).active_server_id == nil
   end
 
+  test "configured apps and language bars follow the active server", %{
+    conn: conn,
+    scope: scope
+  } do
+    running =
+      TenancyFixtures.server_fixture(scope, %{name: "aaa-primary", instance_status: "running"})
+
+    stopped =
+      TenancyFixtures.server_fixture(scope, %{name: "zzz-secondary", instance_status: "stopped"})
+
+    TenancyFixtures.app_fixture(scope, running, %{
+      runtime: "phoenix",
+      slug: "on-primary",
+      name: "Primary App"
+    })
+
+    TenancyFixtures.app_fixture(scope, stopped, %{
+      runtime: "golang",
+      slug: "on-secondary",
+      name: "Secondary App"
+    })
+
+    TenancyFixtures.app_fixture(scope, stopped, %{
+      runtime: "node",
+      slug: "js-secondary",
+      name: "JS App"
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#metric-apps", "1")
+    assert has_element?(view, "#chart-runtimes", "1 registered on this server")
+
+    view
+    |> element("#active-server-select")
+    |> render_change(%{"server_id" => to_string(stopped.id)})
+
+    assert has_element?(view, "#metric-apps", "2")
+    assert has_element?(view, "#chart-runtimes", "2 registered on this server")
+  end
+
   test "deploy chart hover points skip 0/0 copy on empty days", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
 

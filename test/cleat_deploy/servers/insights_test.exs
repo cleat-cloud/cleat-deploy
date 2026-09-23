@@ -66,6 +66,46 @@ defmodule CleatDeploy.Servers.InsightsTest do
     assert Insights.snapshot(scope).server.id == chosen.id
   end
 
+  test "counts apps, runtimes and deploys for the active server only", %{
+    scope: scope,
+    server: server
+  } do
+    other =
+      TenancyFixtures.server_fixture(scope, %{name: "other-box", instance_status: "stopped"})
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      runtime: "phoenix",
+      slug: "on-primary",
+      name: "P"
+    })
+
+    TenancyFixtures.app_fixture(scope, server, %{runtime: "golang", slug: "go-primary", name: "G"})
+
+    other_app =
+      TenancyFixtures.app_fixture(scope, other, %{runtime: "node", slug: "on-other", name: "N"})
+
+    {:ok, queued} = Deployments.create_deployment(other_app, %{git_sha: "other"})
+    {:ok, running} = Deployments.mark_running(queued)
+    {:ok, _} = Deployments.mark_success(running, "ok")
+
+    assert {:ok, _} = Settings.put_active_server(scope, server.id)
+
+    snapshot = Insights.snapshot(scope)
+    assert snapshot.app_count == 2
+    assert snapshot.runtimes.elixir == 1
+    assert snapshot.runtimes.go == 1
+    assert snapshot.runtimes.node == 0
+    assert List.last(snapshot.deploys).success == 0
+
+    assert {:ok, _} = Settings.put_active_server(scope, other.id)
+
+    switched = Insights.snapshot(scope)
+    assert switched.app_count == 1
+    assert switched.runtimes.elixir == 0
+    assert switched.runtimes.node == 1
+    assert List.last(switched.deploys).success >= 1
+  end
+
   test "ignores a choice that does not belong to the tenant", %{scope: scope, server: server} do
     other = TenancyFixtures.scope_fixture()
     foreign = TenancyFixtures.server_fixture(other)

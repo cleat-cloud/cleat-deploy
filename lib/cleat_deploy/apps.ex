@@ -37,20 +37,40 @@ defmodule CleatDeploy.Apps do
     Repo.aggregate(from(a in App, where: a.tenant_id == ^tenant.id), :count, :id)
   end
 
-  def count_by_runtime(%Scope{tenant: tenant}) do
-    from(a in App,
-      where: a.tenant_id == ^tenant.id,
-      group_by: a.runtime,
-      select: {a.runtime, count(a.id)}
+  def count_apps(%Scope{}, nil), do: 0
+
+  def count_apps(%Scope{tenant: tenant}, %{id: server_id}) when is_integer(server_id) do
+    Repo.aggregate(
+      from(a in App, where: a.tenant_id == ^tenant.id and a.server_id == ^server_id),
+      :count,
+      :id
     )
+  end
+
+  def count_by_runtime(%Scope{tenant: tenant}) do
+    count_by_runtime_query(from(a in App, where: a.tenant_id == ^tenant.id))
+  end
+
+  def count_by_runtime(%Scope{}, nil), do: empty_runtime_counts()
+
+  def count_by_runtime(%Scope{tenant: tenant}, %{id: server_id}) when is_integer(server_id) do
+    count_by_runtime_query(
+      from(a in App, where: a.tenant_id == ^tenant.id and a.server_id == ^server_id)
+    )
+  end
+
+  defp count_by_runtime_query(query) do
+    from(a in query, group_by: a.runtime, select: {a.runtime, count(a.id)})
     |> Repo.all()
-    |> Enum.reduce(%{elixir: 0, go: 0, node: 0, ruby: 0}, fn
+    |> Enum.reduce(empty_runtime_counts(), fn
       {"golang", n}, acc -> %{acc | go: n}
       {"node", n}, acc -> %{acc | node: n}
       {"rails", n}, acc -> %{acc | ruby: n}
       {_runtime, n}, acc -> %{acc | elixir: acc.elixir + n}
     end)
   end
+
+  defp empty_runtime_counts, do: %{elixir: 0, go: 0, node: 0, ruby: 0}
 
   def get_app!(id) when is_integer(id) do
     Repo.get!(App, id) |> Repo.preload([:server, :env_vars])
