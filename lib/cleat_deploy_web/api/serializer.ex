@@ -61,6 +61,7 @@ defmodule CleatDeployWeb.Api.Serializer do
       data_dir: App.data_dir(app),
       auto_deploy: app.auto_deploy,
       idle_shutdown_enabled: app.idle_shutdown_enabled,
+      indexable: app.indexable,
       units: App.unit_names(app),
       addons: App.deploy_addons(app),
       runtime: app.runtime,

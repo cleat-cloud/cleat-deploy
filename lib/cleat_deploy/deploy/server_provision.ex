@@ -374,6 +374,9 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   # load: unchanged files still answer 304, changed ones are refetched. The
   # filenames published here are not content-hashed, so nothing can be cached
   # immutably.
+  #
+  # `X-Robots-Tag` keeps Google (and other crawlers) from indexing a drop
+  # until the app is marked indexable.
   defp caddy_provision_script(%App{} = app, _config, %AppManifest{runtime: "static"}) do
     address = caddy_site_address(app)
 
@@ -383,6 +386,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       root * #{static_site_root(app)}
       try_files {path} {path}/index.html /index.html
       header Cache-Control "no-cache"
+      #{robots_header(app)}
       file_server
     }
     """
@@ -504,6 +508,9 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     |> Map.fetch!(:release_path)
     |> Kernel.<>("/current")
   end
+
+  defp robots_header(%App{indexable: true}), do: ""
+  defp robots_header(_app), do: ~s|header X-Robots-Tag "noindex, nofollow"|
 
   @doc false
   def migrate_script(config) do

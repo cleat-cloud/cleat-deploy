@@ -290,6 +290,25 @@ defmodule CleatDeployWeb.AppLive.Show do
     end
   end
 
+  def handle_event("toggle_indexable", _params, socket) do
+    target = not socket.assigns.app.indexable
+
+    case Apps.update_app_settings(socket.assigns.current_scope, socket.assigns.app, %{
+           "indexable" => target
+         }) do
+      {:ok, app} ->
+        app = Apps.get_app!(socket.assigns.current_scope, app.id)
+
+        {:noreply,
+         socket
+         |> assign(:app, app)
+         |> put_flash(:info, indexable_flash(app))}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not update indexing")}
+    end
+  end
+
   def handle_event("open_idle_sleep", _params, socket) do
     {:noreply, assign(socket, :confirming_idle_sleep?, true)}
   end
@@ -1028,6 +1047,12 @@ defmodule CleatDeployWeb.AppLive.Show do
     do: "Auto sleep on — deploy this app to arm it on the server"
 
   defp idle_shutdown_flash(_app), do: "Auto sleep off"
+
+  defp indexable_flash(%{indexable: true}),
+    do: "Indexing on — deploy this app to apply it on the server"
+
+  defp indexable_flash(_app),
+    do: "Indexing off — deploy this app to apply it on the server"
 
   # Re-reads the systemd state so the status tile and the hibernate button
   # reflect what just happened.

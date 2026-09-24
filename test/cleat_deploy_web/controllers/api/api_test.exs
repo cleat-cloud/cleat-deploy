@@ -130,6 +130,23 @@ defmodule CleatDeployWeb.Api.ApiTest do
     assert data["auto_deploy"] == false
   end
 
+  test "PATCH /api/v1/apps/:id turns indexing on", %{token: token, scope: scope, server: server} do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "landing-drop",
+        host: "landing-drop.example.com",
+        runtime: "static"
+      })
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_patch(~p"/api/v1/apps/#{app.id}", %{indexable: true})
+
+    data = json_response(conn, 200)["data"]
+    assert data["indexable"] == true
+  end
+
   test "POST /api/v1/apps/:app/cancel cancels the active deploy", %{token: token, app: app} do
     {:ok, deployment, _job} = Deployments.enqueue_deployment(app, %{git_sha: "manual"})
 

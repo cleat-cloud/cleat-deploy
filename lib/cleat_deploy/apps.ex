@@ -265,7 +265,7 @@ defmodule CleatDeploy.Apps do
 
   @doc """
   Updates deploy settings (`:branch`, `:auto_deploy`, `:idle_shutdown_enabled`,
-  `:host`, `:port`).
+  `:indexable`, `:host`, `:port`).
 
   Other keys are ignored.
   """
@@ -283,6 +283,7 @@ defmodule CleatDeploy.Apps do
         "branch",
         "auto_deploy",
         "idle_shutdown_enabled",
+        "indexable",
         "host",
         "port",
         "github_repo",

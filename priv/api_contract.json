@@ -12,6 +12,7 @@
     "data_dir",
     "auto_deploy",
     "idle_shutdown_enabled",
+    "indexable",
     "units",
     "addons",
     "runtime",

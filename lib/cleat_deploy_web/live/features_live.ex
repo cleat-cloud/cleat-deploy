@@ -342,7 +342,7 @@ defmodule CleatDeployWeb.FeaturesLive do
             title: "Read apps",
             code: "GET /apps · GET /apps/:id · GET /apps/:app_id/env",
             hint:
-              "App payload with branch, host, port, unit, runtime, auto_deploy and idle_shutdown_enabled."
+              "App payload with branch, host, port, unit, runtime, auto_deploy, idle_shutdown_enabled and indexable."
           },
           %{
             id: "feature-api-deploys",
@@ -356,7 +356,7 @@ defmodule CleatDeployWeb.FeaturesLive do
             title: "Write apps",
             code: "POST /apps · PATCH /apps/:id · DELETE /apps/:id",
             hint:
-              "Create an app, edit branch/host/port/runtime/auto_deploy/idle_shutdown_enabled, or delete it."
+              "Create an app, edit branch/host/port/runtime/auto_deploy/idle_shutdown_enabled/indexable, or delete it."
           },
           %{
             id: "feature-api-env",

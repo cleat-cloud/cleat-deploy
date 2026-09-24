@@ -45,9 +45,21 @@ defmodule CleatDeploy.Deploy.StaticTest do
     # Without an explicit Cache-Control, browsers apply heuristic freshness to
     # the ETag/Last-Modified pair and keep serving a previous deploy's page.
     assert script =~ ~s|header Cache-Control "no-cache"|
+    # Static drops are usually previews; Google should stay out until the
+    # operator turns indexing on.
+    assert script =~ ~s|header X-Robots-Tag "noindex, nofollow"|
     assert script =~ "file_server"
     refute script =~ "reverse_proxy"
     refute script =~ "systemd"
+  end
+
+  test "indexable static apps omit X-Robots-Tag", %{app: app, config: config} do
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(%{app | indexable: true}, config, manifest)
+
+    refute script =~ "X-Robots-Tag"
+    assert script =~ ~s|header Cache-Control "no-cache"|
+    assert script =~ "file_server"
   end
 
   test "IP hosts get an http:// static site", %{app: app} do
