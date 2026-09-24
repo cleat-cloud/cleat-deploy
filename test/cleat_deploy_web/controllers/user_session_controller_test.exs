@@ -149,6 +149,57 @@ defmodule CleatDeployWeb.UserSessionControllerTest do
       assert response =~ "Log in"
       assert response =~ "Invalid email or password"
     end
+
+    test "a PWA resubmit after a successful login redirects instead of 403", %{
+      conn: conn,
+      user: user
+    } do
+      user = set_password(user)
+
+      login_page = conn |> with_csrf() |> get(~p"/users/log-in")
+      csrf = csrf_token(html_response(login_page, 200))
+
+      logged_in =
+        login_page
+        |> with_csrf()
+        |> post(~p"/users/log-in", %{
+          "_csrf_token" => csrf,
+          "user" => %{"email" => user.email, "password" => valid_user_password()}
+        })
+
+      assert redirected_to(logged_in) == ~p"/"
+      assert get_session(logged_in, :user_token)
+
+      # Same form POST as the PWA restore: new session cookie, old CSRF token.
+      resent =
+        logged_in
+        |> recycle()
+        |> with_csrf()
+        |> post(~p"/users/log-in", %{
+          "_csrf_token" => csrf,
+          "user" => %{"email" => user.email, "password" => valid_user_password()}
+        })
+
+      refute resent.status == 403
+      assert redirected_to(resent) == ~p"/"
+      assert get_session(resent, :user_token)
+    end
+
+    test "a stale CSRF token still 403s when the session is anonymous", %{conn: conn, user: user} do
+      user = set_password(user)
+
+      login_page = conn |> with_csrf() |> get(~p"/users/log-in")
+      csrf = csrf_token(html_response(login_page, 200))
+
+      assert_error_sent 403, fn ->
+        conn
+        |> with_csrf()
+        |> post(~p"/users/log-in", %{
+          "_csrf_token" => csrf,
+          "user" => %{"email" => user.email, "password" => valid_user_password()}
+        })
+      end
+    end
   end
 
   describe "POST /users/log-in - magic link token" do
@@ -219,5 +270,16 @@ defmodule CleatDeployWeb.UserSessionControllerTest do
       refute get_session(conn, :user_token)
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Logged out successfully"
     end
+  end
+
+  defp with_csrf(conn) do
+    %{conn | private: Map.delete(conn.private, :plug_skip_csrf_protection)}
+  end
+
+  defp csrf_token(html) do
+    %{"token" => token} =
+      Regex.named_captures(~r/name="_csrf_token"[^>]*value="(?<token>[^"]+)"/, html)
+
+    token
   end
 end
