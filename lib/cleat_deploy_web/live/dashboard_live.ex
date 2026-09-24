@@ -16,15 +16,18 @@ defmodule CleatDeployWeb.DashboardLive do
       |> assign(:host_sample, nil)
       |> assign(:live_host?, false)
       |> assign(:servers, Servers.list_servers(socket.assigns.current_scope))
-      |> load_insights(metrics: connected?(socket))
+      # Hetzner metrics are three sequential HTTP calls. Paint first; :tick_hetzner
+      # fills the 24h charts after the socket connects.
+      |> load_insights(metrics: false)
       |> refresh_resources()
 
     socket =
       if connected?(socket) do
+        send(self(), :tick_hetzner)
+
         socket
         |> arm_live()
         |> schedule_live()
-        |> schedule_hetzner()
       else
         socket
       end
@@ -55,9 +58,11 @@ defmodule CleatDeployWeb.DashboardLive do
       server ->
         case Settings.put_active_server(socket.assigns.current_scope, server.id) do
           {:ok, _setting} ->
+            if connected?(socket), do: send(self(), :tick_hetzner)
+
             {:noreply,
              socket
-             |> load_insights(metrics: connected?(socket))
+             |> load_insights(metrics: false)
              |> refresh_resources()
              |> arm_live()}
 

@@ -193,6 +193,26 @@ defmodule CleatDeployWeb.UserAuth do
   end
 
   @doc """
+  Lets a POST `/users/log-in` through when the session already has a user.
+
+  The PWA restores the login form after a successful 302 and resubmits it with
+  the previous CSRF token. `protect_from_forgery` would 403; this plug runs
+  first and sends them to the signed-in path instead.
+  """
+  def redirect_authenticated_login_post(conn, _opts) do
+    if login_post?(conn) and get_session(conn, :user_token) do
+      conn
+      |> redirect(to: signed_in_path(conn))
+      |> halt()
+    else
+      conn
+    end
+  end
+
+  defp login_post?(%Plug.Conn{method: "POST", path_info: ["users", "log-in"]}), do: true
+  defp login_post?(_conn), do: false
+
+  @doc """
   Plug for routes that require the user to not be authenticated.
   """
   def redirect_if_user_is_authenticated(conn, _opts) do

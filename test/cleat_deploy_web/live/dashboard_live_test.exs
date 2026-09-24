@@ -220,6 +220,30 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert "0 failed" in match["lines"]
   end
 
+  test "renders the dashboard before hetzner metrics return", %{conn: conn, scope: scope} do
+    TenancyFixtures.server_fixture(scope, %{
+      name: "gestaobem-cx33",
+      provider: "hetzner",
+      region: "fsn1",
+      aws_instance_name: "gestaobem-cx33",
+      instance_status: "running"
+    })
+
+    stub(HetznerMock, :get_metrics, fn "fsn1", "gestaobem-cx33", _start, _end ->
+      {:ok,
+       %{
+         cpu: [%{t: 1, v: 33.3}],
+         network_in: [%{t: 1, v: 1.0}],
+         network_out: [%{t: 1, v: 2.0}]
+       }}
+    end)
+
+    {:ok, view, html} = live(conn, ~p"/")
+    assert has_element?(view, "#dashboard")
+    refute html =~ "33.3%"
+    assert render(view) =~ "33.3%"
+  end
+
   test "plots hetzner cpu samples on the dashboard", %{conn: conn, scope: scope} do
     TenancyFixtures.server_fixture(scope, %{
       name: "gestaobem-cx33",
