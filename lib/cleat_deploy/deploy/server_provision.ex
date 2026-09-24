@@ -22,6 +22,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     rails_provision_script(app, config, manifest)
   end
 
+  def provision_script(%App{} = app, config, %AppManifest{runtime: "rust"} = manifest) do
+    rust_provision_script(app, config, manifest)
+  end
+
   def provision_script(%App{} = app, config, %AppManifest{} = manifest) do
     data_dir = data_dir_for(manifest, config)
     env_dir = Path.dirname(config.env_file)
@@ -167,6 +171,20 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     service_provision_script(app, config, manifest, ["Environment=RAILS_ENV=production"], "Rails")
   end
 
+  defp rust_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
+    service_provision_script(
+      app,
+      config,
+      manifest,
+      [
+        "Environment=LOCO_ENV=production",
+        "Environment=BINDING=127.0.0.1",
+        "Environment=HOST=https://#{app.host}"
+      ],
+      "Rust"
+    )
+  end
+
   # Shared systemd units for long-lived app servers that start through a
   # generated `current/start.sh` (Node, Rails).
   #
@@ -254,8 +272,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     WorkingDirectory=#{config.release_path}/current
     EnvironmentFile=#{config.env_file}
     Environment=CLEAT_DATA_DIR=#{data_dir}
-    #{extra_env}
     #{port_lines}
+    #{extra_env}
     ExecStart=/bin/bash #{config.release_path}/current/start.sh#{exec_arg}
     Restart=always
     RestartSec=5
@@ -579,6 +597,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
 
   defp runtime_env_exports(%AppManifest{runtime: "rails"}), do: "export RAILS_ENV=production; "
   defp runtime_env_exports(%AppManifest{runtime: "node"}), do: "export NODE_ENV=production; "
+  defp runtime_env_exports(%AppManifest{runtime: "rust"}), do: "export LOCO_ENV=production; "
   defp runtime_env_exports(%AppManifest{}), do: ""
 
   @doc """

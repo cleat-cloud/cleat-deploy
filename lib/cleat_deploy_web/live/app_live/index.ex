@@ -432,7 +432,8 @@ defmodule CleatDeployWeb.AppLive.Index do
                       {"Phoenix / Elixir", "phoenix"},
                       {"Go / Cais", "golang"},
                       {"Node / Next.js / TanStack Start", "node"},
-                      {"Ruby on Rails", "rails"}
+                      {"Ruby on Rails", "rails"},
+                      {"Rust / Loco", "rust"}
                     ]}
                   />
                   <.input
@@ -562,6 +563,13 @@ defmodule CleatDeployWeb.AppLive.Index do
                   current={@apps_runtime}
                 >
                   Ruby
+                </.runtime_filter_chip>
+                <.runtime_filter_chip
+                  id="apps-filter-rust"
+                  runtime={:rust}
+                  current={@apps_runtime}
+                >
+                  Rust
                 </.runtime_filter_chip>
                 <.runtime_filter_chip
                   id="apps-filter-static"
@@ -1025,6 +1033,7 @@ defmodule CleatDeployWeb.AppLive.Index do
   defp parse_runtime("node"), do: :node
   defp parse_runtime("static"), do: :static
   defp parse_runtime("rails"), do: :rails
+  defp parse_runtime("rust"), do: :rust
   defp parse_runtime("phoenix"), do: :phoenix
   defp parse_runtime(_), do: :all
 
@@ -1149,9 +1158,10 @@ defmodule CleatDeployWeb.AppLive.Index do
   defp matches_runtime?(%App{runtime: "node"}, :node), do: true
   defp matches_runtime?(%App{runtime: "static"}, :static), do: true
   defp matches_runtime?(%App{runtime: "rails"}, :rails), do: true
+  defp matches_runtime?(%App{runtime: "rust"}, :rust), do: true
 
   defp matches_runtime?(%App{runtime: runtime}, :phoenix)
-       when runtime not in ["golang", "node", "static", "rails"],
+       when runtime not in ["golang", "node", "static", "rails", "rust"],
        do: true
 
   defp matches_runtime?(_app, _runtime), do: false

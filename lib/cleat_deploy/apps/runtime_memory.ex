@@ -182,6 +182,7 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
   end
 
   defp data_dir(%App{runtime: "golang"}, release), do: Path.join(release, "data")
+  defp data_dir(%App{runtime: "rust"}, release), do: Path.join(release, "data")
   defp data_dir(_app, release), do: "/var/lib/#{Path.basename(release)}"
 
   defp valid_unit?(unit) when is_binary(unit),

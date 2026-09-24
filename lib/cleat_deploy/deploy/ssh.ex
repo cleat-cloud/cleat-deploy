@@ -10,11 +10,12 @@ defmodule CleatDeploy.Deploy.Ssh do
   alias CleatDeploy.Deploy.Node
   alias CleatDeploy.Deploy.Rails
   alias CleatDeploy.Deploy.Runtime
+  alias CleatDeploy.Deploy.Rust
   alias CleatDeploy.Deploy.ServerProvision
   alias CleatDeploy.Deploy.Static
   alias CleatDeploy.Repo
 
-  @tar_excludes ~w(_build deps node_modules .git tmp priv/static/assets)
+  @tar_excludes ~w(_build deps node_modules .git tmp priv/static/assets target)
 
   def run(server, app, argv) when is_list(argv) do
     with :ok <- ensure_commands(["ssh"]),
@@ -380,6 +381,9 @@ defmodule CleatDeploy.Deploy.Ssh do
 
       manifest.runtime == "rails" or Runtime.kind(work_dir, app) == :rails ->
         Rails.remote_build_script(server, app, config, sha, remote_tar, manifest)
+
+      manifest.runtime == "rust" or Runtime.kind(work_dir, app) == :rust ->
+        Rust.remote_build_script(server, app, config, sha, remote_tar, manifest)
 
       Runtime.kind(work_dir, app) == :golang or manifest.runtime == "golang" ->
         Golang.remote_build_script(server, app, config, sha, remote_tar, manifest)

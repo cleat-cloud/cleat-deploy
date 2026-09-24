@@ -84,6 +84,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
     cond do
       file?(repo_path, "mix.exs") -> "phoenix"
       file?(repo_path, "go.mod") -> "golang"
+      file?(repo_path, "Cargo.toml") -> "rust"
       rails?(repo_path) -> "rails"
       node_project?(repo_path) -> "node"
       file?(repo_path, "index.html") or file?(repo_path, "package.json") -> "static"
@@ -410,6 +411,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
   defp parse_runtime("static"), do: "static"
   defp parse_runtime("node"), do: "node"
   defp parse_runtime("rails"), do: "rails"
+  defp parse_runtime("rust"), do: "rust"
   defp parse_runtime(_), do: nil
 
   defp parse_binaries(list) when is_list(list) do

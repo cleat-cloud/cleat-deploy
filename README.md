@@ -1,6 +1,6 @@
 # Cleat
 
-Self-hosted PaaS control panel. Deploy **Phoenix/Elixir**, **Go**, **Node (Next.js / TanStack Start)**, **Ruby on Rails** and **static sites** to **Hetzner Cloud** (CX33) or AWS Lightsail over SSH, with GitHub push-to-deploy.
+Self-hosted PaaS control panel. Deploy **Phoenix/Elixir**, **Go**, **Node (Next.js / TanStack Start)**, **Ruby on Rails**, **Rust (Loco)** and **static sites** to **Hetzner Cloud** (CX33) or AWS Lightsail over SSH, with GitHub push-to-deploy.
 
 Formerly Phoenix PaaS. OTP app: `cleat_deploy`.
 
@@ -11,7 +11,7 @@ Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and w
 ## Features
 
 - **Servers** — register Hetzner Cloud or Lightsail VMs (IP, location, SSH user)
-- **Runtimes** — Phoenix OTP releases, Go/Cais binaries, Node servers (Next.js / TanStack Start), Rails/Puma, and static sites. Auto-detected from the repo or set via `runtime` in `.cleat_deploy/deploy.json` ([manifest reference](docs/deploy-json.md))
+- **Runtimes** — Phoenix OTP releases, Go/Cais binaries, Node servers (Next.js / TanStack Start), Rails/Puma, Rust/Loco binaries, and static sites. Auto-detected from the repo or set via `runtime` in `.cleat_deploy/deploy.json` ([manifest reference](docs/deploy-json.md))
 - **Release phase** — `release_command` runs after publishing and before the restart; a failure keeps the previous release serving
 - **Multi-process apps** — `processes` (web + worker) as one systemd unit each; only `web` binds the port and goes to sleep when idle
 - **Managed addons** — `addons: ["postgres:pgvector", "redis"]` provisions the datastores on the server and injects `DATABASE_URL`/`REDIS_URL`
@@ -110,7 +110,23 @@ alive with a `rails-<slug>` systemd unit behind the Caddy reverse proxy.
 env vars. Start command: `start_command` → `bundle exec puma -C config/puma.rb`
 → `bundle exec puma -b tcp://0.0.0.0:$PORT`.
 
-Rails (and Node) apps can also declare a **release phase**, **multiple
+### Rust / Loco apps
+
+Set `runtime: "rust"` (or put `"runtime": "rust"` in `.cleat_deploy/deploy.json`).
+A repo with `Cargo.toml` is detected automatically. The panel installs rustup,
+runs `cargo build --release` (the target dir is cached across deploys), copies
+the binary as `bin/server` plus `config/`, `assets/` and `frontend/`, and keeps
+it alive with a `rust-<slug>` systemd unit behind Caddy.
+
+Loco apps (`loco-rs` in `Cargo.toml` or `config/production.yaml`) start with
+`./bin/server start`, run `./bin/server db migrate` before the restart, and
+get `LOCO_ENV=production`, `PORT`, `BINDING=127.0.0.1` and
+`HOST=https://<app host>`. Set `DATABASE_URL` and `JWT_SECRET` as panel env
+vars. A `frontend/package.json` is built with npm. Plain Rust binaries (Axum
+and friends) run as `./bin/server`. Override with `build_command` and
+`start_command`.
+
+Rails, Node and Rust apps can also declare a **release phase**, **multiple
 processes** (web + worker) and **managed addons** (Postgres with pgvector,
 Redis) in `.cleat_deploy/deploy.json` — full reference in
 [docs/deploy-json.md](docs/deploy-json.md).
