@@ -250,6 +250,28 @@ defmodule CleatDeploy.DeploymentsTest do
       assert Deployments.recover_orphaned_running(booted_at) == []
       assert Deployments.get_deployment!(deployment.id).status == :running
     end
+
+    test "re-enqueues a queued deployment whose Oban job is gone", %{app: app} do
+      {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "lost-job"})
+
+      assert [requeued] = Deployments.recover_orphaned_queued()
+      assert requeued.id == deployment.id
+      assert requeued.status == :queued
+
+      jobs =
+        CleatDeploy.Repo.all(
+          from j in Oban.Job,
+            where: j.worker == "CleatDeploy.Workers.DeployWorker"
+        )
+
+      assert Enum.any?(jobs, fn job -> job.args["deployment_id"] == deployment.id end)
+    end
+
+    test "leaves a queued deployment that still has an Oban job", %{scope: scope, app: app} do
+      {:ok, _job} = Deployments.enqueue(scope, app, %{git_sha: "still-queued"})
+
+      assert Deployments.recover_orphaned_queued() == []
+    end
   end
 
   describe "for_app/2" do

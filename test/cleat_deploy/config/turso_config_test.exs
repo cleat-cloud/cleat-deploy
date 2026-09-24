@@ -16,7 +16,8 @@ defmodule CleatDeploy.Config.TursoConfigTest do
              migrator: Oban.Migrations.SQLite,
              uri: "libsql://my-db.turso.io",
              auth_token: "secret-token",
-             pool_size: 15
+             pool_size: 15,
+             busy_timeout: 10_000
            ] = Turso.repo_config(env)
   end
 
@@ -31,7 +32,8 @@ defmodule CleatDeploy.Config.TursoConfigTest do
              adapter: Ecto.Adapters.LibSql,
              migrator: Oban.Migrations.SQLite,
              database: "/var/data/cleat_deploy.db",
-             pool_size: 5
+             pool_size: 5,
+             busy_timeout: 10_000
            ] = Turso.repo_config(env)
   end
 

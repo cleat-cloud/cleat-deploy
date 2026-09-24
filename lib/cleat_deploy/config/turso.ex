@@ -17,7 +17,8 @@ defmodule CleatDeploy.Config.Turso do
         migrator: Oban.Migrations.SQLite,
         uri: turso_url,
         auth_token: turso_token,
-        pool_size: pool_size
+        pool_size: pool_size,
+        busy_timeout: 10_000
       ]
     else
       database_path =
@@ -30,7 +31,8 @@ defmodule CleatDeploy.Config.Turso do
         adapter: Ecto.Adapters.LibSql,
         migrator: Oban.Migrations.SQLite,
         database: database_path,
-        pool_size: String.to_integer(env.("POOL_SIZE") || "5")
+        pool_size: String.to_integer(env.("POOL_SIZE") || "5"),
+        busy_timeout: 10_000
       ]
     end
   end
