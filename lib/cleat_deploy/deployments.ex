@@ -430,6 +430,29 @@ defmodule CleatDeploy.Deployments do
     end)
   end
 
+  @doc """
+  Re-inserts an Oban job for queued deployments whose worker job is gone.
+
+  A `queued` row with no live job never starts: FIFO per app waits on it, and
+  cancel is the only manual way out. The health worker puts it back on the
+  queue so the stager can pick it up after a SQLITE_BUSY crash.
+  """
+  def recover_orphaned_queued do
+    jobs = deploy_jobs(@live_job_states)
+
+    from(d in Deployment, where: d.status == :queued, preload: [:app])
+    |> Repo.all()
+    |> Enum.filter(
+      &(Enum.find(jobs, fn job -> deploy_job_deployment_id(job) == &1.id end) == nil)
+    )
+    |> Enum.flat_map(fn deployment ->
+      case insert_deploy_job(deployment.app, deployment) do
+        {:ok, _job} -> [deployment]
+        {:error, _reason} -> []
+      end
+    end)
+  end
+
   defp active_deployment(%App{} = app) do
     Repo.one(
       from d in Deployment,

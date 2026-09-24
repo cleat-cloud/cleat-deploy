@@ -16,9 +16,10 @@ defmodule CleatDeploy.Workers.AutoDeployHealthWorker do
     ips = Target.reconcile_server_ips()
     inventory = Servers.sync_all_inventories()
     recovered = Deployments.recover_orphaned_running(booted_at())
+    requeued = Deployments.recover_orphaned_queued()
 
     Logger.info(
-      "auto_deploy_health webhooks=#{inspect(webhooks)} server_ips=#{inspect(ips)} inventory=#{inventory_log(inventory)} recovered=#{length(recovered)}"
+      "auto_deploy_health webhooks=#{inspect(webhooks)} server_ips=#{inspect(ips)} inventory=#{inventory_log(inventory)} recovered=#{length(recovered)} requeued=#{length(requeued)}"
     )
 
     :ok
