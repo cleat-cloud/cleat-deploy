@@ -26,7 +26,7 @@ defmodule CleatDeployWeb.FeaturesLive do
             is what the <span class="font-mono text-hd-text">cleat</span>
             CLI talks to, and every key of the deploy manifest is documented in <.link
               id="features-manifest-docs"
-              href="https://github.com/puppe1990/cleat-deploy/blob/main/docs/deploy-json.md"
+              href="https://github.com/cleat-cloud/cleat-deploy/blob/main/docs/deploy-json.md"
               target="_blank"
               rel="noopener noreferrer"
               class="text-hd-blue transition-colors hover:underline"
