@@ -47,10 +47,10 @@ config :cleat_deploy, Oban,
   peer: Oban.Peers.Isolated,
   # Two hosts × two concurrent builds each. Same-host cap lives in claim_running.
   queues: [deploys: 4, maintenance: 1],
-  # Built-in Stager dies on Turso SQLITE_BUSY; SafeStager retries instead.
+  # Built-in Stager/Pruner die on Turso SQLITE_BUSY; Safe* retries instead.
   stage_interval: :infinity,
   plugins: [
-    Oban.Plugins.Pruner,
+    CleatDeploy.Oban.SafePruner,
     CleatDeploy.Oban.SafeStager,
     {Oban.Plugins.Cron,
      crontab: [
