@@ -41,12 +41,22 @@ defmodule CleatDeploy.AppsTest do
       assert Ecto.Changeset.get_field(changeset, :systemd_unit) == "atelie"
       assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/atelie"
     end
+
+    test "rust runtime uses rust-<slug> unit and /opt/slug" do
+      changeset =
+        Apps.change_app(%CleatDeploy.Apps.App{}, %{slug: "hello-loco", runtime: "rust"})
+
+      assert Ecto.Changeset.get_field(changeset, :runtime) == "rust"
+      assert Ecto.Changeset.get_field(changeset, :systemd_unit) == "rust-hello-loco"
+      assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/hello-loco"
+    end
   end
 
   describe "main_language/1" do
     test "maps phoenix runtime to Elixir and golang to Go" do
       assert App.main_language(%App{runtime: "phoenix"}) == "Elixir"
       assert App.main_language(%App{runtime: "golang"}) == "Go"
+      assert App.main_language(%App{runtime: "rust"}) == "Rust"
       assert App.main_language(%App{runtime: nil}) == "Elixir"
     end
   end

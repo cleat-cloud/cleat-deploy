@@ -924,12 +924,14 @@ defmodule CleatDeployWeb.AppLive.Layout do
   defp runtime_badge_label("golang"), do: "GO"
   defp runtime_badge_label("node"), do: "JS"
   defp runtime_badge_label("rails"), do: "RB"
+  defp runtime_badge_label("rust"), do: "RS"
   defp runtime_badge_label("static"), do: "HTML"
   defp runtime_badge_label(_runtime), do: "PHX"
 
   defp runtime_badge_class("golang"), do: "border-hd-green/40 bg-hd-green/10 text-hd-green"
   defp runtime_badge_class("node"), do: "border-hd-blue/40 bg-hd-blue/10 text-hd-blue"
   defp runtime_badge_class("rails"), do: "border-hd-red/40 bg-hd-red/10 text-hd-red"
+  defp runtime_badge_class("rust"), do: "border-amber-500/40 bg-amber-500/10 text-amber-500"
   defp runtime_badge_class(_runtime), do: "border-hd-border bg-hd-aside text-hd-orange"
 
   attr :id, :string, required: true

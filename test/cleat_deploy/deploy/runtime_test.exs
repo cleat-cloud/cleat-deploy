@@ -122,4 +122,48 @@ defmodule CleatDeploy.Deploy.RuntimeTest do
 
     assert Runtime.kind(repo_path, app) == :rails
   end
+
+  test "detects rust from Cargo.toml", %{scope: scope, server: server, repo_path: repo_path} do
+    File.write!(
+      Path.join(repo_path, "Cargo.toml"),
+      """
+      [package]
+      name = "hello_loco"
+      version = "0.1.0"
+      edition = "2021"
+
+      [dependencies]
+      loco-rs = { version = "0.16" }
+      """
+    )
+
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Hello Loco",
+        slug: "hello-loco",
+        github_repo: "puppe1990/hello-loco",
+        host: "hello-loco.gestaobem.com",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :rust
+  end
+
+  test "app.runtime rust is detected as rust", %{
+    scope: scope,
+    server: server,
+    repo_path: repo_path
+  } do
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Hello Loco",
+        slug: "hello-loco-forced",
+        github_repo: "puppe1990/hello-loco-forced",
+        host: "hello-loco-forced.gestaobem.com",
+        runtime: "rust",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :rust
+  end
 end

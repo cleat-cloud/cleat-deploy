@@ -180,6 +180,37 @@ defmodule CleatDeploy.Deploy.AppManifestTest do
     assert AppManifest.resolve(repo_path, app).runtime == "node"
   end
 
+  test "infers rust for a Cargo.toml repo without deploy.json" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path =
+      tmp_repo(%{
+        "Cargo.toml" =>
+          ~s([package]\nname = "hello_loco"\nversion = "0.1.0"\n\n[dependencies]\nloco-rs = "0.16"\n)
+      })
+
+    assert AppManifest.resolve(repo_path, app).runtime == "rust"
+  end
+
+  test "deploy.json runtime rust is accepted" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path =
+      tmp_repo(%{
+        "Cargo.toml" => ~s([package]\nname = "hello_loco"\n),
+        ".cleat_deploy/deploy.json" =>
+          ~s({"runtime": "rust", "start_command": "./bin/server start"})
+      })
+
+    manifest = AppManifest.resolve(repo_path, app)
+    assert manifest.runtime == "rust"
+    assert manifest.start_command == "./bin/server start"
+  end
+
   test "resolve reads the release phase, processes and addons", %{app: app, repo_path: repo_path} do
     File.write!(
       Path.join(repo_path, ".cleat_deploy/deploy.json"),

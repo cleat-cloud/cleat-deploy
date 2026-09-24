@@ -34,6 +34,7 @@ defmodule CleatDeployWeb.PaasComponents do
   defp language_badge_classes("golang"), do: "border-hd-green/40 bg-hd-green/10 text-hd-green"
   defp language_badge_classes("node"), do: "border-hd-blue/40 bg-hd-blue/10 text-hd-blue"
   defp language_badge_classes("rails"), do: "border-hd-red/40 bg-hd-red/10 text-hd-red"
+  defp language_badge_classes("rust"), do: "border-amber-500/40 bg-amber-500/10 text-amber-500"
   defp language_badge_classes(_runtime), do: "border-hd-orange/40 bg-hd-orange/10 text-hd-orange"
 
   @doc """
@@ -434,13 +435,15 @@ defmodule CleatDeployWeb.PaasComponents do
   attr :go, :integer, required: true
   attr :js, :integer, required: true
   attr :ruby, :integer, required: true
+  attr :rust, :integer, default: 0
 
   def runtime_bars(assigns) do
-    total = max(assigns.elixir + assigns.go + assigns.js + assigns.ruby, 1)
+    total = max(assigns.elixir + assigns.go + assigns.js + assigns.ruby + assigns.rust, 1)
     elixir_pct = round(assigns.elixir / total * 100)
     go_pct = round(assigns.go / total * 100)
     js_pct = round(assigns.js / total * 100)
     ruby_pct = round(assigns.ruby / total * 100)
+    rust_pct = round(assigns.rust / total * 100)
 
     assigns =
       assign(assigns,
@@ -448,7 +451,8 @@ defmodule CleatDeployWeb.PaasComponents do
         go_pct: go_pct,
         js_pct: js_pct,
         ruby_pct: ruby_pct,
-        total: assigns.elixir + assigns.go + assigns.js + assigns.ruby
+        rust_pct: rust_pct,
+        total: assigns.elixir + assigns.go + assigns.js + assigns.ruby + assigns.rust
       )
 
     ~H"""
@@ -503,6 +507,18 @@ defmodule CleatDeployWeb.PaasComponents do
             <div class="h-2 rounded-full bg-hd-red" style={"width: #{@ruby_pct}%"} />
             <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
               {@ruby} apps · {@ruby_pct}%
+            </span>
+          </div>
+        </div>
+        <div>
+          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
+            <span class="text-amber-500">Rust</span>
+            <span class="tabular-nums text-hd-text">{@rust}</span>
+          </div>
+          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
+            <div class="h-2 rounded-full bg-amber-500" style={"width: #{@rust_pct}%"} />
+            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
+              {@rust} apps · {@rust_pct}%
             </span>
           </div>
         </div>

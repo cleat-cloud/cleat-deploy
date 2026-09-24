@@ -26,7 +26,7 @@ deploy touches the server, with the reason in the deploy log.
 
 | key | type | default | what it does |
 |---|---|---|---|
-| `runtime` | `"phoenix" \| "golang" \| "node" \| "rails" \| "static"` | detected, else `phoenix` | Chooses the build/run pipeline. |
+| `runtime` | `"phoenix" \| "golang" \| "node" \| "rails" \| "rust" \| "static"` | detected, else `phoenix` | Chooses the build/run pipeline. |
 | `build_dir` | string | auto-detected | Subdirectory holding the project (monorepos). |
 | `build_command` | string | runtime default | Overrides the build step (e.g. `npm run build:prod`). |
 | `start_command` | string | runtime default | Command the app's `web` process runs. |
@@ -86,8 +86,8 @@ Rules:
   sweeper and the Hibernate/Wake up buttons act on the base unit, so a sleeping
   app keeps its workers running (queues do not stop).
 
-Runtimes: `rails` and `node`. A single-process app omits `processes` and behaves
-exactly as before.
+Runtimes: `rails`, `node` and `rust`. A single-process app omits `processes` and
+behaves exactly as before.
 
 ## Addons
 
