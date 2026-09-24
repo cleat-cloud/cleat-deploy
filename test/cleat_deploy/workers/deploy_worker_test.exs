@@ -18,7 +18,7 @@ defmodule CleatDeploy.Workers.DeployWorkerTest do
     scope = TenancyFixtures.scope_fixture()
     server = TenancyFixtures.server_fixture(scope)
     app = TenancyFixtures.app_fixture(scope, server)
-    %{app: app}
+    %{scope: scope, server: server, app: app}
   end
 
   test "marks deployment successful when runner succeeds", %{app: app} do
@@ -80,5 +80,33 @@ defmodule CleatDeploy.Workers.DeployWorkerTest do
 
     second = Deployments.get_deployment!(second.id)
     assert second.status == :queued
+  end
+
+  test "deploys a second app while another is running on the same server", %{
+    scope: scope,
+    server: server,
+    app: app
+  } do
+    other =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "other-parallel",
+        name: "Other Parallel",
+        github_repo: "owner/other-parallel",
+        host: "other-parallel.example.com"
+      })
+
+    expect(RunnerMock, :deploy, fn deployment ->
+      assert deployment.status == :running
+      {:ok, "deploy ok"}
+    end)
+
+    {:ok, first} = Deployments.create_deployment(app, %{git_sha: "first"})
+    {:ok, _} = Deployments.mark_running(first)
+
+    {:ok, second} = Deployments.create_deployment(other, %{git_sha: "second"})
+    assert :ok = perform_job(DeployWorker, %{"deployment_id" => second.id})
+
+    second = Deployments.get_deployment!(second.id)
+    assert second.status == :success
   end
 end
