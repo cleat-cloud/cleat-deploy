@@ -231,6 +231,14 @@ defmodule CleatDeploy.AppsTest do
       assert App.data_dir(updated) == "#{updated.release_path}/data"
     end
 
+    test "updates indexable", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{runtime: "static"})
+      refute app.indexable
+
+      assert {:ok, updated} = Apps.update_app_settings(scope, app, %{"indexable" => true})
+      assert updated.indexable
+    end
+
     test "rejects an unknown runtime", %{scope: scope, server: server} do
       app = TenancyFixtures.app_fixture(scope, server)
 

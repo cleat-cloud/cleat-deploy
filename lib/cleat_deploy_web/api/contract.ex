@@ -10,7 +10,7 @@ defmodule CleatDeployWeb.Api.Contract do
   @resources %{
     "app" => ~w(
       id name slug github_repo branch host port systemd_unit release_path data_dir
-      auto_deploy idle_shutdown_enabled units addons runtime runtime_apt_packages server inserted_at
+      auto_deploy idle_shutdown_enabled indexable units addons runtime runtime_apt_packages server inserted_at
     ),
     "server" => ~w(
       id name host_ip ssh_user region provider deploy_mode instance_status

@@ -75,6 +75,8 @@ defmodule CleatDeployWeb.AppLive.Layout do
       )
       |> assign(
         can_hibernate?: assigns.app.runtime != "static",
+        static?: assigns.app.runtime == "static",
+        indexable?: assigns.app.indexable == true,
         hibernated?: hibernated?(assigns.memory),
         idle_on?: assigns.app.idle_shutdown_enabled,
         idle_hint: idle_hint(assigns),
@@ -149,6 +151,23 @@ defmodule CleatDeployWeb.AppLive.Layout do
             ]}
           >
             <.icon name="hero-moon" class="size-3" /> auto sleep {if @idle_on?, do: "on", else: "off"}
+          </button>
+          <button
+            :if={@static?}
+            id="app-indexable-toggle"
+            type="button"
+            phx-click="toggle_indexable"
+            data-state={if @indexable?, do: "on", else: "off"}
+            title="Google indexing. Takes effect on the next deploy."
+            class={[
+              "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wide uppercase transition-colors",
+              @indexable? && "border-hd-green/50 bg-hd-green/10 text-hd-green",
+              !@indexable? &&
+                "border-hd-border bg-hd-card text-hd-muted hover:border-hd-orange/40 hover:text-hd-text"
+            ]}
+          >
+            <.icon name="hero-magnifying-glass" class="size-3" />
+            indexing {if @indexable?, do: "on", else: "off"}
           </button>
           <button
             :if={@app.github_repo not in [nil, ""]}

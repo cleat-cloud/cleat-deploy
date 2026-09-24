@@ -19,6 +19,7 @@ defmodule CleatDeploy.Apps.App do
     field :webhook_secret, :string
     field :auto_deploy, :boolean, default: true
     field :idle_shutdown_enabled, :boolean, default: false
+    field :indexable, :boolean, default: false
     field :deploy_manifest, :map, default: %{}
     field :runtime, :string, default: "phoenix"
     field :runtime_apt_packages, {:array, :string}, default: []
@@ -45,6 +46,7 @@ defmodule CleatDeploy.Apps.App do
       :webhook_secret,
       :auto_deploy,
       :idle_shutdown_enabled,
+      :indexable,
       :runtime,
       :runtime_apt_packages,
       :runtime_packages_text,
@@ -77,7 +79,7 @@ defmodule CleatDeploy.Apps.App do
 
   @doc """
   Changeset for deploy settings editable after creation: branch, auto-deploy,
-  host, port, repo and runtime.
+  idle shutdown, indexing, host, port, repo and runtime.
 
   Changing the runtime re-derives the systemd unit and, for non-phoenix
   runtimes, the data dir default (which depends on the release path), so an app
@@ -87,7 +89,16 @@ defmodule CleatDeploy.Apps.App do
     app
     |> cast(
       attrs,
-      [:branch, :auto_deploy, :idle_shutdown_enabled, :host, :port, :github_repo, :runtime],
+      [
+        :branch,
+        :auto_deploy,
+        :idle_shutdown_enabled,
+        :indexable,
+        :host,
+        :port,
+        :github_repo,
+        :runtime
+      ],
       empty_values: []
     )
     |> update_change(:host, &normalize_host/1)

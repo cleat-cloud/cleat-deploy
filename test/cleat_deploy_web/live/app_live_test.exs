@@ -1071,6 +1071,37 @@ defmodule CleatDeployWeb.AppLiveTest do
     refute Apps.get_app!(scope, app.id).idle_shutdown_enabled
   end
 
+  test "toggles search indexing from the hero of a static app", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "drop-site",
+        host: "drop-site.example.com",
+        runtime: "static"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+
+    refute has_element?(view, "#app-idle-toggle")
+    assert has_element?(view, "#app-indexable-toggle[data-state=off]")
+    refute Apps.get_app!(scope, app.id).indexable
+
+    html = view |> element("#app-indexable-toggle") |> render_click()
+
+    assert html =~ "Indexing on"
+    assert has_element?(view, "#app-indexable-toggle[data-state=on]")
+    assert Apps.get_app!(scope, app.id).indexable
+
+    html = view |> element("#app-indexable-toggle") |> render_click()
+
+    assert html =~ "Indexing off"
+    assert has_element?(view, "#app-indexable-toggle[data-state=off]")
+    refute Apps.get_app!(scope, app.id).indexable
+  end
+
   test "hibernates and wakes the app from the hero", %{conn: conn, scope: scope, server: server} do
     app =
       TenancyFixtures.app_fixture(scope, server, %{slug: "sleeper", host: "sleeper.example.com"})
