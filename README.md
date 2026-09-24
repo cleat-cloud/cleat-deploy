@@ -4,7 +4,7 @@ Self-hosted PaaS control panel. Deploy **Phoenix/Elixir**, **Go**, **Node (Next.
 
 Formerly Phoenix PaaS. OTP app: `cleat_deploy`.
 
-Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and watch builds in a live terminal. Pair it with the [`cleat` CLI](https://github.com/puppe1990/cleat-cli).
+Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and watch builds in a live terminal. Pair it with the [`cleat` CLI](https://github.com/cleat-cloud/cleat-cli).
 
 ![Cleat dashboard — Trip Planner deployed on Lightsail](docs/images/dashboard.jpg)
 
@@ -19,7 +19,7 @@ Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and w
 - **GitHub webhooks** — HMAC-verified `POST /webhooks/github`
 - **Oban queue** — background deploy worker with Mox-tested runner behaviour
 - **SSH deploys** — clone, build on the VM, migrate, restart systemd
-- **CLI** — [`cleat`](https://github.com/puppe1990/cleat-cli) for servers, apps, env vars, deploys and log streaming
+- **CLI** — [`cleat`](https://github.com/cleat-cloud/cleat-cli) for servers, apps, env vars, deploys and log streaming
 
 ## Requirements
 
@@ -29,7 +29,7 @@ Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and w
 ## Quick start
 
 ```bash
-git clone https://github.com/puppe1990/cleat-deploy.git
+git clone https://github.com/cleat-cloud/cleat-deploy.git
 cd cleat-deploy
 mix setup
 mix phx.server
