@@ -11,6 +11,21 @@ defmodule CleatDeploy.AppsTest do
     %{scope: scope, server: server}
   end
 
+  describe "webhook_secret" do
+    test "is stored encrypted and loads as plaintext", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server)
+      plaintext = app.webhook_secret
+
+      assert is_binary(plaintext) and plaintext != ""
+
+      %{rows: [[raw]]} =
+        CleatDeploy.Repo.query!("SELECT webhook_secret FROM apps WHERE id = ?", [app.id])
+
+      refute raw == plaintext
+      assert Apps.get_app!(scope, app.id).webhook_secret == plaintext
+    end
+  end
+
   describe "change_app/2" do
     test "does not set deploy defaults when slug is missing" do
       changeset = Apps.change_app(%CleatDeploy.Apps.App{})
