@@ -14,7 +14,8 @@ defmodule CleatDeployWeb.AppLive.Index do
       |> assign(:servers, Servers.list_servers(socket.assigns.current_scope))
       |> assign(:apps_list, [])
       |> assign(:apps_filtered?, false)
-      |> assign(:apps_page_ids, nil)
+      |> assign(:apps_memory_ids, nil)
+      |> assign(:apps_memory_apps, [])
       |> assign(:app_memory, %{})
       |> assign(:memory_ref, nil)
       |> assign(:apps_query, "")
@@ -286,7 +287,7 @@ defmodule CleatDeployWeb.AppLive.Index do
   @impl true
   def handle_info(:load_app_memory, socket) do
     ref = make_ref()
-    {:ok, _pid} = RuntimeMemory.probe_async(self(), ref, socket.assigns.apps_list)
+    {:ok, _pid} = RuntimeMemory.probe_async(self(), ref, socket.assigns.apps_memory_apps)
 
     {:noreply, assign(socket, :memory_ref, ref)}
   end

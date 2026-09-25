@@ -103,55 +103,94 @@ defmodule CleatDeployWeb.AppLive.Index.Listing do
     do: "App registered — webhook not configured (#{message})"
 
   def restream_apps(socket) do
-    page =
-      Apps.page_apps(socket.assigns.current_scope,
-        page: socket.assigns.apps_page,
-        page_size: @page_size,
-        query: socket.assigns.apps_query,
-        runtime: socket.assigns.apps_runtime,
-        idle: socket.assigns.apps_idle,
-        sort: socket.assigns.apps_sort,
-        dir: socket.assigns.apps_sort_dir
-      )
-
     memory = socket.assigns.app_memory
+    state = socket.assigns.apps_state
+    sort = socket.assigns.apps_sort
+    dir = socket.assigns.apps_sort_dir
 
-    entries =
-      page.entries
-      |> Enum.filter(&matches_state?(&1, memory, socket.assigns.apps_state))
-      |> maybe_metric_sort(socket.assigns.apps_sort, socket.assigns.apps_sort_dir, memory)
+    # Schema columns sort and paginate in SQL. RAM/CPU/disk/status only exist at
+    # runtime, so they rank the whole filtered set in memory and paginate after.
+    {entries, total, total_pages, page, probe_apps} =
+      if metric_sort?(sort) do
+        ranked =
+          socket.assigns.current_scope
+          |> Apps.filtered_apps(filter_opts(socket))
+          |> maybe_metric_sort(sort, dir, memory)
 
-    total =
-      if socket.assigns.apps_state == :all, do: page.total, else: length(entries)
+        visible = Enum.filter(ranked, &matches_state?(&1, memory, state))
 
-    total_pages =
-      if socket.assigns.apps_state == :all,
-        do: page.total_pages,
-        else: max(div(total + @page_size - 1, @page_size), 1)
+        total = length(visible)
+        total_pages = max(div(total + @page_size - 1, @page_size), 1)
+        page = socket.assigns.apps_page |> max(1) |> min(total_pages)
+        offset = (page - 1) * @page_size
 
-    ids = Enum.map(entries, & &1.id)
+        {Enum.slice(visible, offset, @page_size), total, total_pages, page, ranked}
+      else
+        page = Apps.page_apps(socket.assigns.current_scope, page_opts(socket))
+        entries = Enum.filter(page.entries, &matches_state?(&1, memory, state))
+
+        total = if state == :all, do: page.total, else: length(entries)
+
+        total_pages =
+          if state == :all,
+            do: page.total_pages,
+            else: max(div(total + @page_size - 1, @page_size), 1)
+
+        {entries, total, total_pages, page.page, page.entries}
+      end
+
+    probe_ids = Enum.map(probe_apps, & &1.id)
 
     filtered? =
       socket.assigns.apps_query not in [nil, ""] or
         socket.assigns.apps_runtime != :all or
         socket.assigns.apps_idle != :all or
-        socket.assigns.apps_state != :all
+        state != :all
 
     socket =
       socket
       |> assign(:apps_list, entries)
       |> assign(:apps_filtered?, filtered?)
-      |> assign(:apps_page, page.page)
+      |> assign(:apps_page, page)
       |> assign(:apps_total_pages, total_pages)
       |> assign(:apps_visible_count, total)
+      |> assign(:apps_memory_apps, probe_apps)
       |> stream(:apps, entries, reset: true)
 
-    if connected?(socket) and ids != [] and socket.assigns.apps_page_ids != ids do
+    if connected?(socket) and reload_memory?(socket.assigns.apps_memory_ids, probe_ids) do
       send(self(), :load_app_memory)
     end
 
-    assign(socket, :apps_page_ids, ids)
+    assign(socket, :apps_memory_ids, probe_ids)
   end
+
+  defp filter_opts(socket) do
+    [
+      query: socket.assigns.apps_query,
+      runtime: socket.assigns.apps_runtime,
+      idle: socket.assigns.apps_idle
+    ]
+  end
+
+  defp page_opts(socket) do
+    filter_opts(socket) ++
+      [
+        page: socket.assigns.apps_page,
+        page_size: @page_size,
+        sort: socket.assigns.apps_sort,
+        dir: socket.assigns.apps_sort_dir
+      ]
+  end
+
+  # Probe only when the set of apps we need metrics for changes (mount,
+  # pagination, filter, switching to a metric sort). Reordering the same apps
+  # must not re-trigger the probe: each disk `du` result would otherwise flip the
+  # order and re-trigger the next probe forever.
+  def reload_memory?(loaded_ids, ids) when is_list(ids) do
+    ids != [] and MapSet.new(loaded_ids || []) != MapSet.new(ids)
+  end
+
+  def metric_sort?(field), do: field in [:ram, :cpu, :disk, :state]
 
   def maybe_metric_sort(apps, field, dir, memory)
       when field in [:ram, :cpu, :disk, :state] do

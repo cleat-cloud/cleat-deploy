@@ -37,11 +37,8 @@ defmodule CleatDeploy.Apps do
     dir = Keyword.get(opts, :dir, :asc)
 
     filtered =
-      from(a in App, as: :app, where: a.tenant_id == ^tenant.id)
-      |> join(:inner, [app: a], s in assoc(a, :server), as: :server)
-      |> filter_runtime(Keyword.get(opts, :runtime, :all))
-      |> filter_idle(Keyword.get(opts, :idle, :all))
-      |> filter_query(Keyword.get(opts, :query, ""))
+      tenant.id
+      |> filtered_query(opts)
       |> sort_apps(sort, dir)
 
     total = Repo.aggregate(exclude(filtered, :order_by), :count, :id)
@@ -57,6 +54,29 @@ defmodule CleatDeploy.Apps do
       |> Repo.all()
 
     %{entries: entries, page: page, page_size: page_size, total: total, total_pages: total_pages}
+  end
+
+  @doc """
+  Every app matching the filters, name-ordered and with server preloaded.
+
+  RAM, CPU, disk and On/Off only exist at runtime (async SSH probe), so they
+  cannot be sorted in SQL: the index ranks the whole filtered set and paginates
+  afterwards.
+  """
+  def filtered_apps(%Scope{tenant: tenant}, opts \\ []) do
+    tenant.id
+    |> filtered_query(opts)
+    |> order_by([app: a], asc: a.name)
+    |> preload([app: a, server: s], server: s)
+    |> Repo.all()
+  end
+
+  defp filtered_query(tenant_id, opts) do
+    from(a in App, as: :app, where: a.tenant_id == ^tenant_id)
+    |> join(:inner, [app: a], s in assoc(a, :server), as: :server)
+    |> filter_runtime(Keyword.get(opts, :runtime, :all))
+    |> filter_idle(Keyword.get(opts, :idle, :all))
+    |> filter_query(Keyword.get(opts, :query, ""))
   end
 
   defp filter_runtime(query, :all), do: query
