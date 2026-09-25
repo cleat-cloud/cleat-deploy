@@ -57,7 +57,7 @@ config :cleat_deploy, Oban,
     CleatDeploy.Oban.SafeStager,
     {Oban.Plugins.Cron,
      crontab: [
-       {"*/15 * * * *", CleatDeploy.Workers.AutoDeployHealthWorker},
+       {"* * * * *", CleatDeploy.Workers.AutoDeployHealthWorker},
        {"*/5 * * * *", CleatDeploy.Workers.IdleShutdownWorker}
      ]}
   ],

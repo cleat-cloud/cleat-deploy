@@ -29,6 +29,7 @@ defmodule CleatDeploy.DataCase do
 
   setup tags do
     CleatDeploy.DataCase.setup_sandbox(tags)
+    Mox.stub(CleatDeploy.Deploy.RunnerMock, :interrupt, fn _app, _deployment -> :ok end)
     :ok
   end
 

@@ -12,7 +12,7 @@ defmodule CleatDeploy.Deployments do
   @deploy_worker "CleatDeploy.Workers.DeployWorker"
   @pending_job_states ~w(available scheduled retryable)
   @live_job_states ~w(available scheduled executing retryable)
-  @cancelled_message "Cancelled by operator (a build already running on the server is not interrupted)"
+  @cancelled_message "Cancelled by operator"
   @orphaned_message "Deployment orphaned — no deploy worker is running it (auto-recovery)"
 
   def topic(app_id) when is_integer(app_id), do: "deployments:#{app_id}"
@@ -389,7 +389,8 @@ defmodule CleatDeploy.Deployments do
   queued one when nothing is running yet.
 
   The deployment is marked failed and its pending Oban job is cancelled so it
-  never starts. A build already running on the server is not interrupted.
+  never starts. A build already running on the server is interrupted via the
+  deploy runner.
   """
   def cancel(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app)
       when tenant_id == tenant.id do
@@ -403,10 +404,20 @@ defmodule CleatDeploy.Deployments do
       nil ->
         {:error, :no_active_deployment}
 
+      %Deployment{status: :running} = deployment ->
+        _ = interrupt_running(app, deployment)
+        cancel_pending_jobs(deployment.id)
+        mark_failed(deployment, @cancelled_message)
+
       %Deployment{} = deployment ->
         cancel_pending_jobs(deployment.id)
         mark_failed(deployment, @cancelled_message)
     end
+  end
+
+  defp interrupt_running(app, deployment) do
+    runner = Application.get_env(:cleat_deploy, :deploy_runner, CleatDeploy.Deploy.FakeRunner)
+    runner.interrupt(app, deployment)
   end
 
   @doc """

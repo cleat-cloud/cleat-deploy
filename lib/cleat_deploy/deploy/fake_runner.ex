@@ -3,6 +3,9 @@ defmodule CleatDeploy.Deploy.FakeRunner do
   @behaviour CleatDeploy.Deploy.Runner
 
   @impl true
+  def interrupt(_app, _deployment), do: :ok
+
+  @impl true
   def deploy(deployment) do
     repo = deployment.app.github_repo
     host = deployment.app.host
