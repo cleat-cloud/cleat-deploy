@@ -26,6 +26,54 @@ defmodule CleatDeploy.AppsTest do
     end
   end
 
+  describe "page_apps/2" do
+    test "returns one page and the matching total", %{scope: scope, server: server} do
+      for n <- 1..12 do
+        TenancyFixtures.app_fixture(scope, server, %{
+          name: "App #{String.pad_leading(Integer.to_string(n), 2, "0")}",
+          slug: "app-#{n}",
+          host: "app-#{n}.example.com"
+        })
+      end
+
+      page = Apps.page_apps(scope, page: 1, page_size: 10)
+
+      assert page.total == 12
+      assert page.page == 1
+      assert page.page_size == 10
+      assert length(page.entries) == 10
+      assert hd(page.entries).name == "App 01"
+      assert hd(page.entries).server.id == server.id
+
+      page2 = Apps.page_apps(scope, page: 2, page_size: 10)
+      assert Enum.map(page2.entries, & &1.name) == ["App 11", "App 12"]
+    end
+
+    test "filters by query, runtime and idle in SQL", %{scope: scope, server: server} do
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Vexo",
+        slug: "vexo",
+        runtime: "golang",
+        idle_shutdown_enabled: true
+      })
+
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Atelie",
+        slug: "atelie",
+        runtime: "phoenix"
+      })
+
+      assert %{total: 1, entries: [%{slug: "vexo"}]} =
+               Apps.page_apps(scope, query: "vexo")
+
+      assert %{total: 1, entries: [%{slug: "vexo"}]} =
+               Apps.page_apps(scope, runtime: :golang)
+
+      assert %{total: 1, entries: [%{slug: "vexo"}]} =
+               Apps.page_apps(scope, idle: :on)
+    end
+  end
+
   describe "change_app/2" do
     test "does not set deploy defaults when slug is missing" do
       changeset = Apps.change_app(%CleatDeploy.Apps.App{})

@@ -8,14 +8,14 @@ defmodule CleatDeployWeb.AppLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    apps = Apps.list_apps(socket.assigns.current_scope)
-
     socket =
       socket
       |> assign(:page_title, "Apps")
       |> assign(:active_tab, :apps)
       |> assign(:servers, Servers.list_servers(socket.assigns.current_scope))
-      |> assign(:apps_list, apps)
+      |> assign(:apps_list, [])
+      |> assign(:apps_filtered?, false)
+      |> assign(:apps_page_ids, nil)
       |> assign(:app_memory, %{})
       |> assign(:memory_ref, nil)
       |> assign(:apps_query, "")
@@ -29,7 +29,7 @@ defmodule CleatDeployWeb.AppLive.Index do
       |> assign(:pending_hibernate, nil)
       |> assign(:delete_confirm, "")
       |> assign(:delete_form, to_form(%{"confirm" => ""}, as: :delete))
-      |> restream_apps(apps, %{})
+      |> restream_apps()
 
     socket =
       if connected?(socket) do
@@ -220,10 +220,6 @@ defmodule CleatDeployWeb.AppLive.Index do
             {:noreply,
              socket
              |> assign(:pending_delete, nil)
-             |> assign(
-               :apps_list,
-               Enum.reject(socket.assigns.apps_list, &(&1.id == app.id))
-             )
              |> assign(:app_count, max(socket.assigns.app_count - 1, 0))
              |> restream_apps()
              |> put_flash(:info, "#{app.name} was deleted")}
@@ -267,13 +263,8 @@ defmodule CleatDeployWeb.AppLive.Index do
 
     case Apps.create_app(socket.assigns.current_scope, app_params) do
       {:ok, app, webhook_status} ->
-        app = Apps.get_app!(socket.assigns.current_scope, app.id)
-
-        apps_list = [app | socket.assigns.apps_list]
-
         {:noreply,
          socket
-         |> assign(:apps_list, apps_list)
          |> assign(:apps_page, 1)
          |> restream_apps()
          |> assign(:app_count, socket.assigns.app_count + 1)
@@ -297,7 +288,7 @@ defmodule CleatDeployWeb.AppLive.Index do
     if ref == socket.assigns.memory_ref do
       {:noreply,
        socket
-       |> assign(:app_memory, memory)
+       |> assign(:app_memory, Map.merge(socket.assigns.app_memory, memory))
        |> restream_apps()}
     else
       {:noreply, socket}
@@ -676,7 +667,7 @@ defmodule CleatDeployWeb.AppLive.Index do
                 </tr>
               </thead>
               <tbody id="apps-list" phx-update="stream">
-                <tr :if={@apps_list == []} id="apps-empty">
+                <tr :if={@apps_list == [] and not @apps_filtered?} id="apps-empty">
                   <td colspan="10" class="py-8 text-center text-hd-muted">
                     <div class="space-y-3">
                       <p class="font-mono text-xs">No applications configured.</p>
@@ -691,7 +682,7 @@ defmodule CleatDeployWeb.AppLive.Index do
                   </td>
                 </tr>
                 <tr
-                  :if={@apps_list != [] and @apps_visible_count == 0}
+                  :if={@apps_list == [] and @apps_filtered?}
                   id="apps-filter-empty"
                 >
                   <td colspan="10" class="py-8 text-center text-hd-muted">
@@ -1110,35 +1101,62 @@ defmodule CleatDeployWeb.AppLive.Index do
     do: "App registered — webhook not configured (#{message})"
 
   defp restream_apps(socket) do
-    restream_apps(socket, socket.assigns.apps_list, socket.assigns.app_memory)
+    page =
+      Apps.page_apps(socket.assigns.current_scope,
+        page: socket.assigns.apps_page,
+        page_size: @page_size,
+        query: socket.assigns.apps_query,
+        runtime: socket.assigns.apps_runtime,
+        idle: socket.assigns.apps_idle,
+        sort: socket.assigns.apps_sort,
+        dir: socket.assigns.apps_sort_dir
+      )
+
+    memory = socket.assigns.app_memory
+
+    entries =
+      page.entries
+      |> Enum.filter(&matches_state?(&1, memory, socket.assigns.apps_state))
+      |> maybe_metric_sort(socket.assigns.apps_sort, socket.assigns.apps_sort_dir, memory)
+
+    total =
+      if socket.assigns.apps_state == :all, do: page.total, else: length(entries)
+
+    total_pages =
+      if socket.assigns.apps_state == :all,
+        do: page.total_pages,
+        else: max(div(total + @page_size - 1, @page_size), 1)
+
+    ids = Enum.map(entries, & &1.id)
+
+    filtered? =
+      socket.assigns.apps_query not in [nil, ""] or
+        socket.assigns.apps_runtime != :all or
+        socket.assigns.apps_idle != :all or
+        socket.assigns.apps_state != :all
+
+    socket =
+      socket
+      |> assign(:apps_list, entries)
+      |> assign(:apps_filtered?, filtered?)
+      |> assign(:apps_page, page.page)
+      |> assign(:apps_total_pages, total_pages)
+      |> assign(:apps_visible_count, total)
+      |> stream(:apps, entries, reset: true)
+
+    if connected?(socket) and ids != [] and socket.assigns.apps_page_ids != ids do
+      send(self(), :load_app_memory)
+    end
+
+    assign(socket, :apps_page_ids, ids)
   end
 
-  defp restream_apps(socket, apps, memory) do
-    visible = visible_apps(apps, socket, memory)
-    total = length(visible)
-    total_pages = max(div(total + @page_size - 1, @page_size), 1)
-    page = min(max(socket.assigns.apps_page, 1), total_pages)
-    page_entries = Enum.slice(visible, (page - 1) * @page_size, @page_size)
-
-    socket
-    |> assign(:apps_page, page)
-    |> assign(:apps_total_pages, total_pages)
-    |> assign(:apps_visible_count, total)
-    |> stream(:apps, page_entries, reset: true)
+  defp maybe_metric_sort(apps, field, dir, memory)
+       when field in [:ram, :cpu, :disk, :state] do
+    sort_apps(apps, field, dir, memory)
   end
 
-  defp visible_apps(apps, socket, memory) do
-    apps
-    |> Enum.filter(&matches_runtime?(&1, socket.assigns.apps_runtime))
-    |> Enum.filter(&matches_idle?(&1, socket.assigns.apps_idle))
-    |> Enum.filter(&matches_state?(&1, memory, socket.assigns.apps_state))
-    |> Enum.filter(&matches_query?(&1, socket.assigns.apps_query))
-    |> sort_apps(socket.assigns.apps_sort, socket.assigns.apps_sort_dir, memory)
-  end
-
-  defp matches_idle?(_app, :all), do: true
-  defp matches_idle?(app, :on), do: app.idle_shutdown_enabled
-  defp matches_idle?(app, :off), do: not app.idle_shutdown_enabled
+  defp maybe_metric_sort(apps, _field, _dir, _memory), do: apps
 
   defp matches_state?(_app, _memory, :all), do: true
 
@@ -1152,29 +1170,6 @@ defmodule CleatDeployWeb.AppLive.Index do
   defp app_state(_app, %{active?: true}), do: :on
   defp app_state(_app, %{active?: false}), do: :off
   defp app_state(_app, _memory), do: :unknown
-
-  defp matches_runtime?(_app, :all), do: true
-  defp matches_runtime?(%App{runtime: "golang"}, :golang), do: true
-  defp matches_runtime?(%App{runtime: "node"}, :node), do: true
-  defp matches_runtime?(%App{runtime: "static"}, :static), do: true
-  defp matches_runtime?(%App{runtime: "rails"}, :rails), do: true
-  defp matches_runtime?(%App{runtime: "rust"}, :rust), do: true
-
-  defp matches_runtime?(%App{runtime: runtime}, :phoenix)
-       when runtime not in ["golang", "node", "static", "rails", "rust"],
-       do: true
-
-  defp matches_runtime?(_app, _runtime), do: false
-
-  defp matches_query?(_app, query) when query in [nil, ""], do: true
-
-  defp matches_query?(app, query) do
-    needle = query |> to_string() |> String.downcase() |> String.trim()
-
-    [app.name, app.host, app.slug, App.main_language(app), app.server && app.server.name]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.any?(fn value -> String.contains?(String.downcase(value), needle) end)
-  end
 
   defp sort_apps(apps, field, dir, memory) do
     {present, missing} = Enum.split_with(apps, &(sort_value(&1, field, memory) != :missing))
