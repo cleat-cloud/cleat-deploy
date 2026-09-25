@@ -132,4 +132,49 @@ defmodule CleatDeployWeb.UserRegistrationControllerTest do
       assert response =~ ~s(value="#{email}")
     end
   end
+
+  describe "when registration is disabled" do
+    setup do
+      previous = Application.get_env(:cleat_deploy, :allow_registration)
+      Application.put_env(:cleat_deploy, :allow_registration, false)
+
+      on_exit(fn ->
+        Application.put_env(:cleat_deploy, :allow_registration, previous)
+      end)
+
+      :ok
+    end
+
+    test "GET /users/register redirects to log in", %{conn: conn} do
+      conn = get(conn, ~p"/users/register")
+
+      assert redirected_to(conn) == ~p"/users/log-in"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "disabled"
+    end
+
+    test "POST /users/register does not create a user or tenant", %{conn: conn} do
+      alias CleatDeploy.Repo
+      alias CleatDeploy.Accounts.{Tenant, User}
+
+      email = unique_user_email()
+      password = valid_user_password()
+      users_before = Repo.aggregate(User, :count)
+      tenants_before = Repo.aggregate(Tenant, :count)
+
+      conn =
+        post(conn, ~p"/users/register", %{
+          "user" => %{
+            "email" => email,
+            "password" => password,
+            "password_confirmation" => password
+          }
+        })
+
+      assert redirected_to(conn) == ~p"/users/log-in"
+      refute get_session(conn, :user_token)
+      assert Repo.aggregate(User, :count) == users_before
+      assert Repo.aggregate(Tenant, :count) == tenants_before
+      refute CleatDeploy.Accounts.get_user_by_email(email)
+    end
+  end
 end

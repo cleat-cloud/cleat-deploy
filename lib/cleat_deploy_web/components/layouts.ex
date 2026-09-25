@@ -77,7 +77,7 @@ defmodule CleatDeployWeb.Layouts do
                   Log in
                 </.link>
                 <.link
-                  :if={is_nil(@current_scope)}
+                  :if={is_nil(@current_scope) and CleatDeploy.Accounts.registration_allowed?()}
                   href={~p"/users/register"}
                   class="paas-btn-primary px-3 py-1.5"
                 >

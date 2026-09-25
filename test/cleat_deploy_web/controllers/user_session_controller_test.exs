@@ -24,6 +24,21 @@ defmodule CleatDeployWeb.UserSessionControllerTest do
       assert response =~ ~s(id="theme-toggle-auth")
     end
 
+    test "hides signup when registration is disabled", %{conn: conn} do
+      previous = Application.get_env(:cleat_deploy, :allow_registration)
+      Application.put_env(:cleat_deploy, :allow_registration, false)
+
+      on_exit(fn ->
+        Application.put_env(:cleat_deploy, :allow_registration, previous)
+      end)
+
+      conn = get(conn, ~p"/users/log-in")
+      response = html_response(conn, 200)
+
+      refute response =~ ~p"/users/register"
+      refute response =~ ~s(id="signup-link")
+    end
+
     test "clears stale welcome flash when session expired", %{conn: conn} do
       conn =
         conn

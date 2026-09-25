@@ -33,6 +33,9 @@ config :cleat_deploy, :runtime_control_runner, CleatDeploy.Apps.RuntimeControlSs
 
 config :cleat_deploy, :auto_deploy_health_on_boot, true
 
+# Public /users/register. Production overrides this in runtime.exs.
+config :cleat_deploy, :allow_registration, true
+
 # Git-less "drop" uploads (CLEAT_DROPS_DIR / CLEAT_DROP_MAX_BYTES override at runtime).
 config :cleat_deploy, :drop_max_bytes, 52_428_800
 

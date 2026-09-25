@@ -53,6 +53,10 @@ if config_env() != :test do
 end
 
 if config_env() == :prod do
+  config :cleat_deploy,
+         :allow_registration,
+         System.get_env("ALLOW_REGISTRATION", "false") in ~w(1 true TRUE)
+
   config :cleat_deploy, CleatDeploy.Repo, CleatDeploy.Config.Turso.repo_config()
 
   cloak_key =

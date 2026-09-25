@@ -98,7 +98,13 @@ defmodule CleatDeployWeb.FeaturesLive do
           </.link>
 
           <div :if={is_nil(@current_scope)} class="flex items-center gap-2">
-            <.link href={~p"/users/register"} class="paas-btn-primary">Create account</.link>
+            <.link
+              :if={CleatDeploy.Accounts.registration_allowed?()}
+              href={~p"/users/register"}
+              class="paas-btn-primary"
+            >
+              Create account
+            </.link>
             <.link href={~p"/users/log-in"} class="paas-btn-secondary">Log in</.link>
           </div>
         </div>

@@ -225,6 +225,21 @@ defmodule CleatDeployWeb.UserAuth do
     end
   end
 
+  @doc """
+  Plug for `/users/register`. Production keeps signup off unless
+  `ALLOW_REGISTRATION` is set.
+  """
+  def require_registration_enabled(conn, _opts) do
+    if Accounts.registration_allowed?() do
+      conn
+    else
+      conn
+      |> put_flash(:error, "Registration is disabled.")
+      |> redirect(to: ~p"/users/log-in")
+      |> halt()
+    end
+  end
+
   defp signed_in_path(_conn), do: ~p"/"
 
   @doc """

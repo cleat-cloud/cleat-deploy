@@ -129,7 +129,7 @@ defmodule CleatDeployWeb.Router do
   ## Authentication routes
 
   scope "/", CleatDeployWeb do
-    pipe_through [:browser, :redirect_if_user_is_authenticated]
+    pipe_through [:browser, :redirect_if_user_is_authenticated, :require_registration_enabled]
 
     get "/users/register", UserRegistrationController, :new
     post "/users/register", UserRegistrationController, :create

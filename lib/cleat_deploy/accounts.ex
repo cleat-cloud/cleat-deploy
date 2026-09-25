@@ -91,6 +91,14 @@ defmodule CleatDeploy.Accounts do
   ## User registration
 
   @doc """
+  Public self-serve signup. Default true in dev/test; production reads
+  `ALLOW_REGISTRATION` at runtime (off unless `1`/`true`/`TRUE`).
+  """
+  def registration_allowed? do
+    Application.get_env(:cleat_deploy, :allow_registration, false)
+  end
+
+  @doc """
   Registers a user.
 
   ## Examples
