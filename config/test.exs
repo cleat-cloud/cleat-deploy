@@ -15,7 +15,9 @@ config :bcrypt_elixir, :log_rounds, 1
 config :cleat_deploy, CleatDeploy.Repo,
   database: Path.expand("../cleat_deploy_test.db", __DIR__),
   pool_size: 5,
-  pool: Ecto.Adapters.SQL.Sandbox
+  pool: Ecto.Adapters.SQL.Sandbox,
+  busy_timeout: 10_000,
+  journal_mode: :wal
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
