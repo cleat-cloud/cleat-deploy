@@ -4,16 +4,18 @@
       <.header>
         Log in
         <:subtitle>
-          <%= if @current_scope do %>
-            You need to reauthenticate to perform sensitive actions on your account.
-          <% else %>
-            Don't have an account?
-            <.link
-              navigate={~p"/users/register"}
-              class="font-semibold text-hd-orange hover:underline"
-            >
-              Sign up
-            </.link>
+          <%= cond do %>
+            <% @current_scope -> %>
+              You need to reauthenticate to perform sensitive actions on your account.
+            <% CleatDeploy.Accounts.registration_allowed?() -> %>
+              Don't have an account?
+              <.link
+                navigate={~p"/users/register"}
+                class="font-semibold text-hd-orange hover:underline"
+              >
+                Sign up
+              </.link>
+            <% true -> %>
           <% end %>
         </:subtitle>
       </.header>
@@ -50,7 +52,10 @@
       </.button>
     </.form>
 
-    <div :if={!@current_scope} class="border-t border-hd-border pt-4">
+    <div
+      :if={!@current_scope and CleatDeploy.Accounts.registration_allowed?()}
+      class="border-t border-hd-border pt-4"
+    >
       <p class="mb-3 text-center text-xs text-hd-muted">New to Cleat?</p>
       <.link
         id="signup-link"

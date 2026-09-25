@@ -24,6 +24,20 @@ defmodule CleatDeployWeb.FeaturesLiveTest do
       assert has_element?(view, "#theme-toggle-landing")
     end
 
+    test "hides create-account when registration is disabled", %{conn: conn} do
+      previous = Application.get_env(:cleat_deploy, :allow_registration)
+      Application.put_env(:cleat_deploy, :allow_registration, false)
+
+      on_exit(fn ->
+        Application.put_env(:cleat_deploy, :allow_registration, previous)
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/features")
+
+      refute has_element?(view, ~s(#features-cta a[href="/users/register"]))
+      assert has_element?(view, ~s(#features-cta a[href="/users/log-in"]))
+    end
+
     test "links each feature to where it lives", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/features")
 
