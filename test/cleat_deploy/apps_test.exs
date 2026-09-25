@@ -89,11 +89,26 @@ defmodule CleatDeploy.AppsTest do
       assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/my_app"
     end
 
-    test "vexo uses vexo systemd unit and /opt/vexo" do
-      changeset = Apps.change_app(%CleatDeploy.Apps.App{}, %{slug: "vexo"})
+    test "phoenix defaults follow slug convention" do
+      changeset = Apps.change_app(%CleatDeploy.Apps.App{}, %{slug: "trip-planner"})
 
-      assert Ecto.Changeset.get_field(changeset, :systemd_unit) == "vexo"
-      assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/vexo"
+      assert Ecto.Changeset.get_field(changeset, :systemd_unit) == "phx-trip-planner"
+      assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/trip_planner"
+      assert Ecto.Changeset.get_field(changeset, :release_name) == "trip_planner"
+      assert App.release_name("trip-planner") == "trip_planner"
+      assert App.release_name("decor") == "decor"
+    end
+
+    test "stored release_name wins over slug convention" do
+      app = %App{
+        slug: "decor",
+        release_name: "festa_platform",
+        release_path: "/opt/festa_platform"
+      }
+
+      assert App.release_name(app) == "festa_platform"
+      assert App.deploy_config(app).release_name == "festa_platform"
+      assert App.deploy_config(app).release_path == "/opt/festa_platform"
     end
 
     test "golang runtime uses slug as unit and /opt/slug" do
@@ -163,17 +178,18 @@ defmodule CleatDeploy.AppsTest do
   describe "create_app/2" do
     test "persists app linked to server", %{scope: scope, server: server} do
       attrs = %{
-        name: "Trip Planner",
-        slug: "trip-planner",
-        github_repo: "puppe1990/trip-planner-ia-phx",
-        host: "trip.gestaobem.com",
+        name: "My App",
+        slug: "my-app",
+        github_repo: "owner/my-app",
+        host: "my-app.example.com",
         server_id: server.id
       }
 
       assert {:ok, app, _webhook_status} = Apps.create_app(scope, attrs)
       assert app.tenant_id == scope.tenant.id
-      assert app.systemd_unit == "trip_planner_ia"
-      assert app.release_path == "/opt/trip_planner_ia"
+      assert app.systemd_unit == "phx-my-app"
+      assert app.release_path == "/opt/my_app"
+      assert app.release_name == "my_app"
     end
 
     test "requires github_repo, host, and server_id", %{scope: scope, server: server} do

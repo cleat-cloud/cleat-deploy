@@ -2,7 +2,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
   use CleatDeployWeb, :live_view
 
   alias CleatDeploy.{Apps, Deployments, Settings}
-  alias CleatDeploy.Apps.{RuntimeControl, RuntimeMemory}
+  alias CleatDeploy.Apps.{App, RuntimeControl, RuntimeMemory}
   alias CleatDeploy.Deploy.RuntimePackages
   alias CleatDeployWeb.AppLive.{Layout, NewInstance}
 
@@ -31,7 +31,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
       |> assign(:history_page, 1)
       |> assign(:app_memory, nil)
       |> assign(:memory_ref, nil)
-      |> assign(:detail_tabs, Layout.detail_tabs(app.slug == "catalogo", runtime_packages(app)))
+      |> assign(:detail_tabs, Layout.detail_tabs(App.custom_domain?(app), runtime_packages(app)))
       |> NewInstance.assigns()
       |> refresh_deployments(nil, nil)
       |> schedule_poll()

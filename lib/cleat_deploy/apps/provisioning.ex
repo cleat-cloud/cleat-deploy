@@ -11,7 +11,10 @@ defmodule CleatDeploy.Apps.Provisioning do
       name: "Trip Planner",
       slug: "trip-planner",
       host: "trip.gestaobem.com",
-      port: 4000
+      port: 4000,
+      systemd_unit: "trip_planner_ia",
+      release_path: "/opt/trip_planner_ia",
+      release_name: "trip_planner_ia"
     },
     "puppe1990/rapid-tools" => %{
       name: "RapidTools",
@@ -52,6 +55,8 @@ defmodule CleatDeploy.Apps.Provisioning do
       port: 4000,
       systemd_unit: "catalog_platform",
       release_path: "/opt/catalog_platform",
+      release_name: "catalog_platform",
+      custom_domain: true,
       server_name: "catalogo-lightsail"
     },
     "puppe1990/vexo" => %{
@@ -239,6 +244,7 @@ defmodule CleatDeploy.Apps.Provisioning do
     attrs
     |> Map.put_new(:systemd_unit, App.default_systemd_unit(slug, runtime))
     |> Map.put_new(:release_path, App.default_release_path(slug, runtime))
+    |> Map.put_new(:release_name, App.release_name(slug))
   end
 
   defp put_deploy_defaults(attrs), do: attrs

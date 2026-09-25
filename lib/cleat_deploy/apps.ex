@@ -444,9 +444,18 @@ defmodule CleatDeploy.Apps do
   deploy set up.
   """
   def record_deploy_manifest(%App{} = app, summary) when is_map(summary) do
-    app
-    |> App.deploy_manifest_changeset(summary)
-    |> Repo.update()
+    changeset = App.deploy_manifest_changeset(app, summary)
+
+    changeset =
+      case summary[:release_name] || summary["release_name"] do
+        name when is_binary(name) and name != "" ->
+          Ecto.Changeset.put_change(changeset, :release_name, name)
+
+        _ ->
+          changeset
+      end
+
+    Repo.update(changeset)
   end
 
   # Changing an app's host provisions a new Caddy site but leaves the old one
