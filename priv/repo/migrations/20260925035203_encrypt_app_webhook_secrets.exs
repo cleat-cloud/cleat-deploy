@@ -1,18 +1,22 @@
 defmodule CleatDeploy.Repo.Migrations.EncryptAppWebhookSecrets do
   use Ecto.Migration
 
+  import Ecto.Query
+
   def up do
     with_vault(fn ->
-      {:ok, %{rows: rows}} = repo().query("SELECT id, webhook_secret FROM apps", [])
+      rows =
+        repo().all(from(a in "apps", select: %{id: a.id, webhook_secret: a.webhook_secret}))
 
-      Enum.each(rows, fn [id, secret] ->
+      Enum.each(rows, fn %{id: id, webhook_secret: secret} ->
         case encrypt_secret(secret) do
           {:ok, ^secret} ->
             :ok
 
           {:ok, ciphertext} ->
-            {:ok, _} =
-              repo().query("UPDATE apps SET webhook_secret = ? WHERE id = ?", [ciphertext, id])
+            repo().update_all(from(a in "apps", where: a.id == ^id),
+              set: [webhook_secret: ciphertext]
+            )
 
           :skip ->
             :ok
@@ -23,13 +27,15 @@ defmodule CleatDeploy.Repo.Migrations.EncryptAppWebhookSecrets do
 
   def down do
     with_vault(fn ->
-      {:ok, %{rows: rows}} = repo().query("SELECT id, webhook_secret FROM apps", [])
+      rows =
+        repo().all(from(a in "apps", select: %{id: a.id, webhook_secret: a.webhook_secret}))
 
-      Enum.each(rows, fn [id, secret] ->
+      Enum.each(rows, fn %{id: id, webhook_secret: secret} ->
         case decrypt_secret(secret) do
           {:ok, plaintext} ->
-            {:ok, _} =
-              repo().query("UPDATE apps SET webhook_secret = ? WHERE id = ?", [plaintext, id])
+            repo().update_all(from(a in "apps", where: a.id == ^id),
+              set: [webhook_secret: plaintext]
+            )
 
           :skip ->
             :ok
