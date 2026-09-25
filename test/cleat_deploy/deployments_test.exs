@@ -1,7 +1,10 @@
 defmodule CleatDeploy.DeploymentsTest do
   use CleatDeploy.DataCase
 
+  import Mox
+
   alias CleatDeploy.{Apps, Deployments}
+  alias CleatDeploy.Deploy.RunnerMock
   alias CleatDeploy.TenancyFixtures
 
   setup do
@@ -198,6 +201,44 @@ defmodule CleatDeploy.DeploymentsTest do
 
       assert {:error, :no_active_deployment} = Deployments.cancel(scope, app)
       assert Deployments.get_deployment!(deployment.id).status == :success
+    end
+
+    test "interrupts a running build and unblocks the next enqueue", %{scope: scope, app: app} do
+      {:ok, job} = Deployments.enqueue(scope, app, %{git_sha: "abcdef1running"})
+      [deployment] = Deployments.for_app(scope, app)
+      {:ok, _running} = Deployments.mark_running(deployment)
+
+      job
+      |> Ecto.Changeset.change(state: "executing", attempted_at: DateTime.utc_now())
+      |> CleatDeploy.Repo.update!()
+
+      parent = self()
+
+      stub(RunnerMock, :interrupt, fn interrupted_app, interrupted ->
+        send(parent, {:interrupted, interrupted_app.id, interrupted.id})
+        :ok
+      end)
+
+      assert {:ok, cancelled} = Deployments.cancel(scope, app)
+      assert cancelled.status == :failed
+      assert_received {:interrupted, app_id, deployment_id}
+      assert app_id == app.id
+      assert deployment_id == deployment.id
+      refute Deployments.deploying?(scope, app)
+
+      {:ok, _next_job} = Deployments.enqueue(scope, app, %{git_sha: "next-after-cancel"})
+      next = hd(Deployments.for_app(scope, app))
+      assert {:ok, claimed} = Deployments.claim_running(next)
+      assert claimed.status == :running
+    end
+  end
+
+  describe "oban cron" do
+    test "recovers orphaned deploys every minute" do
+      plugins = Application.get_env(:cleat_deploy, Oban)[:plugins]
+      {_mod, opts} = Enum.find(plugins, &match?({Oban.Plugins.Cron, _}, &1))
+
+      assert {"* * * * *", CleatDeploy.Workers.AutoDeployHealthWorker} in opts[:crontab]
     end
   end
 

@@ -11,6 +11,13 @@ defmodule CleatDeploy.Deploy.SshRunner do
   alias CleatDeploy.Deploy.Ssh
 
   @impl true
+  def interrupt(_app, deployment) do
+    deployment = Deployments.get_deployment!(deployment.id)
+    app = Apps.get_app!(deployment.app_id)
+    Ssh.interrupt_build(app.server, app, deployment)
+  end
+
+  @impl true
   def deploy(deployment) do
     deployment = Deployments.get_deployment!(deployment.id)
     app = Apps.get_app!(deployment.app_id)

@@ -30,6 +30,27 @@ defmodule CleatDeploy.Deploy.Ssh do
     |> Enum.each(&File.rm/1)
   end
 
+  @doc """
+  Best-effort `pkill` of the remote build directory for this deployment SHA.
+  """
+  def interrupt_build(server, app, deployment) when not is_nil(server) do
+    sha =
+      case deployment.git_sha do
+        sha when is_binary(sha) and sha != "" -> String.slice(sha, 0, 7)
+        _ -> nil
+      end
+
+    if is_nil(sha) do
+      :ok
+    else
+      pattern = "cleat_deploy_build_#{sha}"
+      _ = run(server, app, ["bash", "-lc", "pkill -f #{shell_escape(pattern)} || true"])
+      :ok
+    end
+  end
+
+  def interrupt_build(_server, _app, _deployment), do: :ok
+
   def run(server, app, argv) when is_list(argv) do
     with :ok <- ensure_commands(["ssh"]),
          {:ok, key_path} <- write_temp_key(server) do

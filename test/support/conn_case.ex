@@ -38,6 +38,7 @@ defmodule CleatDeployWeb.ConnCase do
 
   setup tags do
     CleatDeploy.DataCase.setup_sandbox(tags)
+    Mox.stub(CleatDeploy.Deploy.RunnerMock, :interrupt, fn _app, _deployment -> :ok end)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 
