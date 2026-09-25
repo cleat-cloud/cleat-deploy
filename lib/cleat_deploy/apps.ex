@@ -24,6 +24,103 @@ defmodule CleatDeploy.Apps do
     )
   end
 
+  @page_size 10
+
+  def page_size, do: @page_size
+
+  @doc """
+  One page of apps for the apps index: filter and sort in SQL, preload server.
+  """
+  def page_apps(%Scope{tenant: tenant}, opts \\ []) do
+    page_size = Keyword.get(opts, :page_size, @page_size) |> max(1)
+    sort = Keyword.get(opts, :sort, :name)
+    dir = Keyword.get(opts, :dir, :asc)
+
+    filtered =
+      from(a in App, as: :app, where: a.tenant_id == ^tenant.id)
+      |> join(:inner, [app: a], s in assoc(a, :server), as: :server)
+      |> filter_runtime(Keyword.get(opts, :runtime, :all))
+      |> filter_idle(Keyword.get(opts, :idle, :all))
+      |> filter_query(Keyword.get(opts, :query, ""))
+      |> sort_apps(sort, dir)
+
+    total = Repo.aggregate(exclude(filtered, :order_by), :count, :id)
+    total_pages = max(div(total + page_size - 1, page_size), 1)
+    page = opts |> Keyword.get(:page, 1) |> max(1) |> min(total_pages)
+    offset = (page - 1) * page_size
+
+    entries =
+      filtered
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> preload([app: a, server: s], server: s)
+      |> Repo.all()
+
+    %{entries: entries, page: page, page_size: page_size, total: total, total_pages: total_pages}
+  end
+
+  defp filter_runtime(query, :all), do: query
+  defp filter_runtime(query, :golang), do: where(query, [app: a], a.runtime == "golang")
+  defp filter_runtime(query, :node), do: where(query, [app: a], a.runtime == "node")
+  defp filter_runtime(query, :static), do: where(query, [app: a], a.runtime == "static")
+  defp filter_runtime(query, :rails), do: where(query, [app: a], a.runtime == "rails")
+  defp filter_runtime(query, :rust), do: where(query, [app: a], a.runtime == "rust")
+
+  defp filter_runtime(query, :phoenix) do
+    where(query, [app: a], a.runtime not in ["golang", "node", "static", "rails", "rust"])
+  end
+
+  defp filter_runtime(query, _), do: query
+
+  defp filter_idle(query, :all), do: query
+  defp filter_idle(query, :on), do: where(query, [app: a], a.idle_shutdown_enabled == true)
+  defp filter_idle(query, :off), do: where(query, [app: a], a.idle_shutdown_enabled == false)
+  defp filter_idle(query, _), do: query
+
+  defp filter_query(query, needle) when needle in [nil, ""], do: query
+
+  defp filter_query(query, needle) do
+    pat = "%" <> String.downcase(String.trim(to_string(needle))) <> "%"
+
+    where(
+      query,
+      [app: a, server: s],
+      like(fragment("lower(?)", a.name), ^pat) or
+        like(fragment("lower(?)", a.slug), ^pat) or
+        like(fragment("lower(?)", a.host), ^pat) or
+        like(fragment("lower(?)", a.runtime), ^pat) or
+        like(fragment("lower(?)", s.name), ^pat)
+    )
+  end
+
+  defp sort_apps(query, :host, dir), do: order_by(query, [app: a], [{^dir, a.host}])
+
+  defp sort_apps(query, :idle, dir),
+    do: order_by(query, [app: a], [{^dir, a.idle_shutdown_enabled}])
+
+  defp sort_apps(query, :server, dir), do: order_by(query, [server: s], [{^dir, s.name}])
+
+  defp sort_apps(query, :language, dir) do
+    order_by(query, [app: a], [
+      {^dir,
+       fragment(
+         """
+         case ?
+           when 'golang' then 'Go'
+           when 'static' then 'Static'
+           when 'node' then 'JavaScript'
+           when 'rails' then 'Ruby'
+           when 'rust' then 'Rust'
+           else 'Elixir'
+         end
+         """,
+         a.runtime
+       )}
+    ])
+  end
+
+  defp sort_apps(query, _sort, dir), do: order_by(query, [app: a], [{^dir, a.name}])
+
   def list_app_choices(%Scope{tenant: tenant}) do
     Repo.all(
       from a in App,
