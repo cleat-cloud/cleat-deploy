@@ -5,6 +5,7 @@ defmodule CleatDeploy.Apps.App do
 
   alias CleatDeploy.Accounts.Tenant
   alias CleatDeploy.Apps.AppEnvVar
+  alias CleatDeploy.Encrypted
   alias CleatDeploy.Servers.Server
 
   schema "apps" do
@@ -16,7 +17,7 @@ defmodule CleatDeploy.Apps.App do
     field :port, :integer, default: 4000
     field :systemd_unit, :string
     field :release_path, :string
-    field :webhook_secret, :string
+    field :webhook_secret, Encrypted.Binary
     field :auto_deploy, :boolean, default: true
     field :idle_shutdown_enabled, :boolean, default: false
     field :indexable, :boolean, default: false

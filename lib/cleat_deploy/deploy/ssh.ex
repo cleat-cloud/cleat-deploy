@@ -16,6 +16,19 @@ defmodule CleatDeploy.Deploy.Ssh do
   alias CleatDeploy.Repo
 
   @tar_excludes ~w(_build deps node_modules .git tmp priv/static/assets target)
+  @identity_prefix "cleat_deploy_ssh"
+
+  @doc """
+  Deletes leftover identity files from a crashed SSH deploy.
+
+  `ssh -i` still needs a path, so the PEM is written under `/tmp` for the
+  duration of the command. `after` removes it on the happy path; this sweep
+  covers BEAM crashes that skip `after`.
+  """
+  def cleanup_stale_identity_files do
+    Path.wildcard(Path.join(System.tmp_dir!(), @identity_prefix <> "*"))
+    |> Enum.each(&File.rm/1)
+  end
 
   def run(server, app, argv) when is_list(argv) do
     with :ok <- ensure_commands(["ssh"]),
@@ -131,13 +144,22 @@ defmodule CleatDeploy.Deploy.Ssh do
     do: {:error, "SSH private key not configured on server"}
 
   defp write_temp_key(%{ssh_private_key_encrypted: key}) do
-    path = temp_path("cleat_deploy_ssh")
+    path = temp_path(@identity_prefix)
 
-    with :ok <- File.write(path, key),
-         :ok <- File.chmod(path, 0o600) do
-      {:ok, path}
-    else
-      {:error, reason} -> {:error, "Could not write SSH key: #{inspect(reason)}"}
+    case File.write(path, key) do
+      :ok ->
+        case File.chmod(path, 0o600) do
+          :ok ->
+            {:ok, path}
+
+          {:error, reason} ->
+            _ = File.rm(path)
+            {:error, "Could not write SSH key: #{inspect(reason)}"}
+        end
+
+      {:error, reason} ->
+        _ = File.rm(path)
+        {:error, "Could not write SSH key: #{inspect(reason)}"}
     end
   end
 
