@@ -3,7 +3,7 @@ defmodule CleatDeploy.Repo.Migrations.EncryptAppWebhookSecrets do
 
   def up do
     with_vault(fn ->
-      {:ok, %{rows: rows}} = repo().query("SELECT id, webhook_secret FROM apps")
+      {:ok, %{rows: rows}} = repo().query("SELECT id, webhook_secret FROM apps", [])
 
       Enum.each(rows, fn [id, secret] ->
         case encrypt_secret(secret) do
@@ -23,7 +23,7 @@ defmodule CleatDeploy.Repo.Migrations.EncryptAppWebhookSecrets do
 
   def down do
     with_vault(fn ->
-      {:ok, %{rows: rows}} = repo().query("SELECT id, webhook_secret FROM apps")
+      {:ok, %{rows: rows}} = repo().query("SELECT id, webhook_secret FROM apps", [])
 
       Enum.each(rows, fn [id, secret] ->
         case decrypt_secret(secret) do
