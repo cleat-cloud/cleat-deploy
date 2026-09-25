@@ -14,7 +14,7 @@ defmodule CleatDeployWeb.AppLive.Show do
     scope = socket.assigns.current_scope
     app = Apps.get_app!(scope, id)
     runtime_packages = RuntimePackages.resolve(app).packages
-    custom_domain_app? = app.slug == "catalogo"
+    custom_domain_app? = App.custom_domain?(app)
     deploying? = Deployments.deploying?(scope, app)
     setting = Settings.get_setting(scope)
 

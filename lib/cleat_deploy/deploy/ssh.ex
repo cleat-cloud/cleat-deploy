@@ -121,7 +121,8 @@ defmodule CleatDeploy.Deploy.Ssh do
       CleatDeploy.Apps.record_deploy_manifest(app, %{
         units: AppManifest.extra_units(manifest),
         addons: AppManifest.addons(manifest),
-        wake: CleatDeploy.Deploy.Wake.enabled?(app, manifest)
+        wake: CleatDeploy.Deploy.Wake.enabled?(app, manifest),
+        release_name: manifest.release_name
       })
 
     :ok

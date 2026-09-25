@@ -52,7 +52,10 @@ defmodule CleatDeploy.Seeds do
       github_repo: "puppe1990/trip-planner-ia-phx",
       branch: "main",
       host: "trip.gestaobem.com",
-      port: 4000
+      port: 4000,
+      systemd_unit: "trip_planner_ia",
+      release_path: "/opt/trip_planner_ia",
+      release_name: "trip_planner_ia"
     })
 
     seed_app(scope, server, tenant_id, %{
@@ -193,7 +196,9 @@ defmodule CleatDeploy.Seeds do
           host: "loja.gestaobem.com",
           port: 4000,
           systemd_unit: "catalog_platform",
-          release_path: "/opt/catalog_platform"
+          release_path: "/opt/catalog_platform",
+          release_name: "catalog_platform",
+          custom_domain: true
         })
 
         catalog_server
@@ -387,7 +392,9 @@ defmodule CleatDeploy.Seeds do
       :port,
       :runtime,
       :systemd_unit,
-      :release_path
+      :release_path,
+      :release_name,
+      :custom_domain
     ])
     |> Map.put(:tenant_id, tenant_id)
     |> Map.put(:server_id, server.id)

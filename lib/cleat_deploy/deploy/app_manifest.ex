@@ -297,7 +297,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       release_path: app.release_path,
       runtime: app.runtime || "phoenix",
       # Prefer explicit OTP app mapping; may be overridden by mix.exs / deploy.json
-      release_name: App.release_name(app.slug)
+      release_name: App.release_name(app)
     }
   end
 

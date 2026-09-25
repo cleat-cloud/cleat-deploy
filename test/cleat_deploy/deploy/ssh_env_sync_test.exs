@@ -16,7 +16,10 @@ defmodule CleatDeploy.Deploy.SshEnvSyncTest do
         slug: "trip-planner",
         github_repo: "puppe1990/trip-planner-ia-phx",
         host: "trip.gestaobem.com",
-        server_id: server.id
+        server_id: server.id,
+        systemd_unit: "trip_planner_ia",
+        release_path: "/opt/trip_planner_ia",
+        release_name: "trip_planner_ia"
       })
 
     %{app: app}

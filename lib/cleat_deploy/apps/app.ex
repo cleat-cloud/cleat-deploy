@@ -25,6 +25,8 @@ defmodule CleatDeploy.Apps.App do
     field :runtime, :string, default: "phoenix"
     field :runtime_apt_packages, {:array, :string}, default: []
     field :runtime_packages_text, :string, virtual: true
+    field :release_name, :string
+    field :custom_domain, :boolean, default: false
 
     belongs_to :tenant, Tenant
     belongs_to :server, Server
@@ -51,6 +53,8 @@ defmodule CleatDeploy.Apps.App do
       :runtime,
       :runtime_apt_packages,
       :runtime_packages_text,
+      :release_name,
+      :custom_domain,
       :server_id,
       :tenant_id
     ])
@@ -121,19 +125,15 @@ defmodule CleatDeploy.Apps.App do
     changeset
     |> put_change(:systemd_unit, default_systemd_unit(slug, runtime))
     |> put_change(:release_path, default_release_path(slug, runtime))
+    |> put_change(:release_name, release_name(slug))
   end
 
   defp update_runtime_defaults(changeset), do: changeset
 
-  def release_name("trip-planner"), do: "trip_planner_ia"
-  def release_name("catalogo"), do: "catalog_platform"
-  def release_name("controle-agente-viagens"), do: "controle_agente_viagens_phx"
-  # Mix app atom is :festa_platform (not the PaaS slug "decor")
-  def release_name("decor"), do: "festa_platform"
-  def release_name("gestao-bem-decor"), do: "festa_platform"
-  def release_name("pay-core"), do: "pay_core"
-  def release_name("pay_core"), do: "pay_core"
+  def release_name(%__MODULE__{release_name: name}) when is_binary(name) and name != "", do: name
+  def release_name(%__MODULE__{slug: slug}) when is_binary(slug), do: release_name(slug)
   def release_name(slug) when is_binary(slug), do: String.replace(slug, "-", "_")
+  def release_name(_), do: nil
 
   def default_systemd_unit(slug, runtime \\ "phoenix")
 
@@ -142,11 +142,6 @@ defmodule CleatDeploy.Apps.App do
   def default_systemd_unit(slug, "rails") when is_binary(slug), do: "rails-#{slug}"
   def default_systemd_unit(slug, "rust") when is_binary(slug), do: "rust-#{slug}"
   def default_systemd_unit(_slug, "static"), do: nil
-  def default_systemd_unit("trip-planner", _), do: "trip_planner_ia"
-  def default_systemd_unit("decor", _), do: "festa_platform"
-  def default_systemd_unit("pay-core", _), do: "pay_core"
-  def default_systemd_unit("vexo", _), do: "vexo"
-  def default_systemd_unit("assistente", _), do: "assistente"
   def default_systemd_unit(slug, _) when is_binary(slug), do: "phx-#{slug}"
 
   def default_release_path(slug, runtime \\ "phoenix")
@@ -156,9 +151,6 @@ defmodule CleatDeploy.Apps.App do
   def default_release_path(slug, "rails") when is_binary(slug), do: "/opt/#{slug}"
   def default_release_path(slug, "rust") when is_binary(slug), do: "/opt/#{slug}"
   def default_release_path(slug, "static") when is_binary(slug), do: "/var/www/#{slug}"
-  def default_release_path("trip-planner", _), do: "/opt/trip_planner_ia"
-  def default_release_path("decor", _), do: "/opt/festa_platform"
-  def default_release_path("pay-core", _), do: "/opt/pay_core"
   def default_release_path(slug, _) when is_binary(slug), do: "/opt/#{release_name(slug)}"
 
   def main_language(%__MODULE__{runtime: runtime}), do: main_language(runtime)
@@ -170,16 +162,20 @@ defmodule CleatDeploy.Apps.App do
   def main_language(_runtime), do: "Elixir"
 
   def deploy_config(%__MODULE__{} = app) do
-    release_path = app.release_path || default_release_path(app.slug)
+    runtime = app.runtime || "phoenix"
+    release_path = app.release_path || default_release_path(app.slug, runtime)
     basename = release_path |> Path.basename()
 
     %{
       release_path: release_path,
-      systemd_unit: app.systemd_unit || default_systemd_unit(app.slug),
-      release_name: release_name(app.slug),
+      systemd_unit: app.systemd_unit || default_systemd_unit(app.slug, runtime),
+      release_name: release_name(app),
       env_file: "/etc/#{basename}/env"
     }
   end
+
+  def custom_domain?(%__MODULE__{custom_domain: true}), do: true
+  def custom_domain?(_), do: false
 
   @doc """
   systemd unit this app runs under, derived from the slug when the column is
@@ -307,6 +303,7 @@ defmodule CleatDeploy.Apps.App do
         changeset
         |> put_default(:systemd_unit, default_systemd_unit(slug, runtime))
         |> put_default(:release_path, default_release_path(slug, runtime))
+        |> put_default(:release_name, release_name(slug))
 
       _ ->
         changeset
