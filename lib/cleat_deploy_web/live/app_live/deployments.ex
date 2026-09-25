@@ -288,11 +288,18 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                     Duration: {Deployments.format_duration(Deployments.duration(@viewed_deployment))}
                   </span>
                   <span
-                    :if={@deploying?}
+                    :if={@deploying? and @viewed_deployment.status == :running}
                     class="flex items-center gap-1 font-mono text-[11px] text-hd-orange"
                   >
                     <span class="size-1 animate-ping rounded-full bg-hd-orange" />
                     Compiling OTP release…
+                  </span>
+                  <span
+                    :if={Deployments.wait_reason_message(@viewed_deployment)}
+                    id="deploy-wait-reason"
+                    class="font-mono text-[11px] text-hd-orange"
+                  >
+                    {Deployments.wait_reason_message(@viewed_deployment)}
                   </span>
                 </div>
               </div>
@@ -312,6 +319,14 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                 <span class="font-display text-xs font-semibold text-hd-text">
                   Deployments Version History
                 </span>
+                <p
+                  :if={@app.server && @app.server.deploy_mode != "dedicated"}
+                  id="shared-build-cap"
+                  class="mt-1 font-mono text-[10px] text-hd-muted"
+                >
+                  Shared server: at most {Deployments.max_running_per_server()} builds at a time.
+                  Apps with solo_server in deploy.json need a dedicated server.
+                </p>
               </div>
               <div id="deployments-history" class="overflow-x-auto">
                 <table class="paas-table w-full text-left font-mono">
@@ -340,7 +355,15 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                           "bg-hd-aside/60"
                       ]}
                     >
-                      <td><.deploy_status_badge status={deployment.status} /></td>
+                      <td>
+                        <.deploy_status_badge status={deployment.status} />
+                        <span
+                          :if={Deployments.wait_reason_message(deployment)}
+                          class="mt-0.5 block font-mono text-[10px] text-hd-muted"
+                        >
+                          {Deployments.wait_reason_message(deployment)}
+                        </span>
+                      </td>
                       <td>
                         <span class="rounded border border-hd-border bg-hd-aside px-1.5 py-0.5 text-[10px] text-hd-orange">
                           {deployment.git_sha}

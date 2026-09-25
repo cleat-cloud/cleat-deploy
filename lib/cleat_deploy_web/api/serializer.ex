@@ -82,7 +82,8 @@ defmodule CleatDeployWeb.Api.Serializer do
       started_at: deployment.started_at,
       finished_at: deployment.finished_at,
       inserted_at: deployment.inserted_at,
-      updated_at: deployment.updated_at
+      updated_at: deployment.updated_at,
+      wait_reason: wait_reason(deployment)
     }
 
     if Keyword.get(opts, :log, false) do
@@ -112,4 +113,11 @@ defmodule CleatDeployWeb.Api.Serializer do
 
   defp blank_to_nil(value) when value in [nil, ""], do: nil
   defp blank_to_nil(value), do: value
+
+  defp wait_reason(deployment) do
+    case CleatDeploy.Deployments.wait_reason(deployment) do
+      nil -> nil
+      reason -> Atom.to_string(reason)
+    end
+  end
 end

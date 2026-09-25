@@ -778,6 +778,22 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#app-instance-#{app.slug}", app.slug)
   end
 
+  test "explains why a queued deploy is waiting", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server)
+    {:ok, first} = Deployments.create_deployment(app, %{git_sha: "ahead"})
+    {:ok, _} = Deployments.mark_running(first)
+    {:ok, _second} = Deployments.create_deployment(app, %{git_sha: "behind"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+
+    assert has_element?(view, "#shared-build-cap")
+    assert render(view) =~ "earlier deploy"
+  end
+
   test "queues manual deploy", %{conn: conn, scope: scope, server: server} do
     app = TenancyFixtures.app_fixture(scope, server)
 

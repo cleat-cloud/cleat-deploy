@@ -61,7 +61,7 @@ defmodule CleatDeploy.DeploymentsTest do
       assert first.status == :running
 
       {:ok, second} = Deployments.create_deployment(app, %{git_sha: "def456"})
-      assert {:error, :server_busy} = Deployments.claim_running(second)
+      assert {:error, :app_fifo} = Deployments.claim_running(second)
 
       other_server = TenancyFixtures.server_fixture(scope)
 
@@ -139,13 +139,60 @@ defmodule CleatDeploy.DeploymentsTest do
     } do
       {:ok, newer} = Deployments.create_deployment(app, %{git_sha: "newer"})
 
-      assert {:error, :server_busy} = Deployments.claim_running(newer)
+      assert {:error, :app_fifo} = Deployments.claim_running(newer)
       assert {:ok, running_older} = Deployments.claim_running(older)
       assert running_older.status == :running
 
       {:ok, _} = Deployments.mark_success(running_older, "done")
       assert {:ok, running_newer} = Deployments.claim_running(newer)
       assert running_newer.status == :running
+    end
+
+    test "wait_reason/1 is :app_fifo when an older deploy of the same app is ahead", %{
+      app: app,
+      deployment: older
+    } do
+      {:ok, newer} = Deployments.create_deployment(app, %{git_sha: "newer"})
+
+      assert Deployments.wait_reason(newer) == :app_fifo
+      assert Deployments.wait_reason(older) == nil
+      assert Deployments.wait_reason_message(newer) =~ "earlier deploy"
+    end
+
+    test "wait_reason/1 is :server_cap when the host is already at two running builds", %{
+      scope: scope,
+      app: app,
+      deployment: first
+    } do
+      {:ok, _} = Deployments.claim_running(first)
+
+      {:ok, second_app, _} =
+        Apps.create_app(scope, %{
+          name: "Second App",
+          slug: "second-app",
+          github_repo: "puppe1990/second-app",
+          host: "second.gestaobem.com",
+          server_id: app.server_id
+        })
+
+      {:ok, third_app, _} =
+        Apps.create_app(scope, %{
+          name: "Third App",
+          slug: "third-app",
+          github_repo: "puppe1990/third-app",
+          host: "third.gestaobem.com",
+          server_id: app.server_id
+        })
+
+      {:ok, second} = Deployments.create_deployment(second_app, %{git_sha: "two"})
+      {:ok, _} = Deployments.claim_running(second)
+
+      {:ok, third} = Deployments.create_deployment(third_app, %{git_sha: "three"})
+      running = Deployments.get_deployment!(first.id)
+
+      assert Deployments.wait_reason(third) == :server_cap
+      assert Deployments.wait_reason_message(third) =~ "2-build cap"
+      assert Deployments.wait_reason(running) == nil
     end
 
     test "mark_success/1 sets finished_at", %{deployment: deployment} do

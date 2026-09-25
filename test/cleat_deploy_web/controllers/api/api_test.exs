@@ -79,7 +79,23 @@ defmodule CleatDeployWeb.Api.ApiTest do
 
     assert data["status"] == "queued"
     assert data["triggered_by"] == "api"
+    assert data["wait_reason"] == nil
     assert_enqueued(worker: CleatDeploy.Workers.DeployWorker)
+  end
+
+  test "GET /api/v1/apps/:id/deployments includes wait_reason for FIFO", %{
+    token: token,
+    app: app
+  } do
+    {:ok, first} = Deployments.create_deployment(app, %{git_sha: "ahead"})
+    {:ok, _} = Deployments.mark_running(first)
+    {:ok, second} = Deployments.create_deployment(app, %{git_sha: "behind"})
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{app.id}/deployments")
+    data = json_response(conn, 200)["data"]
+    behind = Enum.find(data, &(&1["id"] == second.id))
+
+    assert behind["wait_reason"] == "app_fifo"
   end
 
   test "GET /api/v1/deployments/:id returns the deployment with its log", %{

@@ -17,7 +17,7 @@ defmodule CleatDeploy.Workers.DeployWorker do
       {:ok, running} ->
         run_deploy(running)
 
-      {:error, :server_busy} ->
+      {:error, reason} when reason in [:server_busy, :app_fifo] ->
         {:snooze, @server_busy_snooze_seconds}
 
       {:error, :invalid_status} ->

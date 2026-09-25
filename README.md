@@ -41,6 +41,8 @@ Open [http://localhost:4000](http://localhost:4000).
 
 CX33 is 4 shared vCPU / 8 GB RAM / 80 GB NVMe / 20 TB traffic. It is **not** sold in Ashburn; the default location is Falkenstein (`fsn1`).
 
+A shared host runs at most **two** builds at a time (the third waits until a slot frees). The Oban `:deploys` queue is wider than that; the cap lives in `claim_running/1`. Apps that set `"solo_server": true` in `.cleat_deploy/deploy.json` must deploy to a dedicated server.
+
 ```bash
 export HCLOUD_TOKEN=...          # Hetzner Cloud API token
 # optional: reuse the Lightsail PEM so the panel can SSH with the existing key
