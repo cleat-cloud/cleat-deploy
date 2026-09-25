@@ -19,11 +19,11 @@ defmodule CleatDeployWeb.Api.Contract do
     ),
     "deployment" => ~w(
       id app_id git_sha git_ref status triggered_by started_at finished_at
-      inserted_at updated_at
+      inserted_at updated_at wait_reason
     ),
     "deployment_log" => ~w(
       id app_id git_sha git_ref status triggered_by started_at finished_at
-      inserted_at updated_at log
+      inserted_at updated_at wait_reason log
     ),
     "env_var" => ~w(key value branch sensitive revealed),
     "user" => ~w(id email),

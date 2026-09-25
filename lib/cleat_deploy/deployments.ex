@@ -249,13 +249,15 @@ defmodule CleatDeploy.Deployments do
   # Two mix/npm builds on a CX33 is tight but usable; a third tends to OOM.
   @max_running_per_server 2
 
+  def max_running_per_server, do: @max_running_per_server
+
   @doc """
   Transitions a queued deployment to running when a slot is free.
 
   Returns:
   - `{:ok, deployment}` when claimed
-  - `{:error, :server_busy}` when this app already has a running/older queued
-    deploy (FIFO per app), or the server is already at
+  - `{:error, :app_fifo}` when this app already has a running or older queued deploy
+  - `{:error, :server_busy}` when the server is already at
     `#{@max_running_per_server}` concurrent deploys
   - `{:error, :invalid_status}` when the deployment is not queued
   """
@@ -263,6 +265,9 @@ defmodule CleatDeploy.Deployments do
     case Repo.transaction(fn -> do_claim_running(id) end) do
       {:ok, deployment} ->
         broadcast_change({:ok, deployment})
+
+      {:error, :app_fifo} ->
+        {:error, :app_fifo}
 
       {:error, :server_busy} ->
         {:error, :server_busy}
@@ -290,7 +295,7 @@ defmodule CleatDeploy.Deployments do
         Repo.rollback(:invalid_status)
 
       app_has_blocking_deploy?(deployment) ->
-        Repo.rollback(:server_busy)
+        Repo.rollback(:app_fifo)
 
       concurrent_running_on_server_count(deployment) >= @max_running_per_server ->
         Repo.rollback(:server_busy)
@@ -326,6 +331,30 @@ defmodule CleatDeploy.Deployments do
         where: d.app_id == ^app_id and d.id != ^id,
         where: d.status == :running or (d.status == :queued and d.id < ^id)
     )
+  end
+
+  @doc """
+  Why a queued deploy has not claimed a slot yet.
+
+  `:app_fifo` — this app already has a running or older queued deploy.
+  `:server_cap` — the host is at `max_running_per_server/0` concurrent builds.
+  """
+  def wait_reason(%Deployment{status: :queued} = deployment) do
+    cond do
+      app_has_blocking_deploy?(deployment) -> :app_fifo
+      concurrent_running_on_server_count(deployment) >= @max_running_per_server -> :server_cap
+      true -> nil
+    end
+  end
+
+  def wait_reason(%Deployment{}), do: nil
+
+  def wait_reason_message(deployment) do
+    case wait_reason(deployment) do
+      :app_fifo -> "Waiting for this app's earlier deploy"
+      :server_cap -> "Waiting: this server is at the 2-build cap"
+      nil -> nil
+    end
   end
 
   defp concurrent_running_on_server_count(%Deployment{app_id: app_id}) do

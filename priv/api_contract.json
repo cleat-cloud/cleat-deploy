@@ -30,7 +30,8 @@
     "started_at",
     "finished_at",
     "inserted_at",
-    "updated_at"
+    "updated_at",
+    "wait_reason"
   ],
   "deployment_log": [
     "id",
@@ -43,6 +44,7 @@
     "finished_at",
     "inserted_at",
     "updated_at",
+    "wait_reason",
     "log"
   ],
   "env_var": [
