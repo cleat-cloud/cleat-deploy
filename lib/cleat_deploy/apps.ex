@@ -385,7 +385,8 @@ defmodule CleatDeploy.Apps do
         "host",
         "port",
         "github_repo",
-        "runtime"
+        "runtime",
+        "runtime_apt_packages"
       ])
     )
     |> Repo.update()
