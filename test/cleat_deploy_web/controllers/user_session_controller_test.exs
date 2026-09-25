@@ -165,6 +165,76 @@ defmodule CleatDeployWeb.UserSessionControllerTest do
       assert response =~ "Invalid email or password"
     end
 
+    test "rejects further attempts after the throttle window fills", %{conn: conn} do
+      previous = Application.get_env(:cleat_deploy, :login_throttle_limit)
+      Application.put_env(:cleat_deploy, :login_throttle_limit, 2)
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:cleat_deploy, :login_throttle_limit, previous)
+        else
+          Application.delete_env(:cleat_deploy, :login_throttle_limit)
+        end
+      end)
+
+      email = unique_user_email()
+
+      assert html_response(failed_password_login(conn, email), 200) =~ "Invalid email or password"
+      assert html_response(failed_password_login(conn, email), 200) =~ "Invalid email or password"
+
+      throttled = failed_password_login(conn, email)
+      response = html_response(throttled, 429)
+      assert response =~ "Too many login attempts"
+      refute response =~ "registered"
+      refute get_session(throttled, :user_token)
+    end
+
+    test "throttles browser login per email", %{conn: conn} do
+      previous = Application.get_env(:cleat_deploy, :login_throttle_limit)
+      Application.put_env(:cleat_deploy, :login_throttle_limit, 2)
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:cleat_deploy, :login_throttle_limit, previous)
+        else
+          Application.delete_env(:cleat_deploy, :login_throttle_limit)
+        end
+      end)
+
+      a = unique_user_email()
+      b = unique_user_email()
+
+      failed_password_login(conn, a)
+      failed_password_login(conn, a)
+      assert html_response(failed_password_login(conn, a), 429)
+
+      assert html_response(failed_password_login(conn, b), 200) =~ "Invalid email or password"
+    end
+
+    test "valid password still logs in before the throttle limit", %{conn: conn, user: user} do
+      previous = Application.get_env(:cleat_deploy, :login_throttle_limit)
+      Application.put_env(:cleat_deploy, :login_throttle_limit, 2)
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:cleat_deploy, :login_throttle_limit, previous)
+        else
+          Application.delete_env(:cleat_deploy, :login_throttle_limit)
+        end
+      end)
+
+      user = set_password(user)
+      failed_password_login(conn, user.email)
+
+      conn =
+        post(conn, ~p"/users/log-in", %{
+          "user" => %{"email" => user.email, "password" => valid_user_password()}
+        })
+
+      assert get_session(conn, :user_token)
+      assert redirected_to(conn) == ~p"/"
+    end
+
     test "a PWA resubmit after a successful login redirects instead of 403", %{
       conn: conn,
       user: user
@@ -285,6 +355,12 @@ defmodule CleatDeployWeb.UserSessionControllerTest do
       refute get_session(conn, :user_token)
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Logged out successfully"
     end
+  end
+
+  defp failed_password_login(conn, email) do
+    post(conn, ~p"/users/log-in", %{
+      "user" => %{"email" => email, "password" => "invalid_password"}
+    })
   end
 
   defp with_csrf(conn) do
