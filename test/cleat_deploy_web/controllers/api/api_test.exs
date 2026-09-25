@@ -135,6 +135,16 @@ defmodule CleatDeployWeb.Api.ApiTest do
     assert json_response(conn, 401)["error"] == "invalid_or_revoked_token"
   end
 
+  test "PATCH /api/v1/apps/:id updates runtime_apt_packages", %{token: token, app: app} do
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_patch(~p"/api/v1/apps/#{app.id}", %{runtime_apt_packages: ["ffmpeg", "webp"]})
+
+    data = json_response(conn, 200)["data"]
+    assert data["runtime_apt_packages"] == ["ffmpeg", "webp"]
+  end
+
   test "PATCH /api/v1/apps/:id updates branch and auto-deploy", %{token: token, app: app} do
     conn =
       build_conn()
