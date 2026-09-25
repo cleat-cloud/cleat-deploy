@@ -3,7 +3,6 @@ defmodule CleatDeploy.Deploy.Ssh do
 
   import Ecto.Query, only: [from: 2]
 
-  alias CleatDeploy.Apps
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.Golang
@@ -11,24 +10,13 @@ defmodule CleatDeploy.Deploy.Ssh do
   alias CleatDeploy.Deploy.Rails
   alias CleatDeploy.Deploy.Runtime
   alias CleatDeploy.Deploy.Rust
-  alias CleatDeploy.Deploy.ServerProvision
   alias CleatDeploy.Deploy.Static
   alias CleatDeploy.Repo
+  alias CleatDeploy.Deploy.Ssh.{Env, Phoenix, Session}
 
   @tar_excludes ~w(_build deps node_modules .git tmp priv/static/assets target)
-  @identity_prefix "cleat_deploy_ssh"
 
-  @doc """
-  Deletes leftover identity files from a crashed SSH deploy.
-
-  `ssh -i` still needs a path, so the PEM is written under `/tmp` for the
-  duration of the command. `after` removes it on the happy path; this sweep
-  covers BEAM crashes that skip `after`.
-  """
-  def cleanup_stale_identity_files do
-    Path.wildcard(Path.join(System.tmp_dir!(), @identity_prefix <> "*"))
-    |> Enum.each(&File.rm/1)
-  end
+  def cleanup_stale_identity_files, do: Session.cleanup_stale_identity_files()
 
   @doc """
   Best-effort `pkill` of the remote build directory for this deployment SHA.
@@ -144,78 +132,6 @@ defmodule CleatDeploy.Deploy.Ssh do
 
   defp target_log(stored_ip, host_ip, app_host) do
     "==> Corrected deploy target #{stored_ip} -> #{host_ip} (DNS #{app_host})"
-  end
-
-  defp ensure_commands(commands) do
-    missing =
-      Enum.reject(commands, fn cmd ->
-        case System.find_executable(cmd) do
-          nil -> false
-          _ -> true
-        end
-      end)
-
-    if missing == [] do
-      :ok
-    else
-      {:error, "Missing commands: #{Enum.join(missing, ", ")}"}
-    end
-  end
-
-  defp write_temp_key(%{ssh_private_key_encrypted: key}) when key in [nil, ""],
-    do: {:error, "SSH private key not configured on server"}
-
-  defp write_temp_key(%{ssh_private_key_encrypted: key}) do
-    path = temp_path(@identity_prefix)
-
-    case File.write(path, key) do
-      :ok ->
-        case File.chmod(path, 0o600) do
-          :ok ->
-            {:ok, path}
-
-          {:error, reason} ->
-            _ = File.rm(path)
-            {:error, "Could not write SSH key: #{inspect(reason)}"}
-        end
-
-      {:error, reason} ->
-        _ = File.rm(path)
-        {:error, "Could not write SSH key: #{inspect(reason)}"}
-    end
-  end
-
-  defp clone_repo(github_repo, branch) do
-    dir = temp_path("cleat_deploy_clone")
-    # Defensive: old BEAM restarts reused unique_integer counters and leftover
-    # dirs from the cleanup bug would make `git clone` fail immediately.
-    _ = File.rm_rf(dir)
-
-    url = github_clone_url(github_repo)
-
-    case cmd("git", ["clone", "--depth", "50", "-b", branch, url, dir]) do
-      {:ok, _output} -> {:ok, dir}
-      {:error, output} -> {:error, "git clone failed:\n#{output}"}
-    end
-  end
-
-  defp create_tarball(work_dir) do
-    path = temp_path("cleat_deploy_src") <> ".tar.gz"
-    _ = File.rm(path)
-
-    args = ["-czf", path] ++ tar_exclude_args() ++ ["-C", work_dir, "."]
-
-    case cmd("tar", args) do
-      {:ok, _output} -> {:ok, path}
-      {:error, output} -> {:error, "tar failed:\n#{output}"}
-    end
-  end
-
-  defp temp_path(prefix) when is_binary(prefix) do
-    Path.join(
-      System.tmp_dir!(),
-      "#{prefix}_#{System.system_time(:nanosecond)}_#{:erlang.unique_integer([:positive])}"
-    )
   end
 
   defp upload_and_build(tarball, key_path, server, app, config, sha, work_dir) do
@@ -342,51 +258,10 @@ defmodule CleatDeploy.Deploy.Ssh do
     end
   end
 
-  defp shell_escape(value) when is_binary(value) do
-    "'" <> String.replace(value, "'", "'\\''") <> "'"
-  end
-
-  @doc false
-  def env_sync_enabled?(%{env_vars: vars}) when is_list(vars), do: vars != []
-  def env_sync_enabled?(_), do: false
-
-  @doc """
-  Contents of the env file for a deploy.
-
-  Env vars are scoped to a branch: everything written for all branches plus the
-  variables of the branch being deployed.
-  """
-  def env_file_content(app, branch \\ nil) do
-    app
-    |> Apps.env_map(branch)
-    |> format_env_file()
-  end
-
-  defp format_env_file(env_map) do
-    env_map
-    |> Enum.sort()
-    |> Enum.map_join("\n", fn {key, value} -> "#{key}=#{value}" end)
-    |> then(&(&1 <> "\n"))
-  end
-
-  @doc false
-  def env_sync_script(app, config) do
-    if env_sync_enabled?(app) do
-      content_b64 =
-        app
-        |> env_file_content(config[:branch] || app.branch)
-        |> Base.encode64()
-
-      """
-      log "Syncing environment from panel"
-      sudo mkdir -p "$(dirname #{config.env_file})"
-      echo '#{content_b64}' | base64 -d | sudo tee #{config.env_file} > /dev/null
-      sudo chmod 600 #{config.env_file}
-      """
-    else
-      ""
-    end
-  end
+  defdelegate env_sync_enabled?(app), to: Env
+  defdelegate env_file_content(app), to: Env
+  defdelegate env_file_content(app, branch), to: Env
+  defdelegate env_sync_script(app, config), to: Env
 
   defp apply_manifest_config(config, %AppManifest{} = manifest) do
     config
@@ -433,147 +308,16 @@ defmodule CleatDeploy.Deploy.Ssh do
         Golang.remote_build_script(server, app, config, sha, remote_tar, manifest)
 
       true ->
-        phoenix_remote_build_script(server, app, config, sha, remote_tar, runtime, manifest)
+        Phoenix.phoenix_remote_build_script(
+          server,
+          app,
+          config,
+          sha,
+          remote_tar,
+          runtime,
+          manifest
+        )
     end
-  end
-
-  defp phoenix_remote_build_script(server, app, config, sha, remote_tar, runtime, manifest) do
-    packages_install =
-      case runtime.packages do
-        [] ->
-          ""
-
-        packages ->
-          """
-          log "Installing runtime packages: #{Enum.join(packages, " ")}"
-          sudo DEBIAN_FRONTEND=noninteractive apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y #{Enum.join(packages, " ")}
-          """
-      end
-
-    post_install_script =
-      case runtime.post_install do
-        [] -> ""
-        steps -> Enum.map_join(steps, "\n", & &1) <> "\n"
-      end
-
-    """
-    set -euo pipefail
-
-    log() { printf '==> %s\\n' "$*"; }
-
-    #{packages_install}#{post_install_script}
-    if ! swapon --show | grep -q /swapfile; then
-      sudo fallocate -l 2G /swapfile || true
-      sudo chmod 600 /swapfile || true
-      sudo mkswap /swapfile || true
-      sudo swapon /swapfile || true
-    fi
-
-    if ! command -v mise >/dev/null 2>&1; then
-      log "Installing mise + Erlang/Elixir"
-      sudo apt-get update
-      sudo apt-get install -y curl build-essential git ca-certificates
-      curl -fsSL https://mise.run | sh
-    fi
-
-    export PATH="/home/#{server.ssh_user}/.local/bin:$PATH"
-    eval "$(/home/#{server.ssh_user}/.local/bin/mise activate bash)"
-    mise install erlang@28.4.1 elixir@1.19.5-otp-28
-    mise use -g erlang@28.4.1 elixir@1.19.5-otp-28
-
-    BUILD_DIR="$HOME/cleat_deploy_build_#{sha}"
-    rm -rf "$BUILD_DIR"
-    mkdir -p "$BUILD_DIR"
-    trap 'rm -rf "$BUILD_DIR"; rm -f #{remote_tar}' EXIT
-    tar -xzf #{remote_tar} -C "$BUILD_DIR"
-    cd "$BUILD_DIR"
-    #{mix_project_cd(manifest)}
-
-    export MIX_ENV=prod
-    export SECRET_KEY_BASE=buildtime_secret_key_base_32chars_min
-    export TURSO_DATABASE_URL=libsql://build.turso.io
-    export TURSO_AUTH_TOKEN=build_token
-
-    log "Fetching dependencies"
-    mix local.hex --force
-    mix local.rebar --force
-    mix deps.get --only prod
-
-    log "Compiling application"
-    mix compile
-
-    log "Compiling assets"
-    mix assets.setup
-    mix assets.deploy
-
-    log "Building release #{config.release_name} (slug=#{app.slug})"
-    mix release --overwrite
-
-    REL_DIR="_build/prod/rel/#{config.release_name}"
-    if [[ ! -d "$REL_DIR" ]]; then
-      echo "Release directory missing: $REL_DIR" >&2
-      echo "Available releases:" >&2
-      ls -la _build/prod/rel 2>/dev/null || true
-      echo "Hint: set release_name in .cleat_deploy/deploy.json to the Mix app atom (see mix.exs app:)." >&2
-      exit 1
-    fi
-
-    RELEASE_DIR="#{config.release_path}/releases/build"
-    sudo mkdir -p "$RELEASE_DIR"
-    sudo rm -rf "${RELEASE_DIR:?}"/*
-    sudo cp -a "$REL_DIR/." "$RELEASE_DIR/"
-    sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
-    #{ServerProvision.prune_releases_script(config.release_path)}
-
-    #{ServerProvision.provision_script(app, config, manifest)}
-    #{CleatDeploy.Deploy.Addons.provision_script(app, config, manifest)}
-    #{env_sync_script(app, config)}
-    #{migrate_script(app, config, manifest)}
-    #{ServerProvision.release_command_script(app, config, manifest)}
-
-    log "Restarting #{config.systemd_unit}"
-    sudo systemctl restart #{config.systemd_unit}
-    sleep 2
-
-    if sudo systemctl is-active --quiet #{config.systemd_unit}; then
-      log "Service #{config.systemd_unit} is active"
-    else
-      sudo journalctl -u #{config.systemd_unit} -n 30 --no-pager
-      exit 1
-    fi
-
-    #{ServerProvision.reload_caddy_script()}
-    """
-  end
-
-  # A release_command takes over the migration slot: it is the app's own
-  # post-publish step, so the built-in Ecto migrate must not run as well.
-  defp migrate_script(_app, config, %AppManifest{} = manifest) do
-    if AppManifest.release_commands(manifest) == [] do
-      ServerProvision.migrate_script(config)
-    else
-      ""
-    end
-  end
-
-  defp mix_project_cd(%AppManifest{build_dir: dir}) when is_binary(dir) and dir != "" do
-    """
-    log "Using mix project in #{dir}"
-    cd #{dir}
-    """
-  end
-
-  defp mix_project_cd(%AppManifest{}) do
-    """
-    if [[ ! -f mix.exs ]]; then
-      nested=$(find . -maxdepth 2 -name mix.exs | head -1)
-      if [[ -n "$nested" ]]; then
-        log "Using mix project in $(dirname "$nested")"
-        cd "$(dirname "$nested")"
-      fi
-    fi
-    """
   end
 
   defp github_clone_url(repo) do
@@ -589,62 +333,39 @@ defmodule CleatDeploy.Deploy.Ssh do
   defp short_sha("manual"), do: Integer.to_string(System.system_time(:second))
   defp short_sha(sha) when is_binary(sha), do: String.slice(sha, 0, 7)
 
-  defp tar_exclude_args do
-    Enum.flat_map(@tar_excludes, fn entry -> ["--exclude", entry] end)
-  end
+  defp ensure_commands(commands), do: Session.ensure_commands(commands)
+  defp write_temp_key(server), do: Session.write_temp_key(server)
+  defp temp_path(prefix), do: Session.temp_path(prefix)
+  defp cmd(command, args), do: Session.cmd(command, args)
+  defp trim(value), do: Session.trim(value)
+  defp shell_escape(value), do: Session.shell_escape(value)
+  defp ssh_base(key_path, target), do: Session.ssh_base(key_path, target)
+  defp scp_base(key_path), do: Session.scp_base(key_path)
+  defp log_ssh_base(key_path, target), do: Session.log_ssh_base(key_path, target)
 
-  defp log_ssh_base(key_path, target) do
-    [
-      "-i",
-      key_path,
-      "-o",
-      "StrictHostKeyChecking=accept-new",
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "ConnectTimeout=8",
-      target
-    ]
-  end
+  defp clone_repo(github_repo, branch) do
+    dir = temp_path("cleat_deploy_clone")
+    _ = File.rm_rf(dir)
+    url = github_clone_url(github_repo)
 
-  defp ssh_base(key_path, target) do
-    [
-      "-i",
-      key_path,
-      "-o",
-      "StrictHostKeyChecking=accept-new",
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "ServerAliveInterval=30",
-      "-o",
-      "ServerAliveCountMax=120",
-      target
-    ]
-  end
-
-  defp scp_base(key_path) do
-    [
-      "-i",
-      key_path,
-      "-o",
-      "StrictHostKeyChecking=accept-new",
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "ServerAliveInterval=30",
-      "-o",
-      "ServerAliveCountMax=120"
-    ]
-  end
-
-  defp cmd(command, args) do
-    case System.cmd(command, args, stderr_to_stdout: true) do
-      {output, 0} -> {:ok, output}
-      {output, _code} -> {:error, output}
+    case cmd("git", ["clone", "--depth", "50", "-b", branch, url, dir]) do
+      {:ok, _output} -> {:ok, dir}
+      {:error, output} -> {:error, "git clone failed:\n" <> output}
     end
   end
 
-  defp trim(value) when is_binary(value), do: String.trim(value)
-  defp trim(_), do: ""
+  defp create_tarball(work_dir) do
+    path = temp_path("cleat_deploy_src") <> ".tar.gz"
+    _ = File.rm(path)
+    args = ["-czf", path] ++ tar_exclude_args() ++ ["-C", work_dir, "."]
+
+    case cmd("tar", args) do
+      {:ok, _output} -> {:ok, path}
+      {:error, output} -> {:error, "tar failed:\n" <> output}
+    end
+  end
+
+  defp tar_exclude_args do
+    Enum.flat_map(@tar_excludes, fn entry -> ["--exclude", entry] end)
+  end
 end

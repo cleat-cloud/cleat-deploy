@@ -88,6 +88,12 @@ defmodule CleatDeployWeb do
       # Core UI components
       import CleatDeployWeb.CoreComponents
       import CleatDeployWeb.PaasComponents
+      import CleatDeployWeb.PaasComponents.Badges
+      import CleatDeployWeb.PaasComponents.Copy
+      import CleatDeployWeb.PaasComponents.Charts
+      import CleatDeployWeb.PaasComponents.Bars
+      import CleatDeployWeb.PaasComponents.Terminal
+      import CleatDeployWeb.PaasComponents.RepoPicker
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS
