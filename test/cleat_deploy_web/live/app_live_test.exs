@@ -349,6 +349,62 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert app_name_order(html) == ["Vexo", "Atelie"]
   end
 
+  test "re-probes only when the visible set of apps changes, not on metric reorder" do
+    alias CleatDeployWeb.AppLive.Index.Listing
+
+    # Clicking a metric header (Disk/RAM/CPU) reorders the same page: the app
+    # set is unchanged, so no probe. Re-probing here made each `du` result
+    # re-trigger the next probe forever in production.
+    refute Listing.reload_memory?([1, 2, 3], [3, 1, 2])
+
+    # Paginating or filtering changes which apps are visible: probe again.
+    assert Listing.reload_memory?([1, 2, 3], [1, 2, 4])
+    assert Listing.reload_memory?(nil, [1])
+    refute Listing.reload_memory?([1, 2], [1, 2])
+    refute Listing.reload_memory?(nil, [])
+  end
+
+  test "sorts the whole filtered set by disk, not just the visible page", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    previous = Application.get_env(:cleat_deploy, :runtime_memory)
+
+    Application.put_env(
+      :cleat_deploy,
+      :runtime_memory,
+      CleatDeploy.Apps.RuntimeMemorySizedStub
+    )
+
+    on_exit(fn ->
+      if previous, do: Application.put_env(:cleat_deploy, :runtime_memory, previous)
+    end)
+
+    for n <- 1..12 do
+      label = String.pad_leading(Integer.to_string(n), 2, "0")
+
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "App #{label}",
+        slug: "app-#{n}",
+        github_repo: "owner/repo-#{n}",
+        host: "app-#{n}.example.com",
+        runtime: "node"
+      })
+    end
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    # App 12 (1200 MB) sits on page 2 alphabetically; a global disk sort must
+    # surface it on page 1.
+    view |> element("#sort-apps-disk") |> render_click()
+    view |> element("#sort-apps-disk") |> render_click()
+
+    wait_for(view, fn -> has_element?(view, "#apps-list", "App 12") end)
+    assert has_element?(view, "#apps-list", "App 11")
+    refute has_element?(view, "#apps-list", "App 01")
+  end
+
   test "redirects app show to deployments page", %{conn: conn, scope: scope, server: server} do
     app = TenancyFixtures.app_fixture(scope, server)
 
