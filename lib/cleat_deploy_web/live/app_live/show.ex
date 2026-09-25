@@ -6,7 +6,8 @@ defmodule CleatDeployWeb.AppLive.Show do
   alias CleatDeploy.Deploy.{Addons, RuntimePackages}
   alias CleatDeployWeb.AppLive.{Layout, NewInstance}
 
-  @poll_ms 1_000
+  # Fallback while a deploy is active. Live updates come from PubSub.
+  @poll_ms 15_000
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
