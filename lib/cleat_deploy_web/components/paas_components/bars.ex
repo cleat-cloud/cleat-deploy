@@ -3,6 +3,7 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
   use Phoenix.Component
 
   import CleatDeployWeb.PaasComponents.Charts, only: [chart_hover_layer: 1]
+  use CleatDeployWeb, :verified_routes
 
   attr :id, :string, required: true
   attr :elixir, :integer, required: true
@@ -45,9 +46,9 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
       </h3>
       <p class="text-[11px] text-hd-muted">{@total} registered on this server</p>
       <div class="mt-5 space-y-4">
-        <div>
+        <.link navigate={~p"/apps?runtime=phoenix"} class="group/row block">
           <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-orange">Elixir</span>
+            <span class="text-hd-orange group-hover/row:underline">Elixir</span>
             <span class="tabular-nums text-hd-text">{@elixir}</span>
           </div>
           <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
@@ -56,10 +57,10 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
               {@elixir} apps · {@elixir_pct}%
             </span>
           </div>
-        </div>
-        <div>
+        </.link>
+        <.link navigate={~p"/apps?runtime=golang"} class="group/row block">
           <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-green">Go</span>
+            <span class="text-hd-green group-hover/row:underline">Go</span>
             <span class="tabular-nums text-hd-text">{@go}</span>
           </div>
           <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
@@ -68,10 +69,10 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
               {@go} apps · {@go_pct}%
             </span>
           </div>
-        </div>
-        <div>
+        </.link>
+        <.link navigate={~p"/apps?runtime=node"} class="group/row block">
           <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-blue">JavaScript</span>
+            <span class="text-hd-blue group-hover/row:underline">JavaScript</span>
             <span class="tabular-nums text-hd-text">{@js}</span>
           </div>
           <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
@@ -80,10 +81,10 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
               {@js} apps · {@js_pct}%
             </span>
           </div>
-        </div>
-        <div>
+        </.link>
+        <.link navigate={~p"/apps?runtime=rails"} class="group/row block">
           <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-red">Ruby</span>
+            <span class="text-hd-red group-hover/row:underline">Ruby</span>
             <span class="tabular-nums text-hd-text">{@ruby}</span>
           </div>
           <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
@@ -92,10 +93,10 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
               {@ruby} apps · {@ruby_pct}%
             </span>
           </div>
-        </div>
-        <div>
+        </.link>
+        <.link navigate={~p"/apps?runtime=rust"} class="group/row block">
           <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-amber-500">Rust</span>
+            <span class="text-amber-500 group-hover/row:underline">Rust</span>
             <span class="tabular-nums text-hd-text">{@rust}</span>
           </div>
           <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
@@ -104,10 +105,10 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
               {@rust} apps · {@rust_pct}%
             </span>
           </div>
-        </div>
-        <div>
+        </.link>
+        <.link navigate={~p"/apps?runtime=static"} class="group/row block">
           <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-muted">Static</span>
+            <span class="text-hd-muted group-hover/row:underline">Static</span>
             <span class="tabular-nums text-hd-text">{@static}</span>
           </div>
           <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
@@ -116,7 +117,7 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
               {@static} apps · {@static_pct}%
             </span>
           </div>
-        </div>
+        </.link>
       </div>
     </section>
     """

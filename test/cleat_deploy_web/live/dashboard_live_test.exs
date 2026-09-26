@@ -216,6 +216,30 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert html =~ ~r/>Static<\/span>\s*<span[^>]*>2<\/span>/
   end
 
+  test "language bars link to the apps index filtered by runtime", %{conn: conn, scope: scope} do
+    server =
+      TenancyFixtures.server_fixture(scope, %{name: "filter-host", instance_status: "running"})
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      runtime: "phoenix",
+      slug: "phx-filter",
+      name: "Phx"
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=phoenix']")
+    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=golang']")
+    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=node']")
+    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=rails']")
+    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=rust']")
+    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=static']")
+
+    view |> element("#chart-runtimes a[href='/apps?runtime=static']") |> render_click()
+
+    assert_redirect(view, "/apps?runtime=static")
+  end
+
   test "deploy chart hover points skip 0/0 copy on empty days", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
 
