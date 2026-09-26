@@ -146,7 +146,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert Settings.get_setting(scope).active_server_id == nil
   end
 
-  test "configured apps and language bars follow the active server", %{
+  test "configured apps stays tenant-wide while language bars follow the active server", %{
     conn: conn,
     scope: scope
   } do
@@ -176,14 +176,14 @@ defmodule CleatDeployWeb.DashboardLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/")
 
-    assert has_element?(view, "#metric-apps", "1")
+    assert has_element?(view, "#metric-apps", "3")
     assert has_element?(view, "#chart-runtimes", "1 registered on this server")
 
     view
     |> element("#active-server-select")
     |> render_change(%{"server_id" => to_string(stopped.id)})
 
-    assert has_element?(view, "#metric-apps", "2")
+    assert has_element?(view, "#metric-apps", "3")
     assert has_element?(view, "#chart-runtimes", "2 registered on this server")
   end
 

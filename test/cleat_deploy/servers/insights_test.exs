@@ -66,7 +66,7 @@ defmodule CleatDeploy.Servers.InsightsTest do
     assert Insights.snapshot(scope).server.id == chosen.id
   end
 
-  test "counts apps, runtimes and deploys for the active server only", %{
+  test "counts runtimes and deploys for the active server only", %{
     scope: scope,
     server: server
   } do
@@ -91,7 +91,6 @@ defmodule CleatDeploy.Servers.InsightsTest do
     assert {:ok, _} = Settings.put_active_server(scope, server.id)
 
     snapshot = Insights.snapshot(scope)
-    assert snapshot.app_count == 2
     assert snapshot.runtimes.elixir == 1
     assert snapshot.runtimes.go == 1
     assert snapshot.runtimes.node == 0
@@ -100,7 +99,6 @@ defmodule CleatDeploy.Servers.InsightsTest do
     assert {:ok, _} = Settings.put_active_server(scope, other.id)
 
     switched = Insights.snapshot(scope)
-    assert switched.app_count == 1
     assert switched.runtimes.elixir == 0
     assert switched.runtimes.node == 1
     assert List.last(switched.deploys).success >= 1
