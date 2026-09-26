@@ -17,7 +17,6 @@ defmodule CleatDeploy.Servers.Insights do
   def snapshot(%Scope{} = scope, opts \\ []) do
     server = active_server(scope)
     runtimes = Apps.count_by_runtime(scope, server)
-    app_count = Apps.count_apps(scope, server)
 
     deploys =
       fill_deploy_days(Deployments.daily_status_counts(scope, @deploy_days, server), @deploy_days)
@@ -25,13 +24,8 @@ defmodule CleatDeploy.Servers.Insights do
     metrics =
       if Keyword.get(opts, :metrics, true), do: remote_metrics(server), else: empty_metrics()
 
-    wrap(server, app_count, runtimes, deploys, metrics)
-  end
-
-  defp wrap(server, app_count, runtimes, deploys, metrics) do
     %{
       server: server,
-      app_count: app_count,
       runtimes: runtimes,
       deploys: deploys,
       metrics: metrics,
