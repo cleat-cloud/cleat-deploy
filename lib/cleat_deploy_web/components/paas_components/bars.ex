@@ -10,14 +10,21 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
   attr :js, :integer, required: true
   attr :ruby, :integer, required: true
   attr :rust, :integer, default: 0
+  attr :static, :integer, default: 0
 
   def runtime_bars(assigns) do
-    total = max(assigns.elixir + assigns.go + assigns.js + assigns.ruby + assigns.rust, 1)
+    total =
+      max(
+        assigns.elixir + assigns.go + assigns.js + assigns.ruby + assigns.rust + assigns.static,
+        1
+      )
+
     elixir_pct = round(assigns.elixir / total * 100)
     go_pct = round(assigns.go / total * 100)
     js_pct = round(assigns.js / total * 100)
     ruby_pct = round(assigns.ruby / total * 100)
     rust_pct = round(assigns.rust / total * 100)
+    static_pct = round(assigns.static / total * 100)
 
     assigns =
       assign(assigns,
@@ -26,7 +33,9 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
         js_pct: js_pct,
         ruby_pct: ruby_pct,
         rust_pct: rust_pct,
-        total: assigns.elixir + assigns.go + assigns.js + assigns.ruby + assigns.rust
+        static_pct: static_pct,
+        total:
+          assigns.elixir + assigns.go + assigns.js + assigns.ruby + assigns.rust + assigns.static
       )
 
     ~H"""
@@ -93,6 +102,18 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
             <div class="h-2 rounded-full bg-amber-500" style={"width: #{@rust_pct}%"} />
             <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
               {@rust} apps · {@rust_pct}%
+            </span>
+          </div>
+        </div>
+        <div>
+          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
+            <span class="text-hd-muted">Static</span>
+            <span class="tabular-nums text-hd-text">{@static}</span>
+          </div>
+          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
+            <div class="h-2 rounded-full bg-hd-muted" style={"width: #{@static_pct}%"} />
+            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
+              {@static} apps · {@static_pct}%
             </span>
           </div>
         </div>

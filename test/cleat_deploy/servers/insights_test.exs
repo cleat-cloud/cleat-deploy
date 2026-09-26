@@ -16,10 +16,12 @@ defmodule CleatDeploy.Servers.InsightsTest do
     TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix", slug: "a1", name: "A1"})
     TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix", slug: "a2", name: "A2"})
     TenancyFixtures.app_fixture(scope, server, %{runtime: "golang", slug: "g1", name: "G1"})
+    TenancyFixtures.app_fixture(scope, server, %{runtime: "static", slug: "s1", name: "S1"})
 
     snapshot = Insights.snapshot(scope)
     assert snapshot.runtimes.elixir == 2
     assert snapshot.runtimes.go == 1
+    assert snapshot.runtimes.static == 1
     assert snapshot.server.id == server.id
   end
 
