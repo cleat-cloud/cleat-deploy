@@ -187,6 +187,35 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#chart-runtimes", "2 registered on this server")
   end
 
+  test "counts static sites apart from Elixir in the language bars", %{conn: conn, scope: scope} do
+    server =
+      TenancyFixtures.server_fixture(scope, %{name: "sites-host", instance_status: "running"})
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      runtime: "phoenix",
+      slug: "phx-host",
+      name: "Phx"
+    })
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      runtime: "golang",
+      slug: "go-host",
+      name: "GoApp"
+    })
+
+    TenancyFixtures.app_fixture(scope, server, %{runtime: "static", slug: "site-one", name: "One"})
+
+    TenancyFixtures.app_fixture(scope, server, %{runtime: "static", slug: "site-two", name: "Two"})
+
+    {:ok, view, _html} = live(conn, ~p"/")
+    html = render(view)
+
+    assert has_element?(view, "#chart-runtimes", "4 registered on this server")
+    assert html =~ ~r/>Elixir<\/span>\s*<span[^>]*>1<\/span>/
+    assert html =~ ~r/>Go<\/span>\s*<span[^>]*>1<\/span>/
+    assert html =~ ~r/>Static<\/span>\s*<span[^>]*>2<\/span>/
+  end
+
   test "deploy chart hover points skip 0/0 copy on empty days", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
 

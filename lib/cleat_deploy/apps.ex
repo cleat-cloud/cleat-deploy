@@ -174,11 +174,12 @@ defmodule CleatDeploy.Apps do
       {"node", n}, acc -> %{acc | node: n}
       {"rails", n}, acc -> %{acc | ruby: n}
       {"rust", n}, acc -> %{acc | rust: n}
+      {"static", n}, acc -> %{acc | static: n}
       {_runtime, n}, acc -> %{acc | elixir: acc.elixir + n}
     end)
   end
 
-  defp empty_runtime_counts, do: %{elixir: 0, go: 0, node: 0, ruby: 0, rust: 0}
+  defp empty_runtime_counts, do: %{elixir: 0, go: 0, node: 0, ruby: 0, rust: 0, static: 0}
 
   def get_app!(id) when is_integer(id) do
     Repo.get!(App, id) |> Repo.preload([:server, :env_vars])
