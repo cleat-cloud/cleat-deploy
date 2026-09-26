@@ -63,7 +63,15 @@ defmodule CleatDeploy.Apps.App do
     |> cast_runtime_packages()
     |> put_runtime_packages_text()
     |> validate_branch()
-    |> validate_inclusion(:runtime, ["phoenix", "golang", "static", "node", "rails", "rust"])
+    |> validate_inclusion(:runtime, [
+      "phoenix",
+      "golang",
+      "static",
+      "node",
+      "rails",
+      "rust",
+      "gleam"
+    ])
     |> put_github_repo_default()
     |> validate_repo()
     |> unique_constraint(:slug, name: :apps_tenant_id_slug_index)
@@ -88,7 +96,8 @@ defmodule CleatDeploy.Apps.App do
 
   Changing the runtime re-derives the systemd unit and, for non-phoenix
   runtimes, the data dir default (which depends on the release path), so an app
-  registered as `phoenix` by mistake can be corrected to `node`/`golang`/`rails`/`rust`.
+  registered as `phoenix` by mistake can be corrected to
+  `node`/`golang`/`rails`/`rust`/`gleam`.
   """
   def deploy_settings_changeset(app, attrs) do
     app
@@ -110,7 +119,15 @@ defmodule CleatDeploy.Apps.App do
     |> update_change(:host, &normalize_host/1)
     |> update_runtime_defaults()
     |> validate_branch()
-    |> validate_inclusion(:runtime, ["phoenix", "golang", "static", "node", "rails", "rust"])
+    |> validate_inclusion(:runtime, [
+      "phoenix",
+      "golang",
+      "static",
+      "node",
+      "rails",
+      "rust",
+      "gleam"
+    ])
     |> validate_required([:auto_deploy])
     |> validate_number(:port, greater_than: 0, less_than: 65_536)
     |> validate_repo()
@@ -142,6 +159,7 @@ defmodule CleatDeploy.Apps.App do
   def default_systemd_unit(slug, "node") when is_binary(slug), do: "node-#{slug}"
   def default_systemd_unit(slug, "rails") when is_binary(slug), do: "rails-#{slug}"
   def default_systemd_unit(slug, "rust") when is_binary(slug), do: "rust-#{slug}"
+  def default_systemd_unit(slug, "gleam") when is_binary(slug), do: "gleam-#{slug}"
   def default_systemd_unit(_slug, "static"), do: nil
   def default_systemd_unit(slug, _) when is_binary(slug), do: "phx-#{slug}"
 
@@ -151,6 +169,7 @@ defmodule CleatDeploy.Apps.App do
   def default_release_path(slug, "node") when is_binary(slug), do: "/opt/#{slug}"
   def default_release_path(slug, "rails") when is_binary(slug), do: "/opt/#{slug}"
   def default_release_path(slug, "rust") when is_binary(slug), do: "/opt/#{slug}"
+  def default_release_path(slug, "gleam") when is_binary(slug), do: "/opt/#{slug}"
   def default_release_path(slug, "static") when is_binary(slug), do: "/var/www/#{slug}"
   def default_release_path(slug, _) when is_binary(slug), do: "/opt/#{release_name(slug)}"
 
@@ -160,6 +179,7 @@ defmodule CleatDeploy.Apps.App do
   def main_language("node"), do: "JavaScript"
   def main_language("rails"), do: "Ruby"
   def main_language("rust"), do: "Rust"
+  def main_language("gleam"), do: "Gleam"
   def main_language(_runtime), do: "Elixir"
 
   def deploy_config(%__MODULE__{} = app) do

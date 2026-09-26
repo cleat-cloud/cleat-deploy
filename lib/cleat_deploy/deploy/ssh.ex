@@ -5,6 +5,7 @@ defmodule CleatDeploy.Deploy.Ssh do
 
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
+  alias CleatDeploy.Deploy.Gleam
   alias CleatDeploy.Deploy.Golang
   alias CleatDeploy.Deploy.Node
   alias CleatDeploy.Deploy.Rails
@@ -303,6 +304,9 @@ defmodule CleatDeploy.Deploy.Ssh do
 
       manifest.runtime == "rust" or Runtime.kind(work_dir, app) == :rust ->
         Rust.remote_build_script(server, app, config, sha, remote_tar, manifest)
+
+      manifest.runtime == "gleam" or Runtime.kind(work_dir, app) == :gleam ->
+        Gleam.remote_build_script(server, app, config, sha, remote_tar, manifest)
 
       Runtime.kind(work_dir, app) == :golang or manifest.runtime == "golang" ->
         Golang.remote_build_script(server, app, config, sha, remote_tar, manifest)

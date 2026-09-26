@@ -26,12 +26,13 @@ deploy touches the server, with the reason in the deploy log.
 
 | key | type | default | what it does |
 |---|---|---|---|
-| `runtime` | `"phoenix" \| "golang" \| "node" \| "rails" \| "rust" \| "static"` | detected, else `phoenix` | Chooses the build/run pipeline. |
+| `runtime` | `"phoenix" \| "golang" \| "node" \| "rails" \| "rust" \| "gleam" \| "static"` | detected, else `phoenix` | Chooses the build/run pipeline. |
 | `build_dir` | string | auto-detected | Subdirectory holding the project (monorepos). |
 | `build_command` | string | runtime default | Overrides the build step (e.g. `npm run build:prod`). |
 | `start_command` | string | runtime default | Command the app's `web` process runs. |
 | `node_version` | string | `engines.node` → `22` | Node major installed for the build (node runtime and Rails asset pipeline). |
 | `ruby_version` | string | `.ruby-version` → Gemfile → `3.3.6` | Ruby version installed through mise. |
+| `gleam_version` | string | `1.18.1` | Gleam version installed through mise (Erlang is pinned to the panel's `28.4.1`). |
 | `binaries` | list | `["server"]` | Go runtime only: one systemd unit per binary (`server` owns the base unit, others get `<unit>-<name>`). |
 
 ## Hosting

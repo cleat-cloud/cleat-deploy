@@ -274,6 +274,20 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert_patch(view, ~p"/apps?query=#{app.slug}")
   end
 
+  test "filters gleam apps by the gleam chip", %{conn: conn, scope: scope, server: server} do
+    gleam_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "gleam"})
+    phx_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps?runtime=gleam")
+    rendered = render(view)
+    assert rendered =~ gleam_app.host
+    refute rendered =~ phx_app.host
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+    view |> element("#apps-filter-gleam") |> render_click()
+    assert_patch(view, ~p"/apps?runtime=gleam")
+  end
+
   test "deletes an app from the list after slug confirmation", %{
     conn: conn,
     scope: scope,

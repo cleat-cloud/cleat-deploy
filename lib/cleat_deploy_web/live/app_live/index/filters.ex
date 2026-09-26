@@ -69,6 +69,13 @@ defmodule CleatDeployWeb.AppLive.Index.Filters do
             Rust
           </.runtime_filter_chip>
           <.runtime_filter_chip
+            id="apps-filter-gleam"
+            runtime={:gleam}
+            current={@apps_runtime}
+          >
+            Gleam
+          </.runtime_filter_chip>
+          <.runtime_filter_chip
             id="apps-filter-static"
             runtime={:static}
             current={@apps_runtime}

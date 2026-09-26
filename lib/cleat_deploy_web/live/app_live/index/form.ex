@@ -117,7 +117,8 @@ defmodule CleatDeployWeb.AppLive.Index.Form do
                   {"Go / Cais", "golang"},
                   {"Node / Next.js / TanStack Start", "node"},
                   {"Ruby on Rails", "rails"},
-                  {"Rust / Loco", "rust"}
+                  {"Rust / Loco", "rust"},
+                  {"Gleam", "gleam"}
                 ]}
               />
               <.input
