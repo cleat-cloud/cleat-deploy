@@ -27,6 +27,7 @@ defmodule CleatDeployWeb.AppLive.Index.Listing do
   def parse_runtime("static"), do: :static
   def parse_runtime("rails"), do: :rails
   def parse_runtime("rust"), do: :rust
+  def parse_runtime("gleam"), do: :gleam
   def parse_runtime("phoenix"), do: :phoenix
   def parse_runtime(_), do: :all
 

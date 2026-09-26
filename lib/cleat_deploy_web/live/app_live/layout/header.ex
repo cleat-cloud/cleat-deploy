@@ -58,6 +58,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Header do
   def runtime_badge_label("node"), do: "JS"
   def runtime_badge_label("rails"), do: "RB"
   def runtime_badge_label("rust"), do: "RS"
+  def runtime_badge_label("gleam"), do: "GL"
   def runtime_badge_label("static"), do: "HTML"
   def runtime_badge_label(_runtime), do: "PHX"
 
@@ -65,6 +66,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Header do
   def runtime_badge_class("node"), do: "border-hd-blue/40 bg-hd-blue/10 text-hd-blue"
   def runtime_badge_class("rails"), do: "border-hd-red/40 bg-hd-red/10 text-hd-red"
   def runtime_badge_class("rust"), do: "border-amber-500/40 bg-amber-500/10 text-amber-500"
+  def runtime_badge_class("gleam"), do: "border-pink-400/40 bg-pink-400/10 text-pink-400"
   def runtime_badge_class(_runtime), do: "border-hd-border bg-hd-aside text-hd-orange"
 
   attr :id, :string, required: true

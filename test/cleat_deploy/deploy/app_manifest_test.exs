@@ -211,6 +211,37 @@ defmodule CleatDeploy.Deploy.AppManifestTest do
     assert manifest.start_command == "./bin/server start"
   end
 
+  test "infers gleam for a gleam.toml repo without deploy.json" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path =
+      tmp_repo(%{
+        "gleam.toml" => ~s(name = "minha_app"\nversion = "0.1.0"\ntarget = "erlang"\n)
+      })
+
+    assert AppManifest.resolve(repo_path, app).runtime == "gleam"
+  end
+
+  test "deploy.json runtime gleam is accepted and carries the version" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path =
+      tmp_repo(%{
+        "gleam.toml" => ~s(name = "minha_app"\ntarget = "erlang"\n),
+        ".cleat_deploy/deploy.json" =>
+          ~s({"runtime": "gleam", "gleam_version": "1.17.0", "build_command": "gleam export erlang-shipment"})
+      })
+
+    manifest = AppManifest.resolve(repo_path, app)
+    assert manifest.runtime == "gleam"
+    assert manifest.gleam_version == "1.17.0"
+    assert manifest.build_command == "gleam export erlang-shipment"
+  end
+
   test "resolve reads the release phase, processes and addons", %{app: app, repo_path: repo_path} do
     File.write!(
       Path.join(repo_path, ".cleat_deploy/deploy.json"),

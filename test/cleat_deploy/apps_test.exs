@@ -128,6 +128,15 @@ defmodule CleatDeploy.AppsTest do
       assert Ecto.Changeset.get_field(changeset, :systemd_unit) == "rust-hello-loco"
       assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/hello-loco"
     end
+
+    test "gleam runtime uses gleam-<slug> unit and /opt/slug" do
+      changeset =
+        Apps.change_app(%CleatDeploy.Apps.App{}, %{slug: "minha-app", runtime: "gleam"})
+
+      assert Ecto.Changeset.get_field(changeset, :runtime) == "gleam"
+      assert Ecto.Changeset.get_field(changeset, :systemd_unit) == "gleam-minha-app"
+      assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/minha-app"
+    end
   end
 
   describe "main_language/1" do
@@ -135,6 +144,7 @@ defmodule CleatDeploy.AppsTest do
       assert App.main_language(%App{runtime: "phoenix"}) == "Elixir"
       assert App.main_language(%App{runtime: "golang"}) == "Go"
       assert App.main_language(%App{runtime: "rust"}) == "Rust"
+      assert App.main_language(%App{runtime: "gleam"}) == "Gleam"
       assert App.main_language(%App{runtime: nil}) == "Elixir"
     end
   end

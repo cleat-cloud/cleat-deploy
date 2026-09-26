@@ -216,6 +216,28 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert html =~ ~r/>Static<\/span>\s*<span[^>]*>2<\/span>/
   end
 
+  test "counts gleam apps in their own language bar", %{conn: conn, scope: scope} do
+    server =
+      TenancyFixtures.server_fixture(scope, %{name: "gleam-host", instance_status: "running"})
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      runtime: "phoenix",
+      slug: "phx-gleam-host",
+      name: "Phx"
+    })
+
+    TenancyFixtures.app_fixture(scope, server, %{runtime: "gleam", slug: "gleam-one", name: "One"})
+
+    TenancyFixtures.app_fixture(scope, server, %{runtime: "gleam", slug: "gleam-two", name: "Two"})
+
+    {:ok, view, _html} = live(conn, ~p"/")
+    html = render(view)
+
+    assert has_element?(view, "#chart-runtimes", "3 registered on this server")
+    assert html =~ ~r/>Elixir<\/span>\s*<span[^>]*>1<\/span>/
+    assert html =~ ~r/>Gleam<\/span>\s*<span[^>]*>2<\/span>/
+  end
+
   test "language bars link to the apps index filtered by runtime", %{conn: conn, scope: scope} do
     server =
       TenancyFixtures.server_fixture(scope, %{name: "filter-host", instance_status: "running"})
@@ -233,6 +255,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=node']")
     assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=rails']")
     assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=rust']")
+    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=gleam']")
     assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=static']")
 
     view |> element("#chart-runtimes a[href='/apps?runtime=static']") |> render_click()

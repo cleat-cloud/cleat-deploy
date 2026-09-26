@@ -26,6 +26,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     rust_provision_script(app, config, manifest)
   end
 
+  def provision_script(%App{} = app, config, %AppManifest{runtime: "gleam"} = manifest) do
+    gleam_provision_script(app, config, manifest)
+  end
+
   def provision_script(%App{} = app, config, %AppManifest{} = manifest) do
     data_dir = data_dir_for(manifest, config)
     env_dir = Path.dirname(config.env_file)
@@ -185,8 +189,15 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     )
   end
 
+  # The Gleam shipment reads PORT and binds where the app decides; `erl` comes
+  # from /usr/local/bin (linked at build time) because the shipment carries no
+  # ERTS of its own.
+  defp gleam_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
+    service_provision_script(app, config, manifest, [], "Gleam")
+  end
+
   # Shared systemd units for long-lived app servers that start through a
-  # generated `current/start.sh` (Node, Rails).
+  # generated `current/start.sh` (Node, Rails, Rust, Gleam).
   #
   # One unit per process: `web` keeps the base unit name (Caddy, the wake agent
   # and the idle sweeper all point at it) and is the only one that gets

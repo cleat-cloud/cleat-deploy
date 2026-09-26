@@ -85,9 +85,14 @@ defmodule CleatDeploy.Apps do
   defp filter_runtime(query, :static), do: where(query, [app: a], a.runtime == "static")
   defp filter_runtime(query, :rails), do: where(query, [app: a], a.runtime == "rails")
   defp filter_runtime(query, :rust), do: where(query, [app: a], a.runtime == "rust")
+  defp filter_runtime(query, :gleam), do: where(query, [app: a], a.runtime == "gleam")
 
   defp filter_runtime(query, :phoenix) do
-    where(query, [app: a], a.runtime not in ["golang", "node", "static", "rails", "rust"])
+    where(
+      query,
+      [app: a],
+      a.runtime not in ["golang", "node", "static", "rails", "rust", "gleam"]
+    )
   end
 
   defp filter_runtime(query, _), do: query
@@ -131,6 +136,7 @@ defmodule CleatDeploy.Apps do
            when 'node' then 'JavaScript'
            when 'rails' then 'Ruby'
            when 'rust' then 'Rust'
+           when 'gleam' then 'Gleam'
            else 'Elixir'
          end
          """,
@@ -175,11 +181,13 @@ defmodule CleatDeploy.Apps do
       {"rails", n}, acc -> %{acc | ruby: n}
       {"rust", n}, acc -> %{acc | rust: n}
       {"static", n}, acc -> %{acc | static: n}
+      {"gleam", n}, acc -> %{acc | gleam: n}
       {_runtime, n}, acc -> %{acc | elixir: acc.elixir + n}
     end)
   end
 
-  defp empty_runtime_counts, do: %{elixir: 0, go: 0, node: 0, ruby: 0, rust: 0, static: 0}
+  defp empty_runtime_counts,
+    do: %{elixir: 0, go: 0, node: 0, ruby: 0, rust: 0, static: 0, gleam: 0}
 
   def get_app!(id) when is_integer(id) do
     Repo.get!(App, id) |> Repo.preload([:server, :env_vars])

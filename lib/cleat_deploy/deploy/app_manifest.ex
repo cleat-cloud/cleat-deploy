@@ -24,6 +24,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
             start_command: nil,
             node_version: nil,
             ruby_version: nil,
+            gleam_version: nil,
             release_command: [],
             release_timeout_s: 300,
             processes: %{},
@@ -46,6 +47,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
           start_command: String.t() | nil,
           node_version: String.t() | nil,
           ruby_version: String.t() | nil,
+          gleam_version: String.t() | nil,
           release_command: [String.t()],
           release_timeout_s: integer(),
           processes: %{String.t() => String.t()},
@@ -85,6 +87,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       file?(repo_path, "mix.exs") -> "phoenix"
       file?(repo_path, "go.mod") -> "golang"
       file?(repo_path, "Cargo.toml") -> "rust"
+      file?(repo_path, "gleam.toml") -> "gleam"
       rails?(repo_path) -> "rails"
       node_project?(repo_path) -> "node"
       file?(repo_path, "index.html") or file?(repo_path, "package.json") -> "static"
@@ -282,6 +285,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       start_command: nil,
       node_version: nil,
       ruby_version: nil,
+      gleam_version: nil,
       release_command: [],
       release_timeout_s: 300,
       processes: %{},
@@ -364,6 +368,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       start_command: blank_to_nil(Map.get(map, "start_command")),
       node_version: blank_to_nil(Map.get(map, "node_version")),
       ruby_version: blank_to_nil(Map.get(map, "ruby_version")),
+      gleam_version: blank_to_nil(Map.get(map, "gleam_version")),
       release_command: parse_release_command(Map.get(map, "release_command")),
       release_timeout_s: parse_int(Map.get(map, "release_timeout_s")),
       processes: parse_processes(Map.get(map, "processes")),
@@ -412,6 +417,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
   defp parse_runtime("node"), do: "node"
   defp parse_runtime("rails"), do: "rails"
   defp parse_runtime("rust"), do: "rust"
+  defp parse_runtime("gleam"), do: "gleam"
   defp parse_runtime(_), do: nil
 
   defp parse_binaries(list) when is_list(list) do

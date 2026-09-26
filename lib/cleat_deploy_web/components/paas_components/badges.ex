@@ -31,6 +31,7 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
   defp language_badge_classes("node"), do: "border-hd-blue/40 bg-hd-blue/10 text-hd-blue"
   defp language_badge_classes("rails"), do: "border-hd-red/40 bg-hd-red/10 text-hd-red"
   defp language_badge_classes("rust"), do: "border-amber-500/40 bg-amber-500/10 text-amber-500"
+  defp language_badge_classes("gleam"), do: "border-pink-400/40 bg-pink-400/10 text-pink-400"
   defp language_badge_classes(_runtime), do: "border-hd-orange/40 bg-hd-orange/10 text-hd-orange"
 
   @doc """

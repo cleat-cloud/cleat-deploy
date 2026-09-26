@@ -128,9 +128,28 @@ vars. A `frontend/package.json` is built with npm. Plain Rust binaries (Axum
 and friends) run as `./bin/server`. Override with `build_command` and
 `start_command`.
 
-Rails, Node and Rust apps can also declare a **release phase**, **multiple
-processes** (web + worker) and **managed addons** (Postgres with pgvector,
-Redis) in `.cleat_deploy/deploy.json` — full reference in
+### Gleam apps
+
+Set `runtime: "gleam"` (or put `"runtime": "gleam"` in `.cleat_deploy/deploy.json`).
+A repo with `gleam.toml` is detected automatically. The panel installs Erlang
+and Gleam via mise, exports the project as an Erlang shipment
+(`gleam export erlang-shipment`), publishes the shipment whole, and keeps
+`./entrypoint.sh run` alive with a `gleam-<slug>` systemd unit behind Caddy.
+
+Only the Erlang target is supported: a `gleam.toml` with
+`target = "javascript"` fails the build with a clear message. Erlang is pinned
+to `28.4.1` for the build and for the service (a shipment does not embed ERTS,
+so `erl` is linked into `/usr/local/bin` for the root unit), and the app reads
+`PORT` from the panel. `gleam_version` overrides the Gleam version (default
+`1.18.1`). `build_command` replaces the export step — it must produce
+`build/erlang-shipment/` — and runs with the persistent
+`<release_path>/data` created and exported as `CLEAT_DATA_DIR`, which is where
+an app that migrates from its source tree should do it: the shipment does not
+carry `src/`.
+
+Rails, Node, Rust and Gleam apps can also declare a **release phase**,
+**multiple processes** (web + worker) and **managed addons** (Postgres with
+pgvector, Redis) in `.cleat_deploy/deploy.json` — full reference in
 [docs/deploy-json.md](docs/deploy-json.md).
 
 One-off test script (no UI):

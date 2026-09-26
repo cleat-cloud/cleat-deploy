@@ -7,6 +7,7 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
 
   attr :id, :string, required: true
   attr :elixir, :integer, required: true
+  attr :gleam, :integer, default: 0
   attr :go, :integer, required: true
   attr :js, :integer, required: true
   attr :ruby, :integer, required: true
@@ -14,13 +15,19 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
   attr :static, :integer, default: 0
 
   def runtime_bars(assigns) do
-    total =
-      max(
-        assigns.elixir + assigns.go + assigns.js + assigns.ruby + assigns.rust + assigns.static,
-        1
-      )
+    counts = [
+      assigns.elixir,
+      assigns.gleam,
+      assigns.go,
+      assigns.js,
+      assigns.ruby,
+      assigns.rust,
+      assigns.static
+    ]
 
+    total = max(Enum.sum(counts), 1)
     elixir_pct = round(assigns.elixir / total * 100)
+    gleam_pct = round(assigns.gleam / total * 100)
     go_pct = round(assigns.go / total * 100)
     js_pct = round(assigns.js / total * 100)
     ruby_pct = round(assigns.ruby / total * 100)
@@ -30,13 +37,13 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
     assigns =
       assign(assigns,
         elixir_pct: elixir_pct,
+        gleam_pct: gleam_pct,
         go_pct: go_pct,
         js_pct: js_pct,
         ruby_pct: ruby_pct,
         rust_pct: rust_pct,
         static_pct: static_pct,
-        total:
-          assigns.elixir + assigns.go + assigns.js + assigns.ruby + assigns.rust + assigns.static
+        total: Enum.sum(counts)
       )
 
     ~H"""
@@ -55,6 +62,18 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
             <div class="h-2 rounded-full bg-hd-orange" style={"width: #{@elixir_pct}%"} />
             <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
               {@elixir} apps · {@elixir_pct}%
+            </span>
+          </div>
+        </.link>
+        <.link navigate={~p"/apps?runtime=gleam"} class="group/row block">
+          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
+            <span class="text-pink-400 group-hover/row:underline">Gleam</span>
+            <span class="tabular-nums text-hd-text">{@gleam}</span>
+          </div>
+          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
+            <div class="h-2 rounded-full bg-pink-400" style={"width: #{@gleam_pct}%"} />
+            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
+              {@gleam} apps · {@gleam_pct}%
             </span>
           </div>
         </.link>

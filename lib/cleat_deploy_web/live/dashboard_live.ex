@@ -189,6 +189,7 @@ defmodule CleatDeployWeb.DashboardLive do
           <.runtime_bars
             id="chart-runtimes"
             elixir={@insights.runtimes.elixir}
+            gleam={@insights.runtimes.gleam}
             go={@insights.runtimes.go}
             js={@insights.runtimes.node}
             ruby={@insights.runtimes.ruby}

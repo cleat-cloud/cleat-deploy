@@ -166,4 +166,44 @@ defmodule CleatDeploy.Deploy.RuntimeTest do
 
     assert Runtime.kind(repo_path, app) == :rust
   end
+
+  test "detects gleam from gleam.toml", %{scope: scope, server: server, repo_path: repo_path} do
+    File.write!(
+      Path.join(repo_path, "gleam.toml"),
+      """
+      name = "minha_app"
+      version = "0.1.0"
+      target = "erlang"
+      """
+    )
+
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Minha App",
+        slug: "minha-app",
+        github_repo: "puppe1990/minha-app",
+        host: "minha-app.gestaobem.com",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :gleam
+  end
+
+  test "app.runtime gleam is detected as gleam", %{
+    scope: scope,
+    server: server,
+    repo_path: repo_path
+  } do
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Minha App",
+        slug: "minha-app-forced",
+        github_repo: "puppe1990/minha-app-forced",
+        host: "minha-app-forced.gestaobem.com",
+        runtime: "gleam",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :gleam
+  end
 end
