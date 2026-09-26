@@ -54,7 +54,7 @@ defmodule CleatDeploy.Deploy.GleamTest do
     manifest = AppManifest.resolve(nil, app)
     script = Gleam.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
 
-    assert script =~ "mise install erlang@28.4.1 gleam@1.18.1"
+    assert script =~ "mise install erlang@28.4.1 gleam@1.18.1 rebar@3.27.0"
     assert script =~ "gleam deps download"
     assert script =~ "gleam export erlang-shipment"
     assert script =~ "build/erlang-shipment"

@@ -1,13 +1,17 @@
 defmodule CleatDeploy.Deploy.Gleam do
   @erlang_version "28.4.1"
   @default_gleam_version "1.18.1"
+  # Gleam shells out to rebar3 to build Erlang dependencies (esqlite, argv).
+  @default_rebar_version "3.27.0"
 
   @moduledoc """
   Build and run a Gleam app on the Erlang target.
 
-  Installs Erlang and Gleam with mise, exports the project as an Erlang
-  shipment and publishes the shipment whole, so the generated `entrypoint.sh`
-  is what systemd keeps alive behind the Caddy reverse proxy.
+  Installs Erlang, Gleam and rebar3 with mise, exports the project as an
+  Erlang shipment and publishes the shipment whole, so the generated
+  `entrypoint.sh` is what systemd keeps alive behind the Caddy reverse
+  proxy. rebar3 is what builds the Erlang (rebar3) dependencies Gleam
+  projects commonly pull in.
 
   A shipment does **not** embed ERTS (unlike a `mix release`), and the unit
   runs as root, so `erl`/`erlc`/`escript`/`epmd` are symlinked into
@@ -133,6 +137,7 @@ defmodule CleatDeploy.Deploy.Gleam do
   defp gleam_install(%AppManifest{} = manifest) do
     erlang = @erlang_version
     gleam = gleam_version(manifest)
+    rebar = @default_rebar_version
 
     """
     if ! command -v mise >/dev/null 2>&1; then
@@ -142,8 +147,8 @@ defmodule CleatDeploy.Deploy.Gleam do
 
     export PATH="$HOME/.local/bin:$PATH"
     eval "$(mise activate bash)"
-    mise install erlang@#{erlang} gleam@#{gleam}
-    mise use -g erlang@#{erlang} gleam@#{gleam}
+    mise install erlang@#{erlang} gleam@#{gleam} rebar@#{rebar}
+    mise use -g erlang@#{erlang} gleam@#{gleam} rebar@#{rebar}
     log "Gleam $(gleam --version)"
 
     # The shipment runs the OTP already installed here and does not carry its
