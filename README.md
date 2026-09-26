@@ -131,8 +131,8 @@ and friends) run as `./bin/server`. Override with `build_command` and
 ### Gleam apps
 
 Set `runtime: "gleam"` (or put `"runtime": "gleam"` in `.cleat_deploy/deploy.json`).
-A repo with `gleam.toml` is detected automatically. The panel installs Erlang
-and Gleam via mise, exports the project as an Erlang shipment
+A repo with `gleam.toml` is detected automatically. The panel installs Erlang,
+Gleam and rebar3 via mise, exports the project as an Erlang shipment
 (`gleam export erlang-shipment`), publishes the shipment whole, and keeps
 `./entrypoint.sh run` alive with a `gleam-<slug>` systemd unit behind Caddy.
 
