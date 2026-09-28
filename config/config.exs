@@ -42,6 +42,12 @@ config :cleat_deploy, :drop_max_bytes, 52_428_800
 # Failed token requests allowed per IP+email per 5-minute window.
 config :cleat_deploy, :login_throttle_limit, 10
 
+# Observability (Corte 01): log retention and per-tenant row cap. The
+# collector is opt-in and its defaults are set in config/runtime.exs.
+config :cleat_deploy, :log_retention_days, 7
+config :cleat_deploy, :log_max_rows_per_tenant, 50_000
+config :cleat_deploy, :log_collector_enabled, false
+
 config :cleat_deploy, Oban,
   repo: CleatDeploy.Repo,
   engine: Oban.Engines.Lite,
@@ -49,7 +55,7 @@ config :cleat_deploy, Oban,
   notifier: Oban.Notifiers.Isolated,
   peer: Oban.Peers.Isolated,
   # Two hosts × two concurrent builds each. Same-host cap lives in claim_running.
-  queues: [deploys: 4, maintenance: 1],
+  queues: [deploys: 4, maintenance: 1, logs: 1],
   # Built-in Stager/Pruner die on Turso SQLITE_BUSY; Safe* retries instead.
   stage_interval: :infinity,
   plugins: [
@@ -58,7 +64,8 @@ config :cleat_deploy, Oban,
     {Oban.Plugins.Cron,
      crontab: [
        {"* * * * *", CleatDeploy.Workers.AutoDeployHealthWorker},
-       {"*/5 * * * *", CleatDeploy.Workers.IdleShutdownWorker}
+       {"*/5 * * * *", CleatDeploy.Workers.IdleShutdownWorker},
+       {"*/5 * * * *", CleatDeploy.Workers.LogCollectWorker}
      ]}
   ],
   shutdown_grace_period: :timer.minutes(15)
