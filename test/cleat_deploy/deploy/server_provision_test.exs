@@ -131,6 +131,45 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "systemctl reload caddy"
   end
 
+  test "caddy strip removes a composite site when the panel host is one alias" do
+    existing = """
+    plaza.purplestock.com.br, www.plaza.purplestock.com.br, plaza.apps.gestaobem.com {
+      reverse_proxy 127.0.0.1:4035
+    }
+
+    other.example.com {
+      reverse_proxy 127.0.0.1:4000
+    }
+    """
+
+    stripped = awk_strip(existing, "plaza.purplestock.com.br")
+
+    refute stripped =~ "plaza.purplestock.com.br"
+    refute stripped =~ "4035"
+    assert stripped =~ "other.example.com {"
+    assert stripped =~ "reverse_proxy 127.0.0.1:4000"
+
+    simple = """
+    tts.gestaobem.com {
+      reverse_proxy 127.0.0.1:4004
+    }
+    """
+
+    leftover = awk_strip(simple, "tts.gestaobem.com")
+    refute leftover =~ "tts.gestaobem.com"
+    refute leftover =~ "4004"
+  end
+
+  test "provision_script validates the Caddyfile before installing it", %{
+    app: app,
+    config: config
+  } do
+    script =
+      ServerProvision.provision_script(app, config, %AppManifest{runtime: "phoenix"})
+
+    assert script =~ "caddy validate --config"
+  end
+
   test "IP hosts get an http:// site to avoid a broken HTTPS redirect", %{app: app} do
     app = %{app | host: "203.0.113.10"}
     config = App.deploy_config(app)
@@ -306,6 +345,15 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     # directories git does not carry when empty — a Chatwoot unit crash-looped
     # with "tmp/pids/server.pid (Errno::ENOENT)" until the launcher created them.
     assert script =~ "mkdir -p tmp/pids tmp/cache log storage"
+  end
+
+  defp awk_strip(caddyfile, site) do
+    path = Path.join(System.tmp_dir!(), "caddy-#{System.unique_integer([:positive])}")
+    File.write!(path, caddyfile)
+    on_exit(fn -> File.rm(path) end)
+
+    {out, 0} = System.cmd("awk", ["-v", "site=#{site}", ServerProvision.caddy_strip_awk(), path])
+    out
   end
 
   defp unit_block(script, unit) do
