@@ -10,12 +10,25 @@ defmodule CleatDeployWeb.Api.LogController do
   alias CleatDeployWeb.Api.Serializer
 
   def index(conn, params) do
+    reply(conn, params, fn scope, filters ->
+      events = Observability.search(scope, filters)
+      json(conn, %{data: Enum.map(events, &Serializer.log_event/1)})
+    end)
+  end
+
+  def groups(conn, params) do
+    reply(conn, params, fn scope, filters ->
+      groups = Observability.group_errors(scope, filters)
+      json(conn, %{data: Enum.map(groups, &Serializer.log_group/1)})
+    end)
+  end
+
+  defp reply(conn, params, fun) do
     scope = conn.assigns.current_scope
 
     case filters(scope, params) do
       {:ok, filters} ->
-        events = Observability.search(scope, filters)
-        json(conn, %{data: Enum.map(events, &Serializer.log_event/1)})
+        fun.(scope, filters)
 
       {:error, :not_found} ->
         conn |> put_status(:not_found) |> json(%{error: "not_found"})
@@ -43,6 +56,8 @@ defmodule CleatDeployWeb.Api.LogController do
          q: params["q"],
          severity: severity,
          min_severity: min_severity,
+         release: params["release"],
+         environment: params["environment"],
          since: since,
          until: until,
          limit: limit

@@ -3,6 +3,8 @@ defmodule CleatDeploy.Workers.DeployWorker do
   use Oban.Worker, queue: :deploys, max_attempts: 3
 
   alias CleatDeploy.Deployments
+  alias CleatDeploy.Observability
+  alias CleatDeploy.Workers.LogCollectWorker
 
   # Wait between attempts when this app is already deploying, or the host is at
   # its concurrent-build cap.
@@ -32,7 +34,8 @@ defmodule CleatDeploy.Workers.DeployWorker do
 
   defp run_deploy(running) do
     with {:ok, message} <- runner().deploy(running),
-         {:ok, _success} <- Deployments.mark_success(running, message) do
+         {:ok, success} <- Deployments.mark_success(running, message) do
+      enqueue_log_collect(success)
       :ok
     else
       {:error, reason} -> fail(running, reason)
@@ -49,6 +52,14 @@ defmodule CleatDeploy.Workers.DeployWorker do
     deployment = Deployments.get_deployment!(running.id)
     _ = Deployments.mark_failed(deployment, format_error(reason))
     {:error, reason}
+  end
+
+  defp enqueue_log_collect(deployment) do
+    if Observability.collector_enabled?() do
+      %{app_id: deployment.app_id}
+      |> LogCollectWorker.new()
+      |> Oban.insert()
+    end
   end
 
   defp runner do

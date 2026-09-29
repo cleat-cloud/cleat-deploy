@@ -4,7 +4,9 @@ defmodule CleatDeployWeb.AppLiveTest do
   import Mox
   import Phoenix.LiveViewTest
 
-  alias CleatDeploy.{Apps, Deployments}
+  alias CleatDeploy.{Apps, Deployments, Repo}
+  alias CleatDeploy.Apps.App
+  alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.RuntimeLogsFixtures
   alias CleatDeploy.TenancyFixtures
 
@@ -541,6 +543,8 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#app-detail-tab-logs")
     assert has_element?(view, "#app-runtime-logs")
     assert has_element?(view, "#refresh-app-logs")
+    assert has_element?(view, "#app-log-events")
+    assert has_element?(view, "#app-log-events-form")
 
     wait_for(view, fn -> render(view) =~ "2026-09-06T12:00:00Z" end)
     assert render(view) =~ "2026-09-06T12:00:00Z"
@@ -550,6 +554,30 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#app-danger-zone")
     assert has_element?(view, "#delete-app-form")
     refute has_element?(view, "#app-webhook")
+  end
+
+  test "shows collected log events on the logs tab", %{conn: conn, scope: scope, server: server} do
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    Repo.insert!(%LogEvent{
+      tenant_id: scope.tenant.id,
+      app_id: app.id,
+      server_id: server.id,
+      source: "app",
+      unit: App.default_systemd_unit(app.slug, app.runtime || "phoenix"),
+      cursor: "ui-1",
+      severity: "err",
+      message: "boom from store",
+      environment: app.branch || "",
+      fingerprint: "abc123abc123abcd",
+      occurred_at: DateTime.utc_now(:second)
+    })
+
+    {:ok, view, html} = live(conn, ~p"/apps/#{app.id}?tab=logs")
+    assert has_element?(view, "#app-log-events")
+    assert has_element?(view, "#log-event-#{Repo.one(LogEvent).id}")
+    assert html =~ "boom from store"
+    assert has_element?(view, "#app-log-error-groups")
   end
 
   test "edits the deploy branch from the webhook tab", %{

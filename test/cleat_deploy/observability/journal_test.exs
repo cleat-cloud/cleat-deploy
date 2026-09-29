@@ -50,6 +50,22 @@ defmodule CleatDeploy.Observability.JournalTest do
       assert entry.occurred_at == ~U[2023-11-14 22:13:20Z]
     end
 
+    test "accepts integer PRIORITY and REALTIME_TIMESTAMP from journald JSON" do
+      output =
+        json([
+          %{
+            "__CURSOR" => "c-int",
+            "__REALTIME_TIMESTAMP" => 1_700_000_000_000_000,
+            "PRIORITY" => 3,
+            "MESSAGE" => "boom"
+          }
+        ])
+
+      assert [entry] = Journal.parse(output)
+      assert entry.severity == "err"
+      assert entry.occurred_at == ~U[2023-11-14 22:13:20Z]
+    end
+
     test "decodes byte-list messages and defaults severity to info" do
       output =
         json([

@@ -24,6 +24,8 @@ defmodule CleatDeploy.Observability.LogEvent do
     field :cursor, :string
     field :severity, :string, default: "info"
     field :message, :string, default: ""
+    field :environment, :string, default: ""
+    field :fingerprint, :string, default: ""
     field :occurred_at, :utc_datetime
 
     belongs_to :tenant, Tenant

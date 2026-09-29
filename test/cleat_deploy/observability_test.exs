@@ -68,6 +68,30 @@ defmodule CleatDeploy.ObservabilityTest do
       assert {:error, "ssh down"} = Observability.ingest_app(ctx.app)
       assert Repo.aggregate(LogEvent, :count) == 0
     end
+
+    test "does not clamp the first ingest to a five-minute window", ctx do
+      expect(RuntimeLogsMock, :run, fn %Server{}, argv ->
+        refute "--since" in argv
+        {:ok, journal([entry("c1", "6", "hello")])}
+      end)
+
+      assert {:ok, 1} = Observability.ingest_app(ctx.app)
+    end
+
+    test "redacts secrets and stores environment plus a fingerprint", ctx do
+      expect(RuntimeLogsMock, :run, fn %Server{}, _argv ->
+        {:ok, journal([entry("c1", "3", "login failed password=hunter2")])}
+      end)
+
+      assert {:ok, 1} = Observability.ingest_app(ctx.app)
+
+      event = Repo.one(LogEvent)
+      refute event.message =~ "hunter2"
+      assert event.message =~ "[redacted]"
+      assert event.environment == ctx.app.branch
+      assert event.fingerprint == CleatDeploy.Observability.Fingerprint.of(event.message)
+      assert event.severity == "err"
+    end
   end
 
   describe "ingest_server/2" do
@@ -138,6 +162,60 @@ defmodule CleatDeploy.ObservabilityTest do
 
       assert Observability.search(ctx.scope) |> Enum.map(& &1.cursor) == ["mine"]
       assert Observability.search(other_scope) |> Enum.map(& &1.cursor) == ["secret"]
+    end
+
+    test "filters by release sha prefix and environment", ctx do
+      release =
+        Repo.insert!(%Deployment{app_id: ctx.app.id, git_sha: "abc123def", status: :success})
+
+      other = Repo.insert!(%Deployment{app_id: ctx.app.id, git_sha: "fff999", status: :success})
+
+      event(ctx, %{
+        cursor: "a",
+        deployment_id: release.id,
+        environment: "main",
+        message: "on main"
+      })
+
+      event(ctx, %{
+        cursor: "b",
+        deployment_id: other.id,
+        environment: "develop",
+        message: "on develop"
+      })
+
+      assert ["a"] =
+               Observability.search(ctx.scope, %{release: "abc123"})
+               |> Enum.map(& &1.cursor)
+
+      assert ["b"] =
+               Observability.search(ctx.scope, %{environment: "develop"})
+               |> Enum.map(& &1.cursor)
+    end
+  end
+
+  describe "group_errors/2" do
+    test "groups similar error lines and ignores info", ctx do
+      event(ctx, %{
+        cursor: "e1",
+        severity: "err",
+        message: "GenServer #PID<0.1.0> crashed",
+        fingerprint: CleatDeploy.Observability.Fingerprint.of("GenServer #PID<0.1.0> crashed")
+      })
+
+      event(ctx, %{
+        cursor: "e2",
+        severity: "err",
+        message: "GenServer #PID<0.9.0> crashed",
+        fingerprint: CleatDeploy.Observability.Fingerprint.of("GenServer #PID<0.9.0> crashed")
+      })
+
+      event(ctx, %{cursor: "ok", severity: "info", message: "request completed"})
+
+      assert [group] = Observability.group_errors(ctx.scope)
+      assert group.count == 2
+      assert group.severity == "err"
+      assert group.sample =~ "crashed"
     end
   end
 

@@ -209,6 +209,7 @@ defmodule CleatDeployWeb.AppLive.Show.Runtime do
   end
 
   def maybe_load_logs(socket, :logs) do
+    socket = CleatDeployWeb.AppLive.Show.Logs.load(socket)
     if connected?(socket), do: request_logs(socket), else: socket
   end
 

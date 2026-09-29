@@ -17,19 +17,15 @@ defmodule CleatDeploy.Observability do
   alias CleatDeploy.Accounts.Scope
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deployments.Deployment
-  alias CleatDeploy.Observability.Journal
-  alias CleatDeploy.Observability.LogEvent
+  alias CleatDeploy.Observability.{Fingerprint, Journal, LogEvent, Query, Redact}
   alias CleatDeploy.Repo
   alias CleatDeploy.Repo.BusyRetry
   alias CleatDeploy.Servers.Server
 
-  @default_limit 200
-  @max_limit 1000
   @ingest_tail 1000
   @ingest_overlap_seconds 300
   @retention_days 7
   @max_rows_per_tenant 50_000
-  @search_bytes 200
 
   @type filters :: %{
           optional(:app_id) => integer() | nil,
@@ -58,7 +54,8 @@ defmodule CleatDeploy.Observability do
       app_id: app.id,
       deployment_id: latest_deployment_id(app.id),
       source: "app",
-      unit: unit
+      unit: unit,
+      environment: app.branch || ""
     })
   end
 
@@ -75,7 +72,8 @@ defmodule CleatDeploy.Observability do
       app_id: nil,
       deployment_id: nil,
       source: "server",
-      unit: unit
+      unit: unit,
+      environment: ""
     })
   end
 
@@ -93,15 +91,18 @@ defmodule CleatDeploy.Observability do
   end
 
   defp since_for(server, meta) do
-    overlap = DateTime.add(DateTime.utc_now(:second), -@ingest_overlap_seconds, :second)
+    case last_occurred_at({server, meta}) do
+      nil ->
+        nil
 
-    {server, meta}
-    |> last_occurred_at()
-    |> case do
-      nil -> overlap
-      last -> max_datetime(DateTime.add(last, -@ingest_overlap_seconds, :second), overlap)
+      last ->
+        overlap = DateTime.add(DateTime.utc_now(:second), -@ingest_overlap_seconds, :second)
+
+        last
+        |> DateTime.add(-@ingest_overlap_seconds, :second)
+        |> max_datetime(overlap)
+        |> Calendar.strftime("%Y-%m-%d %H:%M:%S")
     end
-    |> Calendar.strftime("%Y-%m-%d %H:%M:%S")
   end
 
   defp last_occurred_at({_server, %{app_id: app_id}}) when is_integer(app_id) do
@@ -127,6 +128,8 @@ defmodule CleatDeploy.Observability do
   defp insert_entries(server, meta, entries) do
     count =
       Enum.reduce(entries, 0, fn entry, acc ->
+        message = Redact.message(entry.message)
+
         event = %LogEvent{
           tenant_id: meta.tenant_id,
           app_id: meta.app_id,
@@ -136,7 +139,9 @@ defmodule CleatDeploy.Observability do
           unit: meta.unit || entry.unit || "",
           cursor: entry.cursor,
           severity: entry.severity,
-          message: entry.message,
+          message: message,
+          environment: meta.environment || "",
+          fingerprint: Fingerprint.of(message),
           occurred_at: entry.occurred_at
         }
 
@@ -171,61 +176,12 @@ defmodule CleatDeploy.Observability do
   Searches persisted log events for a tenant scope, newest first.
   """
   @spec search(Scope.t(), filters()) :: [LogEvent.t()]
-  def search(%Scope{} = scope, filters \\ %{}) do
-    filters = normalize_filters(filters)
+  def search(scope, filters \\ %{}), do: Query.search(scope, filters)
 
-    LogEvent
-    |> where([e], e.tenant_id == ^scope.tenant.id)
-    |> filter_app(filters[:app_id])
-    |> filter_server(filters[:server_id])
-    |> filter_unit(filters[:unit])
-    |> filter_severity(filters[:severity], filters[:min_severity])
-    |> filter_query(filters[:q])
-    |> filter_since(filters[:since])
-    |> filter_until(filters[:until])
-    |> order_by([e], desc: e.occurred_at, desc: e.id)
-    |> limit(^(filters[:limit] || @default_limit))
-    |> Repo.all()
-  end
-
-  defp normalize_filters(filters) when is_list(filters), do: Map.new(filters)
-  defp normalize_filters(filters), do: filters
-
-  defp filter_app(query, nil), do: query
-  defp filter_app(query, app_id), do: where(query, [e], e.app_id == ^app_id)
-
-  defp filter_server(query, nil), do: query
-  defp filter_server(query, server_id), do: where(query, [e], e.server_id == ^server_id)
-
-  defp filter_unit(query, nil), do: query
-  defp filter_unit(query, unit), do: where(query, [e], e.unit == ^unit)
-
-  defp filter_severity(query, nil, nil), do: query
-
-  defp filter_severity(query, severity, _min) when is_binary(severity),
-    do: where(query, [e], e.severity == ^severity)
-
-  defp filter_severity(query, _severity, min) when is_binary(min),
-    do: where(query, [e], e.severity in ^LogEvent.severities_at_least(min))
-
-  defp filter_query(query, nil), do: query
-  defp filter_query(query, ""), do: query
-
-  defp filter_query(query, term) do
-    term = term |> String.slice(0, @search_bytes) |> String.downcase()
-
-    if term == "" do
-      query
-    else
-      where(query, [e], like(fragment("lower(?)", e.message), ^("%" <> term <> "%")))
-    end
-  end
-
-  defp filter_since(query, nil), do: query
-  defp filter_since(query, since), do: where(query, [e], e.occurred_at >= ^since)
-
-  defp filter_until(query, nil), do: query
-  defp filter_until(query, until), do: where(query, [e], e.occurred_at <= ^until)
+  @doc """
+  Groups similar error/warning lines for the tenant.
+  """
+  def group_errors(scope, filters \\ %{}), do: Query.group_errors(scope, filters)
 
   @doc """
   Parses a search timestamp: ISO 8601, `YYYY-MM-DD[ HH:MM:SS]` or a relative
@@ -291,19 +247,7 @@ defmodule CleatDeploy.Observability do
   Validates a search limit.
   """
   @spec parse_limit(term()) :: {:ok, pos_integer()} | {:error, :invalid}
-  def parse_limit(nil), do: {:ok, @default_limit}
-
-  def parse_limit(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {int, ""} -> parse_limit(int)
-      _ -> {:error, :invalid}
-    end
-  end
-
-  def parse_limit(value) when is_integer(value) and value >= 1 and value <= @max_limit,
-    do: {:ok, value}
-
-  def parse_limit(_), do: {:error, :invalid}
+  def parse_limit(value), do: Query.parse_limit(value)
 
   # -- retention -------------------------------------------------------------
 

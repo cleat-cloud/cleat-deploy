@@ -34,6 +34,21 @@ defmodule CleatDeploy.Workers.DeployWorkerTest do
     assert deployment.status == :success
   end
 
+  test "enqueues a log collect for the app after a successful deploy", %{app: app} do
+    Application.put_env(:cleat_deploy, :log_collector_enabled, true)
+    on_exit(fn -> Application.put_env(:cleat_deploy, :log_collector_enabled, false) end)
+
+    expect(RunnerMock, :deploy, fn _deployment -> {:ok, "deploy ok"} end)
+
+    {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "abc123"})
+    assert :ok = perform_job(DeployWorker, %{"deployment_id" => deployment.id})
+
+    assert_enqueued(
+      worker: CleatDeploy.Workers.LogCollectWorker,
+      args: %{"app_id" => app.id}
+    )
+  end
+
   test "marks deployment failed when runner errors", %{app: app} do
     expect(RunnerMock, :deploy, fn _deployment -> {:error, "ssh failed"} end)
 
