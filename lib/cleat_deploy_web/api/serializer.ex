@@ -5,6 +5,7 @@ defmodule CleatDeployWeb.Api.Serializer do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.AWS.Lightsail.Bundle
   alias CleatDeploy.Deployments.Deployment
+  alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Servers.Server
 
   def scope(%Scope{user: user, tenant: tenant, role: role}) do
@@ -91,6 +92,20 @@ defmodule CleatDeployWeb.Api.Serializer do
     else
       base
     end
+  end
+
+  def log_event(%LogEvent{} = event) do
+    %{
+      id: event.id,
+      app_id: event.app_id,
+      server_id: event.server_id,
+      deployment_id: event.deployment_id,
+      unit: blank_to_nil(event.unit),
+      source: event.source,
+      severity: event.severity,
+      message: event.message,
+      occurred_at: event.occurred_at
+    }
   end
 
   def bundle(%Bundle{} = bundle) do

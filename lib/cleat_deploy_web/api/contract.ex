@@ -26,6 +26,9 @@ defmodule CleatDeployWeb.Api.Contract do
       inserted_at updated_at wait_reason log
     ),
     "env_var" => ~w(key value branch sensitive revealed),
+    "log_event" => ~w(
+      id app_id server_id deployment_id unit source severity message occurred_at
+    ),
     "user" => ~w(id email),
     "tenant" => ~w(id name slug),
     "me" => ~w(user tenant role),

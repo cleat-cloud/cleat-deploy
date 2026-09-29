@@ -50,6 +50,8 @@ defmodule CleatDeployWeb.Router do
     get "/apps", AppController, :index
     get "/apps/:id", AppController, :show
 
+    get "/logs", LogController, :index
+
     get "/apps/:app_id/env", EnvController, :index
     get "/apps/:app_id/logs", AppController, :logs
     get "/apps/:app_id/deployments", DeploymentController, :index

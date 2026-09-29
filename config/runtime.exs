@@ -32,6 +32,22 @@ if config_env() != :test do
 
   config :cleat_deploy, :deploy_runner, deploy_runner
 
+  # The log collector sweeps every app over SSH, so it stays off in prod until
+  # the operator opts in with LOG_COLLECTOR_ENABLED=true.
+  collector_default = if config_env() == :prod, do: "false", else: "true"
+
+  config :cleat_deploy,
+         :log_collector_enabled,
+         System.get_env("LOG_COLLECTOR_ENABLED", collector_default) in ~w(1 true TRUE)
+
+  config :cleat_deploy,
+         :log_retention_days,
+         String.to_integer(System.get_env("LOG_RETENTION_DAYS", "7"))
+
+  config :cleat_deploy,
+         :log_max_rows_per_tenant,
+         String.to_integer(System.get_env("LOG_MAX_ROWS_PER_TENANT", "50000"))
+
   lightsail_client =
     if System.get_env("AWS_ACCESS_KEY_ID") in [nil, ""] do
       CleatDeploy.AWS.Lightsail.Stub
