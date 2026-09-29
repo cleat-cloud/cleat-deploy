@@ -63,7 +63,7 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ ~s|exit "$code"|
   end
 
-  test "build script reuses the npm cache and warns when the lock is out of sync", %{
+  test "build script picks the lockfile package manager and falls back to npm", %{
     app: app,
     config: config
   } do
@@ -77,6 +77,23 @@ defmodule CleatDeploy.Deploy.NodeTest do
     # instead of silently falling back to `npm install`.
     assert script =~ "package-lock.json out of sync"
     assert script =~ "npm install --no-audit --no-fund"
+
+    # pnpm/yarn/bun projects must not fall through to npm install: npm 10 dies
+    # on modern peer graphs (vitest) before build_command can run.
+    assert script =~ "pnpm-lock.yaml"
+    assert script =~ "pnpm install --frozen-lockfile"
+    assert script =~ "yarn.lock"
+    assert script =~ "yarn install --immutable"
+    assert script =~ "bun.lock"
+    assert script =~ "bun install --frozen-lockfile"
+    assert script =~ "enable_package_manager pnpm"
+    assert script =~ "enable_package_manager yarn"
+    assert script =~ "sudo corepack enable"
+    assert script =~ "export HUSKY=0"
+
+    pnpm_pos = occurrence(script, "pnpm-lock.yaml")
+    npm_fallback_pos = occurrence(script, "No package-lock.json")
+    assert pnpm_pos < npm_fallback_pos
   end
 
   test "build script installs node, builds, resolves a start command, and restarts", %{

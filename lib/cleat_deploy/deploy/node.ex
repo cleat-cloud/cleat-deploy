@@ -64,19 +64,7 @@ defmodule CleatDeploy.Deploy.Node do
       log "Node $(node -v), npm $(npm -v)"
     fi
 
-    log "Installing JS dependencies"
-    # A persistent cache outside BUILD_DIR (wiped every deploy) means a redeploy
-    # only downloads what changed. Registry tarballs dominate install time.
-    export npm_config_cache="$HOME/.npm"
-    if [[ -f package-lock.json ]]; then
-      if ! npm ci --no-audit --no-fund; then
-        log "package-lock.json out of sync (npm ci failed); falling back to npm install"
-        npm install --no-audit --no-fund
-      fi
-    else
-      log "No package-lock.json; using npm install"
-      npm install --no-audit --no-fund
-    fi
+    #{js_install_script()}
 
     #{build_step(manifest.build_command)}
 
@@ -135,6 +123,43 @@ defmodule CleatDeploy.Deploy.Node do
   end
 
   defp normalize_major(_), do: @default_node_version
+
+  defp js_install_script do
+    """
+    log "Installing JS dependencies"
+    # A persistent cache outside BUILD_DIR (wiped every deploy) means a redeploy
+    # only downloads what changed. Registry tarballs dominate install time.
+    export npm_config_cache="$HOME/.npm"
+    export HUSKY=0
+
+    enable_package_manager() {
+      sudo corepack enable >/dev/null 2>&1 || true
+      command -v "$1" >/dev/null 2>&1 || sudo npm install -g "$1" >/dev/null 2>&1 || true
+    }
+
+    if [[ -f yarn.lock ]]; then
+      enable_package_manager yarn
+      log "Installing JS dependencies (yarn)"
+      yarn install --immutable || yarn install --frozen-lockfile || yarn install
+    elif [[ -f pnpm-lock.yaml ]]; then
+      enable_package_manager pnpm
+      log "Installing JS dependencies (pnpm)"
+      pnpm install --frozen-lockfile || pnpm install
+    elif [[ -f bun.lock || -f bun.lockb ]]; then
+      enable_package_manager bun
+      log "Installing JS dependencies (bun)"
+      bun install --frozen-lockfile || bun install
+    elif [[ -f package-lock.json ]]; then
+      if ! npm ci --no-audit --no-fund; then
+        log "package-lock.json out of sync (npm ci failed); falling back to npm install"
+        npm install --no-audit --no-fund
+      fi
+    else
+      log "No package-lock.json; using npm install"
+      npm install --no-audit --no-fund
+    fi
+    """
+  end
 
   defp project_cd(%AppManifest{build_dir: dir}) when is_binary(dir) and dir != "" do
     """
