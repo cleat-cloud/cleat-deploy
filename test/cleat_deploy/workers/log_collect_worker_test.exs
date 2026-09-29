@@ -79,6 +79,58 @@ defmodule CleatDeploy.Workers.LogCollectWorkerTest do
     assert other.id != ctx.app.id
   end
 
+  test "skips prune on a per-app collect", ctx do
+    stub_collector(true)
+    Application.put_env(:cleat_deploy, :log_max_rows_per_tenant, 1)
+
+    on_exit(fn ->
+      Application.delete_env(:cleat_deploy, :log_max_rows_per_tenant)
+    end)
+
+    now = DateTime.utc_now(:second)
+
+    Repo.insert!(%LogEvent{
+      tenant_id: ctx.scope.tenant.id,
+      app_id: ctx.app.id,
+      server_id: ctx.server.id,
+      source: "app",
+      unit: "phx-app.service",
+      cursor: "old",
+      severity: "info",
+      message: "old",
+      occurred_at: DateTime.add(now, -60, :second)
+    })
+
+    Repo.insert!(%LogEvent{
+      tenant_id: ctx.scope.tenant.id,
+      app_id: ctx.app.id,
+      server_id: ctx.server.id,
+      source: "app",
+      unit: "phx-app.service",
+      cursor: "kept",
+      severity: "info",
+      message: "kept",
+      occurred_at: now
+    })
+
+    expect(RuntimeLogsMock, :run, fn _subject, _argv ->
+      timestamp = DateTime.utc_now() |> DateTime.to_unix(:microsecond) |> Integer.to_string()
+
+      {:ok,
+       Jason.encode!(%{
+         "__CURSOR" => "fresh-collect",
+         "__REALTIME_TIMESTAMP" => timestamp,
+         "PRIORITY" => "6",
+         "MESSAGE" => "fresh",
+         "_SYSTEMD_UNIT" => "phx-app.service"
+       })}
+    end)
+
+    assert :ok = perform_job(LogCollectWorker, %{"app_id" => ctx.app.id})
+    cursors = Repo.all(LogEvent) |> Enum.map(& &1.cursor) |> Enum.sort()
+    assert cursors == ["fresh-collect", "kept", "old"]
+  end
+
   defp stub_collector(enabled) do
     Application.put_env(:cleat_deploy, :log_collector_enabled, enabled)
     on_exit(fn -> Application.put_env(:cleat_deploy, :log_collector_enabled, false) end)
