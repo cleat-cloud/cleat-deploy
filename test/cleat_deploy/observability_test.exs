@@ -262,6 +262,77 @@ defmodule CleatDeploy.ObservabilityTest do
       assert {:ok, 1} = Observability.prune(max_rows_per_tenant: 1)
       assert Observability.search(ctx.scope) |> Enum.map(& &1.cursor) == ["two"]
     end
+
+    test "keeps the newest N rows and leaves other tenants alone", ctx do
+      other = TenancyFixtures.scope_fixture()
+      other_server = TenancyFixtures.server_fixture(other)
+      other_app = TenancyFixtures.app_fixture(other, other_server)
+      now = DateTime.utc_now(:second)
+
+      event(ctx, %{cursor: "old-a", occurred_at: DateTime.add(now, -30, :second)})
+      event(ctx, %{cursor: "new-a", occurred_at: now})
+
+      insert_event(other.tenant.id, other_app, other_server, %{
+        cursor: "old-b",
+        occurred_at: DateTime.add(now, -30, :second)
+      })
+
+      insert_event(other.tenant.id, other_app, other_server, %{
+        cursor: "new-b",
+        occurred_at: now
+      })
+
+      assert {:ok, 2} = Observability.prune(max_rows_per_tenant: 1)
+      assert ["new-a"] = Observability.search(ctx.scope) |> Enum.map(& &1.cursor)
+      assert ["new-b"] = Observability.search(other) |> Enum.map(& &1.cursor)
+    end
+
+    test "trim delete is a range on id, not a NOT IN subquery", ctx do
+      now = DateTime.utc_now(:second)
+
+      for i <- 1..4 do
+        event(ctx, %{cursor: "c#{i}", occurred_at: DateTime.add(now, i, :second)})
+      end
+
+      queries = capture_sql(fn -> Observability.prune(max_rows_per_tenant: 2) end)
+      deletes = Enum.filter(queries, &String.contains?(&1, "DELETE FROM \"log_events\""))
+
+      refute Enum.any?(deletes, &String.contains?(&1, "NOT IN")),
+             "expected range delete, got: #{inspect(deletes)}"
+
+      assert Enum.any?(deletes, &String.contains?(&1, "\"id\" <")),
+             "expected id < cutoff delete, got: #{inspect(deletes)}"
+    end
+  end
+
+  defp capture_sql(fun) do
+    parent = self()
+    handler = "sql-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:cleat_deploy, :repo, :query],
+        fn _event, _meas, %{query: query}, _ ->
+          send(parent, {:sql, query})
+        end,
+        nil
+      )
+
+    try do
+      fun.()
+      receive_sql([])
+    after
+      :telemetry.detach(handler)
+    end
+  end
+
+  defp receive_sql(acc) do
+    receive do
+      {:sql, query} -> receive_sql([query | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
   end
 
   defp event(ctx, attrs) do

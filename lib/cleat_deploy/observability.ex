@@ -274,19 +274,26 @@ defmodule CleatDeploy.Observability do
   end
 
   defp trim_tenant(tenant_id, max_rows) do
-    keep =
-      LogEvent
-      |> where([e], e.tenant_id == ^tenant_id)
-      |> order_by([e], desc: e.id)
-      |> limit(^max_rows)
-      |> select([e], e.id)
-
-    {deleted, _} =
-      Repo.delete_all(
-        from(e in LogEvent, where: e.tenant_id == ^tenant_id and e.id not in subquery(keep))
+    newest =
+      from(e in LogEvent,
+        where: e.tenant_id == ^tenant_id,
+        order_by: [desc: e.id],
+        limit: ^max_rows,
+        select: %{id: e.id}
       )
 
-    deleted
+    min_keep_id = Repo.one(from(e in subquery(newest), select: min(e.id)))
+
+    case min_keep_id do
+      nil ->
+        0
+
+      id ->
+        {deleted, _} =
+          Repo.delete_all(from(e in LogEvent, where: e.tenant_id == ^tenant_id and e.id < ^id))
+
+        deleted
+    end
   end
 
   # -- config ----------------------------------------------------------------

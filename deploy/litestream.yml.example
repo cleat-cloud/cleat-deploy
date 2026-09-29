@@ -1,0 +1,19 @@
+# Litestream config for the Cleat panel SQLite file.
+# Installed to /etc/cleat_deploy/litestream.yml (mode 600).
+#
+# The file replica is the default: it survives accidental deletes on the
+# live path. Point `replica` at S3/B2 for disk-loss recovery:
+#
+#   replica:
+#     type: s3
+#     bucket: $LITESTREAM_S3_BUCKET
+#     path: panel
+#     endpoint: $LITESTREAM_S3_ENDPOINT
+#     access-key-id: $LITESTREAM_ACCESS_KEY_ID
+#     secret-access-key: $LITESTREAM_SECRET_ACCESS_KEY
+#
+dbs:
+  - path: /var/lib/cleat_deploy/cleat.db
+    replica:
+      type: file
+      path: /var/backups/cleat_deploy/litestream

@@ -1,0 +1,14 @@
+[Unit]
+Description=Litestream replication for Cleat panel SQLite
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/litestream replicate -config /etc/cleat_deploy/litestream.yml
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

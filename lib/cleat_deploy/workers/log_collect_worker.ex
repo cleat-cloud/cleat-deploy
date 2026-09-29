@@ -22,11 +22,17 @@ defmodule CleatDeploy.Workers.LogCollectWorker do
   def perform(%Oban.Job{args: args}) do
     if Observability.collector_enabled?() do
       collect(args)
-      Observability.prune()
+      maybe_prune(args)
     end
 
     :ok
   end
+
+  # Per-app ingest (after a deploy) must not run the tenant trim. The quadratic
+  # NOT IN prune on Turso billed 8.5B row reads; even the cheap range trim is
+  # reserved for the periodic sweep.
+  defp maybe_prune(%{"app_id" => _}), do: :ok
+  defp maybe_prune(_args), do: Observability.prune()
 
   defp collect(%{"app_id" => app_id}) do
     case Repo.get(App, app_id) do
