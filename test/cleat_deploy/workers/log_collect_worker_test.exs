@@ -55,6 +55,30 @@ defmodule CleatDeploy.Workers.LogCollectWorkerTest do
     assert event.app_id
   end
 
+  test "collects a single app when app_id is passed", ctx do
+    stub_collector(true)
+    other = TenancyFixtures.app_fixture(ctx.scope, ctx.server)
+
+    expect(RuntimeLogsMock, :run, fn _subject, _argv ->
+      timestamp = DateTime.utc_now() |> DateTime.to_unix(:microsecond) |> Integer.to_string()
+
+      {:ok,
+       Jason.encode!(%{
+         "__CURSOR" => "one-app",
+         "__REALTIME_TIMESTAMP" => timestamp,
+         "PRIORITY" => "6",
+         "MESSAGE" => "just one",
+         "_SYSTEMD_UNIT" => "phx-app.service"
+       })}
+    end)
+
+    assert :ok = perform_job(LogCollectWorker, %{"app_id" => ctx.app.id})
+    assert [event] = Repo.all(LogEvent)
+    assert event.app_id == ctx.app.id
+    assert event.message == "just one"
+    assert other.id != ctx.app.id
+  end
+
   defp stub_collector(enabled) do
     Application.put_env(:cleat_deploy, :log_collector_enabled, enabled)
     on_exit(fn -> Application.put_env(:cleat_deploy, :log_collector_enabled, false) end)

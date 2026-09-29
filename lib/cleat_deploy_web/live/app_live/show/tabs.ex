@@ -3,7 +3,7 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
   use CleatDeployWeb, :html
 
   alias CleatDeploy.Apps.RuntimeLogs
-  alias CleatDeployWeb.AppLive.Show.{EnvTab, Runtime}
+  alias CleatDeployWeb.AppLive.Show.{EnvTab, LogsTab, Runtime}
 
   def panel(assigns) do
     ~H"""
@@ -34,7 +34,8 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
       </ul>
     </div>
 
-    <div :if={@app_detail_tab == :logs} id="app-runtime-logs" class="space-y-3">
+    <div :if={@app_detail_tab == :logs} id="app-runtime-logs" class="space-y-6">
+      <LogsTab.explorer {assigns} />
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-0.5">
           <h3 class="font-display text-xs font-semibold text-hd-text">

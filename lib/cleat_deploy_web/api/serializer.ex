@@ -104,7 +104,19 @@ defmodule CleatDeployWeb.Api.Serializer do
       source: event.source,
       severity: event.severity,
       message: event.message,
+      environment: blank_to_nil(event.environment),
+      fingerprint: blank_to_nil(event.fingerprint),
       occurred_at: event.occurred_at
+    }
+  end
+
+  def log_group(group) do
+    %{
+      fingerprint: group.fingerprint,
+      severity: group.severity,
+      count: group.count,
+      sample: group.sample,
+      last_seen_at: group.last_seen_at
     }
   end
 

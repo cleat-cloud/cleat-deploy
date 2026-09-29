@@ -19,14 +19,23 @@ defmodule CleatDeploy.Workers.LogCollectWorker do
   alias CleatDeploy.Repo
 
   @impl Oban.Worker
-  def perform(%Oban.Job{}) do
+  def perform(%Oban.Job{args: args}) do
     if Observability.collector_enabled?() do
-      collect()
+      collect(args)
       Observability.prune()
     end
 
     :ok
   end
+
+  defp collect(%{"app_id" => app_id}) do
+    case Repo.get(App, app_id) do
+      %App{} = app -> collect_app(app)
+      _ -> :ok
+    end
+  end
+
+  defp collect(_args), do: collect()
 
   defp collect do
     App

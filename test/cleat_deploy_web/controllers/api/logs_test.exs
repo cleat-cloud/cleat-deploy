@@ -87,6 +87,40 @@ defmodule CleatDeployWeb.Api.LogsTest do
     assert json_response(conn, 404)["error"] == "not_found"
   end
 
+  test "filters by environment", %{token: token, app: app, server: server, scope: scope} do
+    insert_event(scope.tenant.id, app, server, %{environment: "develop", message: "on develop"})
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/logs?environment=develop")
+    assert [%{"message" => "on develop"}] = json_response(conn, 200)["data"]
+  end
+
+  test "GET /api/v1/logs/groups clusters similar errors", %{
+    token: token,
+    app: app,
+    server: server,
+    scope: scope
+  } do
+    fp = CleatDeploy.Observability.Fingerprint.of("crash pid 1")
+
+    insert_event(scope.tenant.id, app, server, %{
+      severity: "err",
+      message: "crash pid 1",
+      fingerprint: fp
+    })
+
+    insert_event(scope.tenant.id, app, server, %{
+      severity: "err",
+      message: "crash pid 2",
+      fingerprint: fp
+    })
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/logs/groups?app=#{app.slug}")
+    assert [group] = json_response(conn, 200)["data"]
+    assert group["count"] == 2
+    assert group["severity"] == "err"
+    assert group["fingerprint"] == fp
+  end
+
   defp insert_event(tenant_id, app, server, attrs) do
     defaults = %{
       tenant_id: tenant_id,

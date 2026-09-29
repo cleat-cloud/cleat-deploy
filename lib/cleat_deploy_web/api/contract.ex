@@ -27,8 +27,10 @@ defmodule CleatDeployWeb.Api.Contract do
     ),
     "env_var" => ~w(key value branch sensitive revealed),
     "log_event" => ~w(
-      id app_id server_id deployment_id unit source severity message occurred_at
+      id app_id server_id deployment_id unit source severity message
+      environment fingerprint occurred_at
     ),
+    "log_group" => ~w(fingerprint severity count sample last_seen_at),
     "user" => ~w(id email),
     "tenant" => ~w(id name slug),
     "me" => ~w(user tenant role),

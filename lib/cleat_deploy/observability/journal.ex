@@ -94,8 +94,22 @@ defmodule CleatDeploy.Observability.Journal do
   end
 
   defp occurred_at(map) do
-    with timestamp when is_binary(timestamp) <- map["__REALTIME_TIMESTAMP"],
-         {microseconds, ""} <- Integer.parse(timestamp),
+    microseconds =
+      case map["__REALTIME_TIMESTAMP"] do
+        timestamp when is_integer(timestamp) ->
+          timestamp
+
+        timestamp when is_binary(timestamp) ->
+          case Integer.parse(timestamp) do
+            {value, ""} -> value
+            _ -> nil
+          end
+
+        _ ->
+          nil
+      end
+
+    with microseconds when is_integer(microseconds) <- microseconds,
          {:ok, datetime} <- DateTime.from_unix(microseconds, :microsecond) do
       DateTime.truncate(datetime, :second)
     else
@@ -103,7 +117,13 @@ defmodule CleatDeploy.Observability.Journal do
     end
   end
 
-  defp severity(map), do: Map.get(@priority_severities, map["PRIORITY"], "info")
+  defp severity(map) do
+    Map.get(@priority_severities, priority_key(map["PRIORITY"]), "info")
+  end
+
+  defp priority_key(priority) when is_integer(priority), do: Integer.to_string(priority)
+  defp priority_key(priority) when is_binary(priority), do: priority
+  defp priority_key(_), do: nil
 
   defp unit(map) do
     ["_SYSTEMD_UNIT", "SYSLOG_IDENTIFIER", "_COMM", "_EXE"]

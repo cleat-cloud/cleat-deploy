@@ -63,7 +63,16 @@
     "source",
     "severity",
     "message",
+    "environment",
+    "fingerprint",
     "occurred_at"
+  ],
+  "log_group": [
+    "fingerprint",
+    "severity",
+    "count",
+    "sample",
+    "last_seen_at"
   ],
   "me": [
     "user",

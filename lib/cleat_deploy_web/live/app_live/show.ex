@@ -5,7 +5,7 @@ defmodule CleatDeployWeb.AppLive.Show do
   alias CleatDeploy.Apps.{App, RuntimeLogs, RuntimeMemory}
   alias CleatDeploy.Deploy.{Addons, RuntimePackages}
   alias CleatDeployWeb.AppLive.{Layout, NewInstance}
-  alias CleatDeployWeb.AppLive.Show.{Deploy, Env, Runtime, Tabs}
+  alias CleatDeployWeb.AppLive.Show.{Deploy, Env, Logs, Runtime, Tabs}
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -37,6 +37,7 @@ defmodule CleatDeployWeb.AppLive.Show do
       |> assign(:app_detail_tab, :environment)
       |> assign(:runtime_logs, nil)
       |> assign(:logs_error, nil)
+      |> Logs.assigns()
       |> assign(:app_memory, nil)
       |> assign(:memory_ref, nil)
       |> assign(:logs_ref, nil)
@@ -89,6 +90,7 @@ defmodule CleatDeployWeb.AppLive.Show do
 
   @env_events ~w(toggle_secret toggle_env_values open_env_modal edit_env_var close_env_modal validate_env save_env_var delete_env_var)
   @deploy_events ~w(deploy open_cancel_deploy close_cancel_deploy cancel_deploy)
+  @log_events ~w(search_log_events refresh_log_events)
 
   @impl true
   def handle_event(event, params, socket) when event in @env_events do
@@ -97,6 +99,10 @@ defmodule CleatDeployWeb.AppLive.Show do
 
   def handle_event(event, params, socket) when event in @deploy_events do
     Deploy.handle_event(event, params, socket)
+  end
+
+  def handle_event(event, params, socket) when event in @log_events do
+    Logs.handle_event(event, params, socket)
   end
 
   def handle_event(event, params, socket) do
