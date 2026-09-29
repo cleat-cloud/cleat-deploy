@@ -167,7 +167,10 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     script =
       ServerProvision.provision_script(app, config, %AppManifest{runtime: "phoenix"})
 
-    assert script =~ "caddy validate --config"
+    # Global option blocks start with `{`, so Caddy guesses JSON unless we
+    # force the Caddyfile adapter.
+    assert script =~ ~s|caddy validate --adapter caddyfile --config "$TMPFILE"|
+    refute script =~ ~r/caddy validate --config "\$TMPFILE"/
   end
 
   test "IP hosts get an http:// site to avoid a broken HTTPS redirect", %{app: app} do
