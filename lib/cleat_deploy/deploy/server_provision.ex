@@ -496,6 +496,27 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   # new would leave Caddy proxying to the old port. Emitted as a shell function
   # so the caller picks the body and this stays the single implementation of the
   # strip-and-append dance.
+  @doc false
+  def caddy_strip_awk do
+    """
+    function hosts_of(line,   s, n, i, a) {
+      s = line
+      sub(/[ \\t]*{[ \\t]*$/, "", s)
+      n = split(s, a, ",")
+      for (i = 1; i <= n; i++) {
+        gsub(/^[ \\t]+|[ \\t]+$/, "", a[i])
+        if (a[i] == site) return 1
+      }
+      return 0
+    }
+    !inside && /{$/ && hosts_of($0) { inside = 1; next }
+    inside && $0 == "}" { inside = 0; next }
+    inside { next }
+    { print }
+    """
+    |> String.trim()
+  end
+
   defp caddy_site_script(address, caddy_site) do
     """
     #{ensure_caddy_script()}
@@ -505,14 +526,17 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       sudo touch "$CADDYFILE"
       TMPFILE="$(mktemp)"
       sudo awk -v site=#{shell_escape(address)} '
-        $0 == site " {" { inside = 1; next }
-        inside && $0 == "}" { inside = 0; next }
-        inside { next }
-        { print }
+        #{caddy_strip_awk()}
       ' "$CADDYFILE" > "$TMPFILE"
       cat >> "$TMPFILE"
+      if ! caddy validate --config "$TMPFILE" >"$TMPFILE.validate" 2>&1; then
+        echo "Caddyfile invalid after writing site #{address}; keeping previous file" >&2
+        cat "$TMPFILE.validate" >&2
+        rm -f "$TMPFILE" "$TMPFILE.validate"
+        exit 1
+      fi
       sudo install -m 0644 -o root -g root "$TMPFILE" "$CADDYFILE"
-      rm -f "$TMPFILE"
+      rm -f "$TMPFILE" "$TMPFILE.validate"
       log "Writing Caddy site #{address}"
     }
 
