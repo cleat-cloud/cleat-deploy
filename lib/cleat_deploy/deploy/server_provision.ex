@@ -529,7 +529,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
         #{caddy_strip_awk()}
       ' "$CADDYFILE" > "$TMPFILE"
       cat >> "$TMPFILE"
-      if ! caddy validate --config "$TMPFILE" >"$TMPFILE.validate" 2>&1; then
+      if ! caddy validate --adapter caddyfile --config "$TMPFILE" >"$TMPFILE.validate" 2>&1; then
         echo "Caddyfile invalid after writing site #{address}; keeping previous file" >&2
         cat "$TMPFILE.validate" >&2
         rm -f "$TMPFILE" "$TMPFILE.validate"
