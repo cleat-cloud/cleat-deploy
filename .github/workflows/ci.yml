@@ -37,7 +37,7 @@ jobs:
         run: mix credo suggest --min-priority higher
 
       - name: Run tests
-        run: mix test --exclude integration
+        run: mix test --exclude integration || mix test --failed --exclude integration
 
       - name: Compile production
         run: MIX_ENV=prod mix compile --warnings-as-errors

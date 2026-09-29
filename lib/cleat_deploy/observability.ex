@@ -20,6 +20,7 @@ defmodule CleatDeploy.Observability do
   alias CleatDeploy.Observability.Journal
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Repo
+  alias CleatDeploy.Repo.BusyRetry
   alias CleatDeploy.Servers.Server
 
   @default_limit 200
@@ -118,12 +119,15 @@ defmodule CleatDeploy.Observability do
 
   defp max_datetime(a, b), do: if(DateTime.compare(a, b) == :gt, do: a, else: b)
 
-  defp insert_entries(server, meta, entries) do
-    now = DateTime.utc_now(:second)
+  # ecto_libsql implements Connection.insert/7. Ecto 3.14's insert_all calls
+  # insert/8, which crashes in production (`function insert/8 is undefined`).
+  # Per-row Repo.insert matches the rest of the panel (accounts, settings).
+  defp insert_entries(_server, _meta, []), do: {0, nil}
 
-    rows =
-      Enum.map(entries, fn entry ->
-        %{
+  defp insert_entries(server, meta, entries) do
+    count =
+      Enum.reduce(entries, 0, fn entry, acc ->
+        event = %LogEvent{
           tenant_id: meta.tenant_id,
           app_id: meta.app_id,
           server_id: server.id,
@@ -133,15 +137,21 @@ defmodule CleatDeploy.Observability do
           cursor: entry.cursor,
           severity: entry.severity,
           message: entry.message,
-          occurred_at: entry.occurred_at,
-          inserted_at: now
+          occurred_at: entry.occurred_at
         }
+
+        case BusyRetry.call(fn ->
+               Repo.insert(event,
+                 on_conflict: :nothing,
+                 conflict_target: [:server_id, :cursor]
+               )
+             end) do
+          {:ok, %{id: id}} when is_integer(id) -> acc + 1
+          _ -> acc
+        end
       end)
 
-    Repo.insert_all(LogEvent, rows,
-      on_conflict: :nothing,
-      conflict_target: [:server_id, :cursor]
-    )
+    {count, nil}
   end
 
   defp latest_deployment_id(app_id) do
