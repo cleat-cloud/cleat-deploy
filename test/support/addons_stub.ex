@@ -12,7 +12,7 @@ defmodule CleatDeploy.Deploy.AddonsStub do
 
     output =
       app
-      |> CleatDeploy.Apps.App.deploy_addons()
+      |> CleatDeploy.Deploy.Addons.listed()
       |> Enum.map_join("\n", fn
         "redis" -> "CLEAT addon redis ready #{prefix}"
         addon -> "CLEAT addon #{addon} ready #{prefix}"

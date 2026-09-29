@@ -6,6 +6,8 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Apps.AppEnvVar
+  alias CleatDeploy.Deploy.Addons
+  alias CleatDeployWeb.AppLive.Show.Runtime
 
   def handle_event("toggle_secret", _params, socket) do
     {:noreply, assign(socket, :show_secret?, not socket.assigns.show_secret?)}
@@ -116,6 +118,8 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
     |> assign(:app, app)
     |> assign(:env_vars, Apps.list_env_vars_for_display(app))
     |> assign(:env_branches, env_branches(app))
+    |> assign(:addons, Addons.listed(app))
+    |> Runtime.request_addon_status()
   end
 
   # Branches offered for scoping a variable: the deploy branch plus whatever is

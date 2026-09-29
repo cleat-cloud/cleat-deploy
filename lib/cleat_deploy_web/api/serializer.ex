@@ -3,6 +3,7 @@ defmodule CleatDeployWeb.Api.Serializer do
 
   alias CleatDeploy.Accounts.{ApiToken, Scope, Tenant, User}
   alias CleatDeploy.Apps.App
+  alias CleatDeploy.Deploy.Addons
   alias CleatDeploy.AWS.Lightsail.Bundle
   alias CleatDeploy.Deployments.Deployment
   alias CleatDeploy.Observability.LogEvent
@@ -64,7 +65,7 @@ defmodule CleatDeployWeb.Api.Serializer do
       idle_shutdown_enabled: app.idle_shutdown_enabled,
       indexable: app.indexable,
       units: App.unit_names(app),
-      addons: App.deploy_addons(app),
+      addons: Addons.listed(app),
       runtime: app.runtime,
       runtime_apt_packages: app.runtime_apt_packages,
       server: server_ref(app),

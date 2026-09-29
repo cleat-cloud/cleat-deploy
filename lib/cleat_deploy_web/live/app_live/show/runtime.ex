@@ -94,7 +94,11 @@ defmodule CleatDeployWeb.AppLive.Show.Runtime do
   end
 
   def handle_event("rotate_addon_prompt", %{"addon" => addon}, socket) do
-    {:noreply, assign(socket, :rotating_addon, addon)}
+    if Addons.rotatable?(addon) do
+      {:noreply, assign(socket, :rotating_addon, addon)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("close_rotate_addon", _params, socket) do
@@ -102,13 +106,17 @@ defmodule CleatDeployWeb.AppLive.Show.Runtime do
   end
 
   def handle_event("rotate_addon", %{"addon" => addon}, socket) do
-    {_addons, _credentials} = Addons.rotate(socket.assigns.app, [addon])
+    if Addons.rotatable?(addon) do
+      {_addons, _credentials} = Addons.rotate(socket.assigns.app, [addon])
 
-    {:noreply,
-     socket
-     |> assign(:rotating_addon, nil)
-     |> put_flash(:info, "New credentials stored — deploy this app to apply them")
-     |> request_addon_status()}
+      {:noreply,
+       socket
+       |> assign(:rotating_addon, nil)
+       |> put_flash(:info, "New credentials stored — deploy this app to apply them")
+       |> request_addon_status()}
+    else
+      {:noreply, assign(socket, :rotating_addon, nil)}
+    end
   end
 
   def handle_event("refresh_addon_status", _params, socket) do

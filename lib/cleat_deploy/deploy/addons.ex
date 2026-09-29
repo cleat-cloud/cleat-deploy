@@ -1,20 +1,21 @@
 defmodule CleatDeploy.Deploy.Addons do
   @moduledoc """
-  Managed datastores declared in `.cleat_deploy/deploy.json` (`addons`).
+  Managed datastores declared in `.cleat_deploy/deploy.json` (`addons`), plus
+  Litestream when the app points at a local SQLite file.
 
-  Everything is native — apt packages plus systemd services, no containers: one
-  PostgreSQL cluster and one Redis instance per server, with a role + database
-  (Postgres) and an ACL user (Redis) per app. The panel owns the credentials: it
-  generates them, stores them encrypted as app env vars and injects
-  `DATABASE_URL` / `REDIS_URL` through the app env file, so units, release
-  commands and migrations all see them.
+  Postgres and Redis are native apt packages plus systemd services, no
+  containers: one PostgreSQL cluster and one Redis instance per server, with a
+  role + database (Postgres) and an ACL user (Redis) per app. The panel owns the
+  credentials: it generates them, stores them encrypted as app env vars and
+  injects `DATABASE_URL` / `REDIS_URL` through the app env file.
 
-  Data lives in the distro's service directories (`/var/lib/postgresql/…`,
-  `/var/lib/redis`), outside `release_path`, so it survives deploys.
+  Litestream is a host-level sidecar (`cleat-litestream`). The panel lists it
+  whenever `DATABASE_PATH` or a `file:` database URL is set; it does not issue
+  credentials or rotate passwords.
 
-  Declaring an addon hands its env var to Cleat: an existing value is only reused
-  when it is one of ours (it parses back to the same shape), otherwise the addon
-  overwrites it. To point at your own database, do not declare the addon.
+  Declaring a credentialed addon hands its env var to Cleat: an existing value is
+  only reused when it is one of ours, otherwise the addon overwrites it. To point
+  at your own database, do not declare the addon.
   """
 
   alias CleatDeploy.Apps
@@ -23,6 +24,7 @@ defmodule CleatDeploy.Deploy.Addons do
 
   @postgres "postgres:pgvector"
   @redis "redis"
+  @litestream "litestream"
 
   @postgres_port 5432
   @redis_port 6379
@@ -30,12 +32,70 @@ defmodule CleatDeploy.Deploy.Addons do
 
   @callback run(App.t(), [String.t()]) :: {:ok, String.t()} | {:error, term()}
 
-  @doc "Env var each addon injects."
+  @doc "Env var each addon injects. `nil` when the addon has no credentials."
   def env_var(@postgres), do: "DATABASE_URL"
   def env_var(@redis), do: "REDIS_URL"
+  def env_var(_addon), do: nil
 
   @doc "Addons supported by this module."
-  def known, do: [@postgres, @redis]
+  def known, do: [@postgres, @redis, @litestream]
+
+  @doc "Whether the panel can issue a new password for this addon."
+  def rotatable?(addon) when is_binary(addon), do: env_var(addon) != nil
+
+  @doc """
+  Addons shown for an app: whatever the last deploy declared, plus `litestream`
+  when the app points at a local SQLite file.
+  """
+  def listed(%App{} = app) do
+    declared = App.deploy_addons(app)
+
+    case sqlite_path(app) do
+      nil -> declared
+      _path -> Enum.uniq(declared ++ [@litestream])
+    end
+  end
+
+  defp sqlite_path(%App{} = app) do
+    env = env_lookup(app)
+
+    cond do
+      path = present_path(env["DATABASE_PATH"]) -> path
+      path = file_sqlite_path(env["DATABASE_URL"]) -> path
+      path = file_sqlite_path(env["TURSO_DATABASE_URL"]) -> path
+      true -> nil
+    end
+  end
+
+  defp present_path(path) when is_binary(path) do
+    path = String.trim(path)
+    if path == "", do: nil, else: path
+  end
+
+  defp present_path(_), do: nil
+
+  defp file_sqlite_path(url) when is_binary(url) do
+    trimmed = String.trim(url)
+
+    cond do
+      String.starts_with?(trimmed, "file://") ->
+        present_path(String.replace_prefix(trimmed, "file://", ""))
+
+      String.starts_with?(trimmed, "file:") ->
+        present_path(String.replace_prefix(trimmed, "file:", ""))
+
+      true ->
+        nil
+    end
+  end
+
+  defp file_sqlite_path(_), do: nil
+
+  defp env_lookup(%App{env_vars: vars}) when is_list(vars) do
+    Map.new(vars, &{&1.key, &1.value})
+  end
+
+  defp env_lookup(%App{} = app), do: Apps.env_map(app)
 
   @doc """
   Resolves the addons declared in a manifest, generating and persisting
@@ -49,7 +109,11 @@ defmodule CleatDeploy.Deploy.Addons do
 
     credentials =
       Enum.reduce(addons, %{}, fn addon, credentials ->
-        Map.put(credentials, addon, ensure_credential(app, addon))
+        if rotatable?(addon) do
+          Map.put(credentials, addon, ensure_credential(app, addon))
+        else
+          credentials
+        end
       end)
 
     {addons, credentials}
@@ -72,6 +136,8 @@ defmodule CleatDeploy.Deploy.Addons do
   env var, and the provision script (next deploy) applies it on the server.
   """
   def rotate(%App{} = app, addons) when is_list(addons) do
+    addons = Enum.filter(addons, &rotatable?/1)
+
     credentials =
       Enum.reduce(addons, %{}, fn addon, credentials ->
         credential = new_credential(app, addon)
@@ -201,6 +267,8 @@ defmodule CleatDeploy.Deploy.Addons do
   Best-effort removal of the app's database/role (Postgres) or ACL user (Redis),
   used when the app is deleted.
   """
+  def teardown_script(%App{}, @litestream), do: ""
+
   def teardown_script(%App{} = app, addon) do
     credential = parse_credential_from_env(app, addon) || new_credential(app, addon)
 
@@ -230,10 +298,28 @@ defmodule CleatDeploy.Deploy.Addons do
   def status_script(%App{} = app, addons) do
     addons
     |> Enum.map_join("\n\n", fn addon ->
-      credential = parse_credential_from_env(app, addon) || new_credential(app, addon)
-      status_step(addon, credential)
+      status_for(app, addon)
     end)
     |> String.trim()
+  end
+
+  defp status_for(app, @litestream) do
+    path = sqlite_path(app) || "missing"
+
+    """
+    LS_STATE="$(systemctl is-active cleat-litestream 2>/dev/null || true)"
+    if [[ "$LS_STATE" == "active" ]] && [[ -f '#{path}' ]]; then
+      printf 'CLEAT addon %s ready %s\\n' '#{@litestream}' '#{path}'
+    else
+      printf 'CLEAT addon %s %s %s\\n' '#{@litestream}' "${LS_STATE:-missing}" '#{path}'
+    fi
+    """
+    |> String.trim()
+  end
+
+  defp status_for(app, addon) do
+    credential = parse_credential_from_env(app, addon) || new_credential(app, addon)
+    status_step(addon, credential)
   end
 
   defp status_step(@postgres, %{user: user, database: database}) do

@@ -61,10 +61,10 @@ defmodule CleatDeployWeb.AppLive.Show do
       if connected?(socket) do
         :ok = Deployments.subscribe(app)
         send(self(), :load_app_memory)
-        socket = assign(socket, :addons, App.deploy_addons(app))
+        socket = assign(socket, :addons, Addons.listed(app))
         Runtime.request_addon_status(socket)
       else
-        assign(socket, :addons, App.deploy_addons(app))
+        assign(socket, :addons, Addons.listed(app))
       end
 
     {:ok, socket}
