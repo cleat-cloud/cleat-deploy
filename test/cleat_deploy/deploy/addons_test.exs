@@ -156,4 +156,78 @@ defmodule CleatDeploy.Deploy.AddonsTest do
 
     assert :error = Addons.parse_credential("not a url", "redis", app)
   end
+
+  test "listed/1 includes litestream when the app uses a local sqlite file", %{app: app} do
+    assert Addons.listed(app) == []
+
+    {:ok, _} = Apps.put_env_var(app, "DATABASE_PATH", "/opt/chatwoot/data/app.db")
+    app = Apps.get_app!(app.id)
+
+    assert Addons.listed(app) == ["litestream"]
+  end
+
+  test "listed/1 treats file: database URLs as sqlite", %{app: app} do
+    {:ok, _} = Apps.put_env_var(app, "DATABASE_URL", "file:/opt/plaza/data/plaza.db")
+    app = Apps.get_app!(app.id)
+    assert Addons.listed(app) == ["litestream"]
+
+    {:ok, _} =
+      Apps.put_env_var(app, "DATABASE_URL", "postgres://cleat_x:pw@127.0.0.1:5432/cleat_x")
+
+    {:ok, _} = Apps.put_env_var(app, "TURSO_DATABASE_URL", "file:///opt/edna/data/edna.db")
+    app = Apps.get_app!(app.id)
+    assert Addons.listed(app) == ["litestream"]
+  end
+
+  test "listed/1 keeps declared addons and does not treat postgres as sqlite", %{app: app} do
+    {:ok, app} =
+      Apps.record_deploy_manifest(app, %{addons: ["postgres:pgvector", "redis"]})
+
+    {:ok, _} =
+      Apps.put_env_var(app, "DATABASE_URL", "postgres://cleat_x:pw@127.0.0.1:5432/cleat_x")
+
+    app = Apps.get_app!(app.id)
+    assert Addons.listed(app) == ["postgres:pgvector", "redis"]
+
+    {:ok, _} = Apps.put_env_var(app, "DATABASE_PATH", "/var/lib/cleat_deploy/cleat.db")
+    app = Apps.get_app!(app.id)
+    assert Addons.listed(app) == ["postgres:pgvector", "redis", "litestream"]
+  end
+
+  test "known/0 includes litestream" do
+    assert "litestream" in Addons.known()
+  end
+
+  test "ensure/2 does not invent credentials for litestream", %{app: app} do
+    {addons, credentials} = Addons.ensure(app, %AppManifest{addons: ["litestream"]})
+
+    assert addons == ["litestream"]
+    assert credentials == %{}
+    refute Map.has_key?(Apps.env_map(app), "DATABASE_URL")
+
+    assert Addons.provision_script(app, %{addon_credentials: credentials}, %AppManifest{
+             addons: ["litestream"]
+           }) == ""
+  end
+
+  test "rotate/2 skips litestream", %{app: app} do
+    {addons, credentials} = Addons.rotate(app, ["litestream"])
+    assert addons == []
+    assert credentials == %{}
+    refute Addons.rotatable?("litestream")
+    assert Addons.rotatable?("redis")
+  end
+
+  test "status_script/2 probes the shared litestream unit and the sqlite file", %{app: app} do
+    {:ok, _} = Apps.put_env_var(app, "DATABASE_PATH", "/opt/chatwoot/data/app.db")
+    app = Apps.get_app!(app.id)
+
+    script = Addons.status_script(app, ["litestream"])
+
+    assert script =~ "systemctl is-active cleat-litestream"
+    assert script =~ "/opt/chatwoot/data/app.db"
+    assert script =~ ~s|printf 'CLEAT addon %s ready %s\\n' 'litestream'|
+
+    assert Addons.teardown_script(app, "litestream") == ""
+  end
 end

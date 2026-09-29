@@ -18,8 +18,8 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
         <div class="min-w-0 space-y-0.5">
           <h3 class="font-display text-sm font-semibold text-hd-text">Managed addons</h3>
           <p class="text-xs leading-relaxed text-hd-muted">
-            Declared in <span class="font-mono text-hd-text">.cleat_deploy/deploy.json</span>
-            — the connection strings live in this app's env vars.
+            Postgres and Redis come from <span class="font-mono text-hd-text">.cleat_deploy/deploy.json</span>.
+            SQLite files also replicate with Litestream.
           </p>
         </div>
         <button
@@ -51,6 +51,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
           </div>
 
           <button
+            :if={rotatable?(addon)}
             type="button"
             id={"rotate-#{addon_id(addon)}"}
             phx-click="rotate_addon_prompt"
@@ -134,7 +135,10 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
 
   def addon_label("postgres:pgvector"), do: "Postgres"
   def addon_label("redis"), do: "Redis"
+  def addon_label("litestream"), do: "Litestream"
   def addon_label(addon), do: addon
+
+  def rotatable?(addon), do: CleatDeploy.Deploy.Addons.rotatable?(addon)
 
   # `postgres:pgvector` is not usable in a CSS selector.
   def addon_id(addon), do: String.replace(addon, ":", "-")

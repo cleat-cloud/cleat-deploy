@@ -1655,6 +1655,23 @@ defmodule CleatDeployWeb.AppLiveTest do
     refute has_element?(view, "#app-addons")
   end
 
+  test "lists litestream for sqlite apps without a rotate button", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server, %{slug: "plaza"})
+    {:ok, _} = Apps.put_env_var(app, "DATABASE_PATH", "/opt/plaza/data/plaza.db")
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+
+    wait_for(view, fn -> has_element?(view, "#addon-litestream", "Running") end)
+
+    assert has_element?(view, "#app-addons")
+    assert has_element?(view, "#addon-litestream", "litestream")
+    refute has_element?(view, "#rotate-litestream")
+  end
+
   defp app_name_order(html) do
     html
     |> then(&Regex.scan(~r/href="\/apps\/\d+\/deployments"[^>]*>\s*([^<]+)\s*</, &1))
