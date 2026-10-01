@@ -11,7 +11,7 @@ defmodule CleatDeploy.Logs do
   alias CleatDeploy.Servers.Server
 
   @unit_pattern ~r/^[A-Za-z0-9:_.@-]+\z/
-  @since_iso ~r/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?\z/
+  @since_iso ~r/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?(Z|[+-]\d{2}:\d{2})?\z/
   @since_relative ~r/^\d+(s|m|h|d|w)\z/
   @default_tail 200
   @max_tail 5000
