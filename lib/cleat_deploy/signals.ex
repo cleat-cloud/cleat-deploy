@@ -14,6 +14,7 @@ defmodule CleatDeploy.Signals do
   alias CleatDeploy.Deployments.Deployment
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Repo
+  alias CleatDeploy.Signals.Alert
 
   @error_severities ~w(emerg alert crit err)
   @error_rate_min 5
@@ -260,5 +261,159 @@ defmodule CleatDeploy.Signals do
         order_by: [asc: d.finished_at]
     )
     |> Enum.map(&release_ref/1)
+  end
+
+  @doc """
+  Opens default alerts for degraded/down apps and resolves ones that recovered.
+
+  D-007: the first outbound channel is a webhook (`SIGNALS_WEBHOOK_URL` /
+  `:signals_webhook_url`). Alerts always persist in-app so CLI/MCP can list
+  them even when no webhook is configured.
+  """
+  def evaluate_alerts(%Scope{} = scope, opts \\ []) do
+    now = Keyword.get(opts, :now, DateTime.utc_now(:second))
+    rows = health_overview(scope, opts)
+    open = open_alerts(scope.tenant.id)
+    desired = desired_alerts(rows)
+    desired_keys = MapSet.new(Map.keys(desired))
+
+    opened =
+      desired
+      |> Enum.reject(fn {key, _row} -> Map.has_key?(open, key) end)
+      |> Enum.flat_map(fn {{app_id, rule}, row} -> open_alert(scope, app_id, rule, row, now) end)
+
+    open
+    |> Enum.filter(fn {key, alert} ->
+      alert.status == "firing" and not MapSet.member?(desired_keys, key)
+    end)
+    |> Enum.each(fn {_key, alert} -> resolve_alert(alert, now) end)
+
+    {:ok, opened}
+  end
+
+  def list_alerts(%Scope{tenant: tenant}) do
+    Repo.all(
+      from a in Alert,
+        where: a.tenant_id == ^tenant.id and a.status in ["firing", "acked"],
+        order_by: [desc: a.fired_at, desc: a.id],
+        preload: [:app]
+    )
+  end
+
+  def ack_alert(%Scope{tenant: tenant}, id) when is_integer(id) do
+    case Repo.get_by(Alert, id: id, tenant_id: tenant.id) do
+      %Alert{status: "firing"} = alert ->
+        alert
+        |> Ecto.Changeset.change(%{status: "acked", acked_at: DateTime.utc_now(:second)})
+        |> Repo.update()
+
+      nil ->
+        {:error, :not_found}
+
+      _alert ->
+        {:error, :invalid_status}
+    end
+  end
+
+  def ack_alert(%Scope{}, _id), do: {:error, :not_found}
+
+  defp desired_alerts(rows) do
+    for row <- rows, reason <- row.reasons, into: %{} do
+      {{row.app_id, Atom.to_string(reason)}, row}
+    end
+  end
+
+  defp open_alerts(tenant_id) do
+    Repo.all(
+      from a in Alert,
+        where: a.tenant_id == ^tenant_id and a.status in ["firing", "acked"]
+    )
+    |> Map.new(&{{&1.app_id, &1.rule}, &1})
+  end
+
+  defp open_alert(scope, app_id, rule, row, now) do
+    attrs = %{
+      tenant_id: scope.tenant.id,
+      app_id: app_id,
+      rule: rule,
+      status: "firing",
+      message: alert_message(rule, row),
+      payload: alert_payload(rule, row),
+      channel: if(webhook_url(), do: "webhook", else: "in_app"),
+      fired_at: now
+    }
+
+    case attrs |> Alert.insert_changeset() |> Repo.insert() do
+      {:ok, alert} -> [deliver_alert(alert, row)]
+      {:error, _changeset} -> []
+    end
+  end
+
+  defp resolve_alert(alert, now) do
+    alert
+    |> Ecto.Changeset.change(%{status: "resolved", resolved_at: now})
+    |> Repo.update()
+  end
+
+  defp alert_message("unavailability", row), do: "Aplicação #{row.slug} indisponível"
+  defp alert_message("error_rate", row), do: "Taxa de erro subiu em #{row.slug}"
+  defp alert_message("saturation", row), do: "Saturação em #{row.slug}"
+  defp alert_message(_rule, row), do: "Alerta em #{row.slug}"
+
+  defp alert_payload(rule, row) do
+    %{
+      "event" => "signal.alert",
+      "rule" => rule,
+      "status" => "firing",
+      "message" => alert_message(rule, row),
+      "app" => %{"id" => row.app_id, "slug" => row.slug, "name" => row.name},
+      "preceding_release" => json_release(row.preceding_release)
+    }
+  end
+
+  defp json_release(nil), do: nil
+
+  defp json_release(release) do
+    %{
+      "id" => release.id,
+      "git_sha" => release.git_sha,
+      "git_ref" => release.git_ref,
+      "status" => to_string(release.status),
+      "finished_at" => release.finished_at
+    }
+  end
+
+  defp deliver_alert(alert, row) do
+    case webhook_url() do
+      nil ->
+        alert
+
+      url ->
+        opts = [json: alert_payload(alert.rule, row)] ++ webhook_req_options()
+
+        case Req.post(url, opts) do
+          {:ok, %{status: status}} when status in 200..299 ->
+            alert
+            |> Ecto.Changeset.change(%{
+              channel: "webhook",
+              delivered_at: DateTime.utc_now(:second)
+            })
+            |> Repo.update!()
+
+          _other ->
+            alert
+        end
+    end
+  end
+
+  defp webhook_url do
+    case Application.get_env(:cleat_deploy, :signals_webhook_url) do
+      url when is_binary(url) and url != "" -> url
+      _ -> nil
+    end
+  end
+
+  defp webhook_req_options do
+    Application.get_env(:cleat_deploy, :signals_req_options, [])
   end
 end

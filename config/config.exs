@@ -47,6 +47,8 @@ config :cleat_deploy, :login_throttle_limit, 10
 config :cleat_deploy, :log_retention_days, 7
 config :cleat_deploy, :log_max_rows_per_tenant, 50_000
 config :cleat_deploy, :log_collector_enabled, false
+# D-007: first alert channel is a webhook. Empty means in-app only.
+config :cleat_deploy, :signals_webhook_url, nil
 
 config :cleat_deploy, Oban,
   repo: CleatDeploy.Repo,
@@ -65,7 +67,8 @@ config :cleat_deploy, Oban,
      crontab: [
        {"* * * * *", CleatDeploy.Workers.AutoDeployHealthWorker},
        {"*/5 * * * *", CleatDeploy.Workers.IdleShutdownWorker},
-       {"*/5 * * * *", CleatDeploy.Workers.LogCollectWorker}
+       {"*/5 * * * *", CleatDeploy.Workers.LogCollectWorker},
+       {"* * * * *", CleatDeploy.Workers.SignalsAlertWorker}
      ]}
   ],
   shutdown_grace_period: :timer.minutes(15)
