@@ -172,7 +172,13 @@ defmodule CleatDeploy.Logs do
   defp normalize_grep(_), do: {:error, {:invalid, "grep must be a string"}}
 
   defp filter_grep(lines, nil), do: lines
-  defp filter_grep(lines, grep), do: Enum.filter(lines, &String.contains?(&1, grep))
+
+  defp filter_grep(lines, grep) do
+    case Regex.compile(grep) do
+      {:ok, re} -> Enum.filter(lines, &Regex.match?(re, &1))
+      {:error, _} -> Enum.filter(lines, &String.contains?(&1, grep))
+    end
+  end
 
   defp split_lines(output) when is_binary(output) do
     output
