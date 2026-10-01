@@ -35,5 +35,10 @@ defmodule CleatDeployWeb.Internal.DomainAskController do
 
   defp loopback?({127, _, _, _}), do: true
   defp loopback?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
+
+  defp loopback?({0, 0, 0, 0, 0, 65535, _, _} = mapped) do
+    loopback?(:inet.ipv4_mapped_ipv6_address(mapped))
+  end
+
   defp loopback?(_), do: false
 end
