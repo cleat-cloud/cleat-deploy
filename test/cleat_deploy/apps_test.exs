@@ -260,6 +260,44 @@ defmodule CleatDeploy.AppsTest do
 
       assert app.port == 4050
     end
+
+    test "derives slug from name when slug is omitted", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Ateliê",
+          github_repo: "owner/atelie-derived",
+          host: "atelie-derived.example.com",
+          server_id: server.id
+        })
+
+      assert app.slug == "atelie"
+    end
+
+    test "derives slug from name when slug is blank", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "CloudStore",
+          slug: "",
+          github_repo: "cleat-cloud/cloudstore-derived",
+          host: "cloudstore-derived.example.com",
+          server_id: server.id
+        })
+
+      assert app.slug == "cloudstore"
+    end
+
+    test "keeps an explicit slug instead of the name", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Cloud Store",
+          slug: "cs",
+          github_repo: "owner/cloud-store-explicit",
+          host: "cs-explicit.example.com",
+          server_id: server.id
+        })
+
+      assert app.slug == "cs"
+    end
   end
 
   describe "allocate_port/2" do
