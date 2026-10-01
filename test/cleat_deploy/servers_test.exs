@@ -211,6 +211,8 @@ defmodule CleatDeploy.ServersTest do
       assert user_data =~ "ignoreip"
       assert user_data =~ "hostname -I"
       assert user_data =~ "cleat-ignore.local"
+      # Ubuntu 24 logs sshd as unit ssh.service, not sshd.service.
+      assert user_data =~ "journalmatch = _COMM=sshd"
     end
   end
 
