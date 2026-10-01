@@ -9,10 +9,8 @@ defmodule CleatDeployWeb.ConnCase do
 
   Finally, if the test case interacts with the database,
   we enable the SQL sandbox, so changes done to the database
-  are reverted at the end of every test. If you are using
-  PostgreSQL, you can even run database tests asynchronously
-  by setting `use CleatDeployWeb.ConnCase, async: true`, although
-  this option is not recommended for other databases.
+  are reverted at the end of every test. This project uses SQLite:
+  `async: true` is not supported on ConnCase (see issue #201).
   """
 
   use ExUnit.CaseTemplate
