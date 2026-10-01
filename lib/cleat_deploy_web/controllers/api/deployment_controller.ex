@@ -4,6 +4,7 @@ defmodule CleatDeployWeb.Api.DeploymentController do
   use CleatDeployWeb, :controller
 
   alias CleatDeploy.{Apps, Deployments}
+  alias CleatDeploy.Deploy.Ssh
   alias CleatDeployWeb.Api.Serializer
 
   def index(conn, %{"app_id" => app_id}) do
@@ -23,10 +24,18 @@ defmodule CleatDeployWeb.Api.DeploymentController do
     scope = conn.assigns.current_scope
 
     with {:ok, app} <- resolve_app(scope, app_id) do
+      git_ref = params["git_ref"]
+
+      git_sha =
+        case Ssh.git_clone_plan(git_ref, app.branch || "main") do
+          {:sha, _branch, sha} -> sha
+          {:branch, _branch} -> "manual"
+        end
+
       attrs = %{
-        git_sha: "manual",
+        git_sha: git_sha,
         triggered_by: "api",
-        git_ref: params["git_ref"]
+        git_ref: git_ref
       }
 
       case Deployments.enqueue_deployment(scope, app, attrs) do
