@@ -7,7 +7,11 @@ defmodule CleatDeployWeb.SignalsLiveTest do
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Repo
   alias CleatDeploy.Signals
+  alias CleatDeploy.Signals.Traces
   alias CleatDeploy.TenancyFixtures
+
+  @trace_id "5b8aa5a2d2c872e8321cf37308d69df2"
+  @root_span "051581bf3cb55c13"
 
   setup :register_and_log_in_user
 
@@ -80,6 +84,91 @@ defmodule CleatDeployWeb.SignalsLiveTest do
 
     refute has_element?(view, "#signals-ack-#{alert.id}")
     assert has_element?(view, "#signals-alert-#{alert.id}")
+  end
+
+  test "opens a waterfall and service map from an ingested trace", %{conn: conn, scope: scope} do
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server)
+    {:ok, _} = Traces.set_sampling(scope, app, 1.0)
+    {:ok, _} = Traces.ingest(scope, app, checkout_payload())
+
+    {:ok, view, _html} = live(conn, ~p"/signals?app=#{app.slug}")
+
+    assert has_element?(view, "#signals-traces")
+    assert has_element?(view, "#signals-trace-#{@trace_id}")
+    assert has_element?(view, "#signals-sampling-form")
+
+    view
+    |> element("#signals-trace-#{@trace_id}")
+    |> render_click()
+
+    assert_patch(view, ~p"/signals?app=#{app.slug}&trace_id=#{@trace_id}")
+    assert has_element?(view, "#signals-waterfall")
+    assert has_element?(view, "#signals-span-#{@root_span}")
+    assert has_element?(view, "#signals-service-map")
+  end
+
+  test "jumps from a log line to the matching trace", %{conn: conn, scope: scope} do
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server)
+    {:ok, _} = Traces.set_sampling(scope, app, 1.0)
+    {:ok, _} = Traces.ingest(scope, app, checkout_payload())
+    insert_event(scope, server, app, %{message: "failed trace_id=#{@trace_id}", severity: "err"})
+
+    {:ok, view, _html} = live(conn, ~p"/signals?app=#{app.slug}")
+
+    assert has_element?(view, "#signals-log-jump-#{@trace_id}")
+
+    view
+    |> element("#signals-log-jump-#{@trace_id}")
+    |> render_click()
+
+    assert_patch(view, ~p"/signals?app=#{app.slug}&trace_id=#{@trace_id}")
+    assert has_element?(view, "#signals-waterfall")
+  end
+
+  test "saves per-app sampling from the Saúde page", %{conn: conn, scope: scope} do
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    {:ok, view, _html} = live(conn, ~p"/signals?app=#{app.slug}")
+
+    view
+    |> form("#signals-sampling-form", sampling: %{rate: "1"})
+    |> render_submit()
+
+    assert Repo.get!(App, app.id).trace_sample_rate == 1.0
+  end
+
+  defp checkout_payload do
+    %{
+      "resourceSpans" => [
+        %{
+          "resource" => %{
+            "attributes" => [
+              %{"key" => "service.name", "value" => %{"stringValue" => "web"}}
+            ]
+          },
+          "scopeSpans" => [
+            %{
+              "spans" => [
+                %{
+                  "traceId" => @trace_id,
+                  "spanId" => @root_span,
+                  "parentSpanId" => "",
+                  "name" => "GET /checkout",
+                  "kind" => 2,
+                  "startTimeUnixNano" => "1544712660000000000",
+                  "endTimeUnixNano" => "1544712661000000000",
+                  "status" => %{"code" => 1},
+                  "attributes" => []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   end
 
   defp insert_event(scope, server, app, attrs) do
