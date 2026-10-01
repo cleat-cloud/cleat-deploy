@@ -75,6 +75,36 @@ defmodule CleatDeploy.Deploy.GolangTest do
     refute script =~ "mix release"
   end
 
+  test "golang restart waits for a stable unit and HTTP bind instead of sleep 1", %{
+    app: app,
+    config: config,
+    server: server
+  } do
+    manifest = %{
+      AppManifest.resolve(nil, app)
+      | runtime: "golang",
+        binaries: ["server", "worker"]
+    }
+
+    script =
+      Golang.remote_build_script(server, app, config, "abc1234", "/tmp/src.tar.gz", manifest)
+
+    refute script =~
+             ~r/systemctl restart atelie\n[[:space:]]*sleep 1\n[[:space:]]*if sudo systemctl is-active/
+
+    assert script =~ "NRestarts"
+    assert script =~ "http://127.0.0.1:4020/"
+    assert script =~ "seq 1 30"
+    # Workers have no HTTP port — only the main unit is probed.
+    worker_block =
+      script
+      |> String.split("Restarting atelie-worker")
+      |> Enum.at(1)
+      |> Kernel.||("")
+
+    refute worker_block =~ "http://127.0.0.1:4020/"
+  end
+
   test "release command runs after publishing and before the units restart", %{
     app: app,
     config: config,

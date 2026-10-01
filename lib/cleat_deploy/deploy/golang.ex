@@ -27,20 +27,10 @@ defmodule CleatDeploy.Deploy.Golang do
       end)
 
     restart_cmds =
-      [config.systemd_unit | Enum.map(worker_units, &"#{config.systemd_unit}-#{&1}")]
-      |> Enum.map_join("\n", fn unit ->
-        """
-        log "Restarting #{unit}"
-        sudo systemctl restart #{unit}
-        sleep 1
-        if sudo systemctl is-active --quiet #{unit}; then
-          log "Service #{unit} is active"
-        else
-          sudo journalctl -u #{unit} -n 30 --no-pager
-          exit 1
-        fi
-        """
-      end)
+      wait_for_unit(config.systemd_unit, http_port: app.port) <>
+        Enum.map_join(worker_units, "\n", fn bin ->
+          wait_for_unit("#{config.systemd_unit}-#{bin}")
+        end)
 
     """
     set -euo pipefail
@@ -115,6 +105,56 @@ defmodule CleatDeploy.Deploy.Golang do
 
   defp binaries(%AppManifest{binaries: bins}) when is_list(bins) and bins != [], do: bins
   defp binaries(_), do: ["server"]
+
+  # `sleep 1` + is-active is a false success: the unit can be active while the
+  # process is still booting the wrong env, or about to crash-loop. Wait until
+  # NRestarts stays 0 and (for the HTTP unit) the port answers.
+  defp wait_for_unit(unit, opts \\ []) do
+    http_check =
+      case Keyword.get(opts, :http_port) do
+        port when is_integer(port) ->
+          """
+              code=$(curl -sS -o /dev/null --max-time 2 -w '%{http_code}' "http://127.0.0.1:#{port}/" || true)
+              if [[ "$code" == "000" || -z "$code" ]]; then
+                sleep 1
+                continue
+              fi
+          """
+
+        _ ->
+          ""
+      end
+
+    """
+    log "Restarting #{unit}"
+    if ! sudo grep -q 'Environment=CLEAT_DATA_DIR=' /etc/systemd/system/#{unit}.service; then
+      log "unit #{unit} is missing CLEAT_DATA_DIR"
+      sudo journalctl -u #{unit} -n 30 --no-pager
+      exit 1
+    fi
+    sudo systemctl reset-failed #{unit} || true
+    sudo systemctl restart #{unit}
+    ready=0
+    for i in $(seq 1 30); do
+      if sudo systemctl is-active --quiet #{unit}; then
+        n=$(systemctl show #{unit} -p NRestarts --value 2>/dev/null || echo 0)
+        if [[ "${n:-0}" -ne 0 ]]; then
+          sleep 1
+          continue
+        fi
+    #{http_check}
+        ready=1
+        break
+      fi
+      sleep 1
+    done
+    if [[ "$ready" -ne 1 ]]; then
+      sudo journalctl -u #{unit} -n 30 --no-pager
+      exit 1
+    fi
+    log "Service #{unit} is active"
+    """
+  end
 
   defp source_package("server"), do: "./cmd/server"
   defp source_package("worker"), do: "./cmd/worker"
