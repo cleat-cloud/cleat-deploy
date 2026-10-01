@@ -412,6 +412,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
 
     caddy_site = """
     #{address} {
+      # paas:app=#{app.slug}
       log
       encode gzip
       root * #{static_site_root(app)}
@@ -422,7 +423,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     }
     """
 
-    caddy_site_script(address, caddy_site)
+    caddy_site_script(address, caddy_site, app.slug)
   end
 
   defp caddy_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
@@ -436,6 +437,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       # Caddy hand the request to the app.
       caddy_site = """
       #{address} {
+        # paas:app=#{app.slug}
         log
         encode gzip
         forward_auth 127.0.0.1:#{Wake.wake_port()} {
@@ -446,19 +448,20 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       """
 
       """
-      #{caddy_site_script(address, caddy_site)}
+      #{caddy_site_script(address, caddy_site, app.slug)}
       #{Wake.arm_script(unit)}
       """
     else
       caddy_site = """
       #{address} {
+        # paas:app=#{app.slug}
         log
         encode gzip
         reverse_proxy 127.0.0.1:#{app.port}
       }
       """
 
-      caddy_site_script(address, caddy_site)
+      caddy_site_script(address, caddy_site, app.slug)
     end
   end
 
@@ -513,15 +516,49 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       }
       return 0
     }
-    !inside && /{$/ && hosts_of($0) { inside = 1; next }
-    inside && $0 == "}" { inside = 0; next }
-    inside { next }
+    function braces(s,   n, i, c) {
+      n = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == "{") n++
+        if (c == "}") n--
+      }
+      return n
+    }
+    function keep_buf(   i) {
+      for (i = 1; i <= nbuf; i++) print buf[i]
+      nbuf = 0
+    }
+    depth == 0 && /{/ {
+      in_site = 1
+      nbuf = 0
+      drop = hosts_of($0)
+      buf[++nbuf] = $0
+      depth += braces($0)
+      if (depth <= 0) {
+        if (!drop) print $0
+        in_site = 0
+        nbuf = 0
+      }
+      next
+    }
+    in_site {
+      buf[++nbuf] = $0
+      if (app != "" && $0 ~ ("^[ \\t]*# paas:app=" app "[ \\t]*$")) drop = 1
+      depth += braces($0)
+      if (depth <= 0) {
+        if (!drop) keep_buf()
+        in_site = 0
+        nbuf = 0
+      }
+      next
+    }
     { print }
     """
     |> String.trim()
   end
 
-  defp caddy_site_script(address, caddy_site) do
+  defp caddy_site_script(address, caddy_site, slug) do
     """
     #{ensure_caddy_script()}
 
@@ -529,7 +566,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       CADDYFILE="/etc/caddy/Caddyfile"
       sudo touch "$CADDYFILE"
       TMPFILE="$(mktemp)"
-      sudo awk -v site=#{shell_escape(address)} '
+      sudo awk -v site=#{shell_escape(address)} -v app=#{shell_escape(slug)} '
         #{caddy_strip_awk()}
       ' "$CADDYFILE" > "$TMPFILE"
       cat >> "$TMPFILE"
