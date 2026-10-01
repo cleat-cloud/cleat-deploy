@@ -47,7 +47,9 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "log access {"
     assert script =~ "include http.log.access"
     assert script =~ "/var/log/caddy/access.log"
-    assert script =~ ~r/tts\.gestaobem\.com \{\n\s+log\n\s+encode gzip/
+
+    assert script =~
+             ~r/tts\.gestaobem\.com \{\n\s+# paas:app=phoenix-tts\n\s+log\n\s+encode gzip/
   end
 
   test "node apps get a persistent data dir outside the release", %{
@@ -163,6 +165,37 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     leftover = awk_strip(simple, "tts.gestaobem.com")
     refute leftover =~ "tts.gestaobem.com"
     refute leftover =~ "4004"
+  end
+
+  test "caddy strip removes a previous host of the same app by paas marker" do
+    existing = """
+    cifra.gestaobem.com {
+      # paas:app=cifra
+      reverse_proxy 127.0.0.1:4022
+    }
+
+    other.example.com {
+      reverse_proxy 127.0.0.1:4000
+    }
+    """
+
+    stripped = awk_strip(existing, "finops.gestaobem.com", "cifra")
+
+    refute stripped =~ "cifra.gestaobem.com"
+    refute stripped =~ "4022"
+    assert stripped =~ "other.example.com {"
+    assert stripped =~ "reverse_proxy 127.0.0.1:4000"
+  end
+
+  test "provision_script marks the managed site so a later host rename can strip it", %{
+    app: app,
+    config: config
+  } do
+    script =
+      ServerProvision.provision_script(app, config, %AppManifest{runtime: "phoenix"})
+
+    assert script =~ "# paas:app=phoenix-tts"
+    assert script =~ "sudo awk -v site='tts.gestaobem.com' -v app='phoenix-tts'"
   end
 
   test "provision_script validates the Caddyfile before installing it", %{
@@ -355,12 +388,17 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "mkdir -p tmp/pids tmp/cache log storage"
   end
 
-  defp awk_strip(caddyfile, site) do
+  defp awk_strip(caddyfile, site, app \\ "") do
     path = Path.join(System.tmp_dir!(), "caddy-#{System.unique_integer([:positive])}")
     File.write!(path, caddyfile)
     on_exit(fn -> File.rm(path) end)
 
-    {out, 0} = System.cmd("awk", ["-v", "site=#{site}", ServerProvision.caddy_strip_awk(), path])
+    {out, 0} =
+      System.cmd(
+        "awk",
+        ["-v", "site=#{site}", "-v", "app=#{app}", ServerProvision.caddy_strip_awk(), path]
+      )
+
     out
   end
 
