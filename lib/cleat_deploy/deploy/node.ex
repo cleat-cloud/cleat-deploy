@@ -260,10 +260,10 @@ defmodule CleatDeploy.Deploy.Node do
       rm -rf .next/cache
     fi
 
-    if [[ "$START_CMD" == node *".output/server/index.mjs" ]]; then
+    if [[ "$START_CMD" == "node "*.output/server/index.mjs ]]; then
       log "Self-contained Nitro output; dropping node_modules before publish"
       rm -rf node_modules
-    elif [[ "$START_CMD" == node *".next/standalone/server.js" ]]; then
+    elif [[ "$START_CMD" == "node "*.next/standalone/server.js ]]; then
       log "Self-contained Next standalone output; dropping node_modules before publish"
       rm -rf node_modules
     elif [[ -d node_modules ]]; then
