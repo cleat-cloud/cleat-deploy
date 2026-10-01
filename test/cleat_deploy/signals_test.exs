@@ -247,6 +247,59 @@ defmodule CleatDeploy.SignalsTest do
     end
   end
 
+  describe "incident/3" do
+    test "merges deploys, alerts and error groups into a timeline", ctx do
+      now = DateTime.utc_now(:second)
+      fp = CleatDeploy.Observability.Fingerprint.of("crash in worker")
+
+      deploy =
+        insert_deploy(ctx.app,
+          git_sha: "feedface",
+          finished_at: DateTime.add(now, -600, :second)
+        )
+
+      for _ <- 1..6 do
+        insert_event(ctx, ctx.app, %{
+          severity: "err",
+          message: "crash in worker",
+          fingerprint: fp,
+          occurred_at: DateTime.add(now, -30, :second)
+        })
+      end
+
+      {:ok, [alert]} = Signals.evaluate_alerts(ctx.scope, now: now)
+      assert {:ok, incident} = Signals.incident(ctx.scope, ctx.app, now: now, range: "24h")
+
+      assert incident.app_id == ctx.app.id
+      assert incident.slug == ctx.app.slug
+
+      kinds = Enum.map(incident.events, & &1.kind)
+      assert :deploy in kinds
+      assert :alert in kinds
+      assert :error_group in kinds
+
+      deploy_event = Enum.find(incident.events, &(&1.kind == :deploy))
+      assert deploy_event.summary == "feedface"
+      assert deploy_event.payload.id == deploy.id
+
+      alert_event = Enum.find(incident.events, &(&1.kind == :alert))
+      assert alert_event.payload.id == alert.id
+      assert alert_event.payload.rule == "error_rate"
+
+      group = Enum.find(incident.events, &(&1.kind == :error_group))
+      assert group.payload.fingerprint == fp
+      assert group.payload.count == 6
+    end
+
+    test "404s via {:error, :not_found} for another tenant's app", ctx do
+      other = TenancyFixtures.scope_fixture()
+      other_server = TenancyFixtures.server_fixture(other)
+      other_app = TenancyFixtures.app_fixture(other, other_server)
+
+      assert {:error, :not_found} = Signals.incident(ctx.scope, other_app)
+    end
+  end
+
   defp insert_deploy(app, attrs) do
     Repo.insert!(%Deployment{
       app_id: app.id,
