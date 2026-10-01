@@ -506,13 +506,19 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   @doc false
   def caddy_strip_awk do
     """
-    function hosts_of(line,   s, n, i, a) {
+    function hosts_of(line,   s, n, i, a, m, j, b) {
       s = line
       sub(/[ \\t]*{[ \\t]*$/, "", s)
       n = split(s, a, ",")
+      m = split(site, b, ",")
+      for (j = 1; j <= m; j++) {
+        gsub(/^[ \\t]+|[ \\t]+$/, "", b[j])
+      }
       for (i = 1; i <= n; i++) {
         gsub(/^[ \\t]+|[ \\t]+$/, "", a[i])
-        if (a[i] == site) return 1
+        for (j = 1; j <= m; j++) {
+          if (a[i] != "" && a[i] == b[j]) return 1
+        }
       }
       return 0
     }

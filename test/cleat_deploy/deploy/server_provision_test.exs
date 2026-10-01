@@ -167,6 +167,32 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     refute leftover =~ "4004"
   end
 
+  test "caddy strip removes a composite site when the panel host is the full list" do
+    # new-lp stores host as "www, apex, blog". The strip awk used to compare
+    # each comma-split token to that whole string, so the old block survived
+    # and Caddy rejected the rewrite (deploy 897: ambiguous site definition).
+    existing = """
+    www.purplestock.com.br, purplestock.com.br, blog.purplestock.com.br {
+      reverse_proxy 127.0.0.1:4034
+    }
+
+    other.example.com {
+      reverse_proxy 127.0.0.1:4000
+    }
+    """
+
+    stripped =
+      awk_strip(
+        existing,
+        "www.purplestock.com.br, purplestock.com.br, blog.purplestock.com.br"
+      )
+
+    refute stripped =~ "www.purplestock.com.br"
+    refute stripped =~ "4034"
+    assert stripped =~ "other.example.com {"
+    assert stripped =~ "reverse_proxy 127.0.0.1:4000"
+  end
+
   test "caddy strip removes a previous host of the same app by paas marker" do
     existing = """
     cifra.gestaobem.com {
