@@ -156,7 +156,7 @@ defmodule CleatDeploy.Servers.AccessCountsTest do
     assert top.requests == 1
   end
 
-  test "ensure_caddyfile injects a global access logger once" do
+  test "ensure_caddyfile injects a Caddy 2.11 named access logger once" do
     original = """
     {
     email admin@gestaobem.com
@@ -174,7 +174,10 @@ defmodule CleatDeploy.Servers.AccessCountsTest do
     twice = AccessCounts.ensure_caddyfile(once)
 
     assert once == twice
-    assert once =~ "default_logger_name access"
+    refute once =~ "default_logger_name"
+    refute once =~ ~r/servers\s*\{[^}]*logs/s
+    assert once =~ "log access {"
+    assert once =~ "include http.log.access"
     assert once =~ "/var/log/caddy/access.log"
     assert once =~ "nfe.gestaobem.com {"
     assert once =~ "email admin@gestaobem.com"
@@ -194,7 +197,68 @@ defmodule CleatDeploy.Servers.AccessCountsTest do
 
     {_, 0} = System.cmd("python3", [py, path], stderr_to_stdout: true)
     assert File.read!(path) == once
+
+    validate_caddyfile!(once)
+  end
+
+  test "ensure_caddyfile strips the Caddy 2.11-invalid servers logs snippet" do
+    original = """
+    {
+    email admin@gestaobem.com
+    servers {
+    logs {
+    default_logger_name access
+    }
+    }
+    log access {
+    output file /var/log/caddy/access.log {
+    roll_size 50MiB
+    roll_keep 2
+    }
+    format json
+    include http.log.access
+    }
+    }
+
+    nfe.gestaobem.com {
+    reverse_proxy 127.0.0.1:4033
+    }
+    """
+
+    fixed = AccessCounts.ensure_caddyfile(original)
+
+    refute fixed =~ "default_logger_name"
+    refute fixed =~ ~r/servers\s*\{[^}]*logs/s
+    assert fixed =~ "log access {"
+    assert fixed =~ "include http.log.access"
+    assert AccessCounts.ensure_caddyfile(fixed) == fixed
+
+    validate_caddyfile!(fixed)
   end
 
   defp jason(map), do: Jason.encode!(map)
+
+  defp validate_caddyfile!(contents) do
+    case System.find_executable("caddy") do
+      nil ->
+        :ok
+
+      caddy ->
+        path =
+          Path.join(
+            System.tmp_dir!(),
+            "cleat-caddy-validate-#{System.unique_integer([:positive])}.caddyfile"
+          )
+
+        File.write!(path, contents)
+        on_exit(fn -> File.rm(path) end)
+
+        {out, status} =
+          System.cmd(caddy, ["validate", "--adapter", "caddyfile", "--config", path],
+            stderr_to_stdout: true
+          )
+
+        assert status == 0, out
+    end
+  end
 end
