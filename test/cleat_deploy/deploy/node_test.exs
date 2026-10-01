@@ -143,6 +143,30 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "rm -rf node_modules"
   end
 
+  test "build script prunes with the lockfile package manager, not npm on a pnpm tree", %{
+    app: app,
+    config: config
+  } do
+    manifest = AppManifest.resolve(nil, app)
+    script = Node.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
+
+    {prune_pos, _} = :binary.match(script, "Pruning dev dependencies for the release")
+    prune_tail = binary_part(script, prune_pos, byte_size(script) - prune_pos)
+
+    # npm prune on a pnpm node_modules tree dies with
+    # "Cannot read properties of null (reading 'matches')" (new-lp deploy 893).
+    assert prune_tail =~ "pnpm-lock.yaml"
+    assert prune_tail =~ "pnpm prune --prod"
+    assert prune_tail =~ "yarn.lock"
+    assert prune_tail =~ "yarn install --production"
+    assert prune_tail =~ "bun.lock"
+    assert prune_tail =~ "bun install --production"
+    assert prune_tail =~ "npm prune --omit=dev"
+
+    assert occurrence(prune_tail, "pnpm prune --prod") <
+             occurrence(prune_tail, "npm prune --omit=dev")
+  end
+
   test "build script detects Next standalone and drops node_modules", %{
     app: app,
     config: config
