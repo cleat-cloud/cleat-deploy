@@ -42,6 +42,7 @@ defmodule CleatDeployWeb.Api.DropTest do
     assert deployment.source == "drop"
     assert deployment.artifact_path =~ dir
     assert File.read!(deployment.artifact_path) == body
+    assert Plug.Conn.get_resp_header(conn, "connection") == ["close"]
   end
 
   test "rejects drops for non-static apps", %{phoenix: app, token: token} do

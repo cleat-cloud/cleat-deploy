@@ -13,6 +13,9 @@ defmodule CleatDeployWeb.Api.DropController do
   @chunk 8_000_000
 
   def create(conn, %{"app_id" => app_id} = params) do
+    # Drops are one-shot uploads. Leaving keep-alive open makes Bandit wait
+    # for a next request and log `Read timeout` ~15s after the 201.
+    conn = put_resp_header(conn, "connection", "close")
     scope = conn.assigns.current_scope
     max = max_bytes()
 
