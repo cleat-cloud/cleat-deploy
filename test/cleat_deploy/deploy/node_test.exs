@@ -189,9 +189,14 @@ defmodule CleatDeploy.Deploy.NodeTest do
     # Exact `node .output/server/index.mjs` misses monorepo output
     # (`node apps/landing/.output/server/index.mjs`) and falls through to
     # `pnpm install --prod`, which then dies without a TTY.
-    assert script =~ ~s|if [[ "$START_CMD" == node\ *".output/server/index.mjs" ]]|
+    # The glob must be a single `[[ == ]]` word: `node *".output/..."` is two
+    # words and bash dies with "syntax error in conditional expression"
+    # (gestao-bem-landing deploy 906).
+    assert script =~ ~s|if [[ "$START_CMD" == "node "*.output/server/index.mjs ]]|
+    refute script =~ ~s|if [[ "$START_CMD" == node *".output/server/index.mjs" ]]|
     refute script =~ ~s|if [[ "$START_CMD" == "node .output/server/index.mjs" ]]|
     assert script =~ "Self-contained Nitro output; dropping node_modules before publish"
+    assert_valid_bash(script)
   end
 
   test "build script detects Next standalone and drops node_modules", %{
@@ -270,5 +275,22 @@ defmodule CleatDeploy.Deploy.NodeTest do
   defp occurrence(script, snippet) do
     {position, _length} = :binary.match(script, snippet)
     position
+  end
+
+  defp assert_valid_bash(script) do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "cleat-node-build-#{System.unique_integer([:positive])}.sh"
+      )
+
+    File.write!(path, script)
+
+    try do
+      {output, status} = System.cmd("bash", ["-n", path], stderr_to_stdout: true)
+      assert status == 0, output
+    after
+      File.rm(path)
+    end
   end
 end
