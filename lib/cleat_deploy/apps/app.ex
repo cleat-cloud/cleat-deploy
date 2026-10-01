@@ -59,6 +59,7 @@ defmodule CleatDeploy.Apps.App do
       :tenant_id
     ])
     |> update_change(:host, &normalize_host/1)
+    |> maybe_put_slug()
     |> validate_required([:name, :slug, :host, :server_id, :tenant_id])
     |> cast_runtime_packages()
     |> put_runtime_packages_text()
@@ -291,6 +292,38 @@ defmodule CleatDeploy.Apps.App do
 
   # Static apps can exist without a git repo (git-less `cleat drop` deploys).
   # The column is NOT NULL, so a blank repo is stored as "".
+  # API/MCP omit slug; the panel form also derives it. Keep an explicit slug.
+  defp maybe_put_slug(changeset) do
+    if blank_slug?(get_field(changeset, :slug)) do
+      case get_field(changeset, :name) do
+        name when is_binary(name) ->
+          case slug_from_name(name) do
+            "" -> changeset
+            slug -> put_change(changeset, :slug, slug)
+          end
+
+        _ ->
+          changeset
+      end
+    else
+      changeset
+    end
+  end
+
+  defp blank_slug?(slug) when slug in [nil, ""], do: true
+  defp blank_slug?(slug) when is_binary(slug), do: String.trim(slug) == ""
+  defp blank_slug?(_), do: true
+
+  defp slug_from_name(name) do
+    name
+    |> String.normalize(:nfd)
+    |> String.replace(~r/\p{Mn}/u, "")
+    |> String.downcase()
+    |> String.replace("_", "-")
+    |> String.replace(~r/[^a-z0-9-]+/u, "-")
+    |> String.trim("-")
+  end
+
   defp put_github_repo_default(changeset) do
     if get_field(changeset, :runtime) == "static" and
          get_field(changeset, :github_repo) in [nil, ""] do
