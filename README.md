@@ -86,6 +86,24 @@ Plain HTML/CSS/JS folders need no build and work as-is. They can also be
 published without git via `cleat drop`, which uploads a folder to
 `POST /api/v1/apps/:app/drops` and publishes it the same way.
 
+### Go / Cais apps
+
+Set `runtime: "golang"` (or put `"runtime": "golang"` in `.cleat_deploy/deploy.json`).
+A repo with `go.mod` is detected automatically. The panel installs Go 1.26.4,
+builds `bin/<name>` from `./cmd/<name>` (`binaries` defaults to `["server"]`;
+extra names become `<unit>-<name>`), publishes `bin/` plus `web/static` to
+`/opt/<slug>/current`, creates `/opt/<slug>/data`, and keeps each binary alive
+with a systemd unit behind Caddy. `MemoryMax` defaults to 256M.
+
+If the repo has `package.json`, Node 22 is installed and `npm ci` + `npm run build`
+run **before** `go build` (frontend assets). The unit sources the panel env file
+and `CLEAT_DATA_DIR`; it does not inject `PORT` or `ENV`. Amarra-cais apps
+typically set `PORT=:<port>`, `ENV=production`,
+`DB_PATH=/opt/<slug>/data/app.db`,
+`STATIC_DIR=/opt/<slug>/current/web/static` and `TRUSTED_PROXIES=127.0.0.1`.
+The HTTP unit is not considered ready until it answers on the app port with
+`NRestarts=0`.
+
 ### Node / SSR apps (Next.js, TanStack Start)
 
 Set `runtime: "node"` (or `"runtime": "node"` in `.cleat_deploy/deploy.json`).

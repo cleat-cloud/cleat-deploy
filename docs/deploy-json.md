@@ -117,6 +117,59 @@ Notes:
   the manifest nothing changes: Cleat touches no datastore, and you can point
   `DATABASE_URL`/`REDIS_URL` at your own service through the app's env vars.
 
+## Go / Cais
+
+A repo with `go.mod` is detected as `runtime: "golang"`. Override with
+`"runtime": "golang"` when detection is wrong.
+
+Pipeline on every deploy:
+
+1. Install Go `1.26.4` on the host if `go` is missing or older than 1.26.
+2. If the repo has `package.json`, install Node 22, run `npm ci` (falls back to
+   `npm install`) and, when a `build` script exists, `npm run build` **before**
+   the Go compile (Tailwind / frontend for CloudStore, cifra, etc.).
+3. `go build -o bin/<binary> ./cmd/<binary>` for each entry in `binaries`.
+4. Publish `bin/` (and `web/static` when present) to
+   `<release_path>/releases/build`, point `current` at it, create
+   `<release_path>/data`.
+5. Write one systemd unit per binary, provision addons, run `release_command`,
+   restart units (HTTP unit must answer on the app port with `NRestarts=0`),
+   reload Caddy.
+
+| key | default | notes |
+|---|---|---|
+| `binaries` | `["server"]` | `server` → `./cmd/server`, base unit `<systemd_unit>`. Extra names (e.g. `worker`) build `./cmd/<name>` and get unit `<systemd_unit>-<name>`. |
+| `memory_max_mb` | `256` | `MemoryMax` of every Go unit. |
+| `release_path` | `/opt/<slug>` | `current` is the published tree; SQLite/files live in `data/`. |
+| `build_command` | — | Not used by the Go pipeline; binaries always build from `./cmd/<name>`. |
+
+The Go unit sources `/etc/<app>/env` and sets `CLEAT_DATA_DIR`. It does **not**
+inject `PORT` or `ENV` — the binary decides the bind address and Cais mode from
+the env file. A missing `ENV=production` can boot the HTTP unit in development
+and fail the readiness gate (#152).
+
+Conventional env for amarra-cais apps (set in the panel, not by the runtime):
+
+| var | typical value |
+|---|---|
+| `PORT` | `:<app port>` (e.g. `:4044`) |
+| `ENV` | `production` |
+| `DB_PATH` | `/opt/<slug>/data/app.db` |
+| `STATIC_DIR` | `/opt/<slug>/current/web/static` |
+| `TRUSTED_PROXIES` | `127.0.0.1` |
+
+Units run as `ubuntu` (`NoNewPrivileges`, `PrivateTmp`). The HTTP binary is the
+only Caddy upstream; extra binaries do not get `PORT`.
+
+```json
+{
+  "runtime": "golang",
+  "binaries": ["server", "worker"],
+  "memory_max_mb": 256,
+  "addons": ["postgres:pgvector"]
+}
+```
+
 ## Example: Rails with a worker (Chatwoot-like)
 
 ```json
