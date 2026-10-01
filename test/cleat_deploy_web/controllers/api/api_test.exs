@@ -83,6 +83,22 @@ defmodule CleatDeployWeb.Api.ApiTest do
     assert_enqueued(worker: CleatDeploy.Workers.DeployWorker)
   end
 
+  test "POST /api/v1/apps/:id/deployments stores a 40-hex git_ref as git_sha", %{
+    token: token,
+    app: app
+  } do
+    sha = "e1b61521d8d2767eb23ebef0aed5b1eb4d041d32"
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_post(~p"/api/v1/apps/#{app.id}/deployments", %{git_ref: sha})
+
+    data = json_response(conn, 201)["data"]
+    assert data["git_ref"] == sha
+    assert data["git_sha"] == sha
+  end
+
   test "GET /api/v1/apps/:id/deployments includes wait_reason for FIFO", %{
     token: token,
     app: app

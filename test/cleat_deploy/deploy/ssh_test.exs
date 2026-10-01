@@ -11,6 +11,16 @@ defmodule CleatDeploy.Deploy.SshTest do
     assert String.split(out, "\n", trim: true) == argv
   end
 
+  test "git_clone_plan/2 treats a 40-hex git_ref as a commit, not a branch" do
+    sha = "e1b61521d8d2767eb23ebef0aed5b1eb4d041d32"
+
+    assert Ssh.git_clone_plan(sha, "main") == {:sha, "main", sha}
+    assert Ssh.git_clone_plan(String.upcase(sha), "main") == {:sha, "main", String.downcase(sha)}
+    assert Ssh.git_clone_plan("main", "develop") == {:branch, "main"}
+    assert Ssh.git_clone_plan(nil, "main") == {:branch, "main"}
+    assert Ssh.git_clone_plan("", "main") == {:branch, "main"}
+  end
+
   test "cleanup_stale_identity_files/0 removes leftover PEM paths and leaves other tmp files" do
     leftover =
       Path.join(System.tmp_dir!(), "cleat_deploy_ssh_stale_#{System.unique_integer([:positive])}")
