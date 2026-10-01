@@ -2,6 +2,7 @@ defmodule CleatDeploy.Deploy.Ssh.Phoenix do
   @moduledoc false
 
   alias CleatDeploy.Deploy.{AppManifest, ServerProvision}
+  alias CleatDeploy.Deploy.Ssh.CpuLimit
 
   def phoenix_remote_build_script(server, app, config, sha, remote_tar, runtime, manifest) do
     packages_install =
@@ -27,6 +28,7 @@ defmodule CleatDeploy.Deploy.Ssh.Phoenix do
     set -euo pipefail
 
     log() { printf '==> %s\\n' "$*"; }
+    #{CpuLimit.snippet()}
 
     #{packages_install}#{post_install_script}
     if ! swapon --show | grep -q /swapfile; then
@@ -67,14 +69,14 @@ defmodule CleatDeploy.Deploy.Ssh.Phoenix do
     mix deps.get --only prod
 
     log "Compiling application"
-    mix compile
+    #{CpuLimit.wrap("mix compile")}
 
     log "Compiling assets"
-    mix assets.setup
-    mix assets.deploy
+    #{CpuLimit.wrap("mix assets.setup")}
+    #{CpuLimit.wrap("mix assets.deploy")}
 
     log "Building release #{config.release_name} (slug=#{app.slug})"
-    mix release --overwrite
+    #{CpuLimit.wrap("mix release --overwrite")}
 
     REL_DIR="_build/prod/rel/#{config.release_name}"
     if [[ ! -d "$REL_DIR" ]]; then

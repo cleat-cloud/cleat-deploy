@@ -211,7 +211,8 @@ defmodule CleatDeploy.Apps.RuntimeMemory do
   end
 
   defp stats_argv(_units, paths, :disk) do
-    du = "timeout 12s sudo du -sb #{join_escaped(paths)} 2>/dev/null"
+    du =
+      "timeout 8s ionice -c3 nice -n 19 sudo du -sb #{join_escaped(paths)} 2>/dev/null"
 
     script = """
     set +e

@@ -22,6 +22,7 @@ defmodule CleatDeploy.Deploy.Rails do
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.ServerProvision
   alias CleatDeploy.Deploy.Ssh
+  alias CleatDeploy.Deploy.Ssh.CpuLimit
 
   @default_ruby_version "3.3.6"
   @default_node_version "22"
@@ -38,6 +39,7 @@ defmodule CleatDeploy.Deploy.Rails do
     set -euo pipefail
 
     log() { printf '==> %s\\n' "$*"; }
+    #{CpuLimit.snippet()}
 
     if ! swapon --show | grep -q /swapfile; then
       sudo fallocate -l 2G /swapfile || true
@@ -65,7 +67,7 @@ defmodule CleatDeploy.Deploy.Rails do
     log "Installing gems"
     bundle config set --local path vendor/bundle
     bundle config set --local without 'development test'
-    bundle install --jobs 4 --retry 3
+    #{CpuLimit.wrap("bundle install --jobs 4 --retry 3")}
 
     #{node_and_js(manifest, config)}
 
@@ -283,7 +285,7 @@ defmodule CleatDeploy.Deploy.Rails do
       # that ships its own NODE_OPTIONS in the env keeps it.
       export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
       log "Precompiling assets"
-      run_rails bundle exec rails assets:precompile
+      run_rails #{CpuLimit.wrap("bundle exec rails assets:precompile")}
     else
       log "No asset pipeline detected; skipping assets:precompile"
     fi

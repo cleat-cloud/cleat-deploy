@@ -97,7 +97,7 @@ defmodule CleatDeploy.Workers.DeployWorkerTest do
     assert second.status == :queued
   end
 
-  test "deploys a second app while another is running on the same server", %{
+  test "snoozes a second app when the server is already at the build cap", %{
     scope: scope,
     server: server,
     app: app
@@ -110,18 +110,13 @@ defmodule CleatDeploy.Workers.DeployWorkerTest do
         host: "other-parallel.example.com"
       })
 
-    expect(RunnerMock, :deploy, fn deployment ->
-      assert deployment.status == :running
-      {:ok, "deploy ok"}
-    end)
-
     {:ok, first} = Deployments.create_deployment(app, %{git_sha: "first"})
     {:ok, _} = Deployments.mark_running(first)
 
     {:ok, second} = Deployments.create_deployment(other, %{git_sha: "second"})
-    assert :ok = perform_job(DeployWorker, %{"deployment_id" => second.id})
+    assert {:snooze, 20} = perform_job(DeployWorker, %{"deployment_id" => second.id})
 
     second = Deployments.get_deployment!(second.id)
-    assert second.status == :success
+    assert second.status == :queued
   end
 end

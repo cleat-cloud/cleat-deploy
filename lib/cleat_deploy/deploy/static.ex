@@ -7,6 +7,7 @@ defmodule CleatDeploy.Deploy.Static do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.ServerProvision
+  alias CleatDeploy.Deploy.Ssh.CpuLimit
 
   @candidate_dirs ~w(dist build public _site out)
 
@@ -22,6 +23,7 @@ defmodule CleatDeploy.Deploy.Static do
     set -euo pipefail
 
     log() { printf '==> %s\\n' "$*"; }
+    #{CpuLimit.snippet()}
 
     if ! swapon --show | grep -q /swapfile; then
       sudo fallocate -l 2G /swapfile || true
@@ -44,7 +46,7 @@ defmodule CleatDeploy.Deploy.Static do
       npm ci || npm install
       if npm run | grep -q " build"; then
         log "Building static site"
-        npm run build
+        #{CpuLimit.wrap("npm run build")}
       fi
     fi
 

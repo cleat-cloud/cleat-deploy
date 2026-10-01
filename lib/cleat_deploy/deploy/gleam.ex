@@ -33,6 +33,7 @@ defmodule CleatDeploy.Deploy.Gleam do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.ServerProvision
+  alias CleatDeploy.Deploy.Ssh.CpuLimit
 
   def remote_build_script(
         _server,
@@ -47,6 +48,7 @@ defmodule CleatDeploy.Deploy.Gleam do
 
     SECONDS=0
     log() { printf '==> [%3ds] %s\\n' "$SECONDS" "$*"; }
+    #{CpuLimit.snippet()}
 
     if ! swapon --show | grep -q /swapfile; then
       sudo fallocate -l 2G /swapfile || true
@@ -194,7 +196,7 @@ defmodule CleatDeploy.Deploy.Gleam do
   defp build_step(command) when is_binary(command) and command != "" do
     """
     log "Building (custom build_command)"
-    #{command}
+    #{CpuLimit.wrap(command)}
     """
   end
 
@@ -202,7 +204,7 @@ defmodule CleatDeploy.Deploy.Gleam do
     """
     log "Exporting Erlang shipment"
     gleam deps download
-    gleam export erlang-shipment
+    #{CpuLimit.wrap("gleam export erlang-shipment")}
     """
   end
 
