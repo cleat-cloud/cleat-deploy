@@ -4,6 +4,7 @@ defmodule CleatDeploy.Deploy.Golang do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.ServerProvision
+  alias CleatDeploy.Deploy.Ssh.CpuLimit
 
   def remote_build_script(
         _server,
@@ -22,7 +23,7 @@ defmodule CleatDeploy.Deploy.Golang do
 
         """
         log "Building #{bin} (#{source})"
-        go build -o bin/#{bin} #{source}
+        #{CpuLimit.wrap("go build -o bin/#{bin} #{source}")}
         """
       end)
 
@@ -36,6 +37,7 @@ defmodule CleatDeploy.Deploy.Golang do
     set -euo pipefail
 
     log() { printf '==> %s\\n' "$*"; }
+    #{CpuLimit.snippet()}
 
     if ! swapon --show | grep -q /swapfile; then
       sudo fallocate -l 4G /swapfile || true
@@ -74,7 +76,7 @@ defmodule CleatDeploy.Deploy.Golang do
       npm ci || npm install
       if npm run | grep -q " build"; then
         log "Building frontend assets"
-        npm run build
+        #{CpuLimit.wrap("npm run build")}
       fi
     fi
 

@@ -60,6 +60,18 @@ set -euo pipefail
 
 log() { printf '→ %s\n' "$*" >&2; }
 
+cleat_cpu_limit() {
+  if command -v systemd-run >/dev/null 2>&1; then
+    envfile=$(mktemp)
+    env | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' > "$envfile"
+    sudo systemd-run --quiet --uid="$(id -u)" --gid="$(id -g)" --wait --pipe --collect \
+      -p CPUQuota=150% -p Nice=10 -p "EnvironmentFile=$envfile" \
+      --working-directory="$PWD" -- "$@"
+    st=$?; rm -f "$envfile"; return $st
+  fi
+  nice -n 10 "$@"
+}
+
 if ! command -v mise >/dev/null 2>&1; then
   log "Installing mise + Erlang/Elixir"
   sudo apt-get update
@@ -86,10 +98,10 @@ export TURSO_DATABASE_URL=libsql://build.turso.io
 mix local.hex --force
 mix local.rebar --force
 mix deps.get --only prod
-mix compile
-mix assets.setup
-mix assets.deploy
-mix release --overwrite
+cleat_cpu_limit mix compile
+cleat_cpu_limit mix assets.setup
+cleat_cpu_limit mix assets.deploy
+cleat_cpu_limit mix release --overwrite
 
 RELEASE_ROOT="/opt/cleat_deploy/releases"
 RELEASE_ID="$(date -u +%Y%m%d%H%M%S)"

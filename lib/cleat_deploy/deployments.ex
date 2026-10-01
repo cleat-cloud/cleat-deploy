@@ -246,8 +246,10 @@ defmodule CleatDeploy.Deployments do
     }
   end
 
-  # Two mix/npm builds on a CX33 is tight but usable; a third tends to OOM.
-  @max_running_per_server 2
+  # One mix/npm build on a CX33 is the ceiling: a single Phoenix compile already
+  # hits ~330% (Hetzner 100% = 1 vCPU) and starves Caddy on :443. Compile steps
+  # are also wrapped in CPUQuota=150%; this cap stops two of those overlapping.
+  @max_running_per_server 1
 
   def max_running_per_server, do: @max_running_per_server
 
@@ -351,9 +353,14 @@ defmodule CleatDeploy.Deployments do
 
   def wait_reason_message(deployment) do
     case wait_reason(deployment) do
-      :app_fifo -> "Waiting for this app's earlier deploy"
-      :server_cap -> "Waiting: this server is at the 2-build cap"
-      nil -> nil
+      :app_fifo ->
+        "Waiting for this app's earlier deploy"
+
+      :server_cap ->
+        "Waiting: this server is at the #{@max_running_per_server}-build cap"
+
+      nil ->
+        nil
     end
   end
 

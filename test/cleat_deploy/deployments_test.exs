@@ -79,7 +79,7 @@ defmodule CleatDeploy.DeploymentsTest do
       assert other_running.status == :running
     end
 
-    test "claim_running/1 runs two different apps on the same server at once", %{
+    test "claim_running/1 caps concurrent deploys on one server at one", %{
       scope: scope,
       app: app,
       deployment: first
@@ -97,40 +97,7 @@ defmodule CleatDeploy.DeploymentsTest do
         })
 
       {:ok, second} = Deployments.create_deployment(other_app, %{git_sha: "parallel"})
-      assert {:ok, second_running} = Deployments.claim_running(second)
-      assert second_running.status == :running
-    end
-
-    test "claim_running/1 caps concurrent deploys on one server at two", %{
-      scope: scope,
-      app: app,
-      deployment: first
-    } do
-      {:ok, _} = Deployments.claim_running(first)
-
-      {:ok, second_app, _} =
-        Apps.create_app(scope, %{
-          name: "Second App",
-          slug: "second-app",
-          github_repo: "puppe1990/second-app",
-          host: "second.gestaobem.com",
-          server_id: app.server_id
-        })
-
-      {:ok, third_app, _} =
-        Apps.create_app(scope, %{
-          name: "Third App",
-          slug: "third-app",
-          github_repo: "puppe1990/third-app",
-          host: "third.gestaobem.com",
-          server_id: app.server_id
-        })
-
-      {:ok, second} = Deployments.create_deployment(second_app, %{git_sha: "two"})
-      {:ok, third} = Deployments.create_deployment(third_app, %{git_sha: "three"})
-
-      assert {:ok, _} = Deployments.claim_running(second)
-      assert {:error, :server_busy} = Deployments.claim_running(third)
+      assert {:error, :server_busy} = Deployments.claim_running(second)
     end
 
     test "claim_running/1 enforces FIFO for queued deploys of the same app", %{
@@ -159,7 +126,7 @@ defmodule CleatDeploy.DeploymentsTest do
       assert Deployments.wait_reason_message(newer) =~ "earlier deploy"
     end
 
-    test "wait_reason/1 is :server_cap when the host is already at two running builds", %{
+    test "wait_reason/1 is :server_cap when the host is already at one running build", %{
       scope: scope,
       app: app,
       deployment: first
@@ -175,23 +142,11 @@ defmodule CleatDeploy.DeploymentsTest do
           server_id: app.server_id
         })
 
-      {:ok, third_app, _} =
-        Apps.create_app(scope, %{
-          name: "Third App",
-          slug: "third-app",
-          github_repo: "puppe1990/third-app",
-          host: "third.gestaobem.com",
-          server_id: app.server_id
-        })
-
       {:ok, second} = Deployments.create_deployment(second_app, %{git_sha: "two"})
-      {:ok, _} = Deployments.claim_running(second)
-
-      {:ok, third} = Deployments.create_deployment(third_app, %{git_sha: "three"})
       running = Deployments.get_deployment!(first.id)
 
-      assert Deployments.wait_reason(third) == :server_cap
-      assert Deployments.wait_reason_message(third) =~ "2-build cap"
+      assert Deployments.wait_reason(second) == :server_cap
+      assert Deployments.wait_reason_message(second) =~ "1-build cap"
       assert Deployments.wait_reason(running) == nil
     end
 

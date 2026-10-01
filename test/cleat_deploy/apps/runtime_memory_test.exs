@@ -172,6 +172,47 @@ defmodule CleatDeploy.Apps.RuntimeMemoryTest do
     assert RuntimeMemory.for_app(app) == nil
   end
 
+  test "disk probe nices and ionices du so it cannot starve the host", %{
+    scope: scope,
+    server: server
+  } do
+    previous = Application.get_env(:cleat_deploy, :runtime_memory)
+    Application.put_env(:cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeMemoryArgvCapture)
+
+    on_exit(fn ->
+      if previous do
+        Application.put_env(:cleat_deploy, :runtime_memory, previous)
+      else
+        Application.delete_env(:cleat_deploy, :runtime_memory)
+      end
+    end)
+
+    # Own the ETS table in this process; collect/2 runs inside Task.async_stream
+    # and a table created there is dropped when the task exits.
+    _ = CleatDeploy.Apps.RuntimeMemoryArgvCapture.take()
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "open-drive",
+        systemd_unit: "open_drive",
+        release_path: "/opt/open_drive"
+      })
+
+    _ = RuntimeMemory.for_app(app)
+
+    scripts =
+      Enum.map(CleatDeploy.Apps.RuntimeMemoryArgvCapture.take(), fn
+        ["bash", "-c", script] -> script
+        other -> inspect(other)
+      end)
+
+    disk = Enum.find(scripts, &String.contains?(&1, "du -sb"))
+    assert disk
+    assert disk =~ "ionice -c3"
+    assert disk =~ "nice -n 19"
+    assert disk =~ "timeout"
+  end
+
   test "format_bytes uses one decimal under 10 MB and GB above 1 GB" do
     assert RuntimeMemory.format_bytes(5_505_024) == "5.3 MB"
     assert RuntimeMemory.format_bytes(171_200_512) == "163 MB"

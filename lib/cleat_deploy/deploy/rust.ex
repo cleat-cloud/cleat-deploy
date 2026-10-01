@@ -21,6 +21,7 @@ defmodule CleatDeploy.Deploy.Rust do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.ServerProvision
+  alias CleatDeploy.Deploy.Ssh.CpuLimit
 
   @default_node_version "22"
 
@@ -37,6 +38,7 @@ defmodule CleatDeploy.Deploy.Rust do
 
     SECONDS=0
     log() { printf '==> [%3ds] %s\\n' "$SECONDS" "$*"; }
+    #{CpuLimit.snippet()}
 
     if ! swapon --show | grep -q /swapfile; then
       sudo fallocate -l 4G /swapfile || true
@@ -175,7 +177,7 @@ defmodule CleatDeploy.Deploy.Rust do
     if [[ -f frontend/package.json ]]; then
       #{node_install(version)}
       log "Building frontend"
-      (cd frontend && { npm ci --no-audit --no-fund || npm install --no-audit --no-fund; } && npm run build)
+      (cd frontend && { npm ci --no-audit --no-fund || npm install --no-audit --no-fund; } && #{CpuLimit.wrap("npm run build")})
     fi
     """
   end
@@ -205,14 +207,14 @@ defmodule CleatDeploy.Deploy.Rust do
   defp build_step(command) when is_binary(command) and command != "" do
     """
     log "Building (custom build_command)"
-    #{command}
+    #{CpuLimit.wrap(command)}
     """
   end
 
   defp build_step(_) do
     """
     log "Building (cargo build --release)"
-    cargo build --release
+    #{CpuLimit.wrap("cargo build --release")}
     """
   end
 

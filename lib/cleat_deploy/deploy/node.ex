@@ -16,6 +16,7 @@ defmodule CleatDeploy.Deploy.Node do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.ServerProvision
+  alias CleatDeploy.Deploy.Ssh.CpuLimit
 
   @default_node_version "22"
 
@@ -32,6 +33,7 @@ defmodule CleatDeploy.Deploy.Node do
 
     SECONDS=0
     log() { printf '==> [%3ds] %s\\n' "$SECONDS" "$*"; }
+    #{CpuLimit.snippet()}
 
     if ! swapon --show | grep -q /swapfile; then
       sudo fallocate -l 2G /swapfile || true
@@ -183,7 +185,7 @@ defmodule CleatDeploy.Deploy.Node do
   defp build_step(command) when is_binary(command) and command != "" do
     """
     log "Building (custom build_command)"
-    #{command}
+    #{CpuLimit.wrap(command)}
     """
   end
 
@@ -191,7 +193,7 @@ defmodule CleatDeploy.Deploy.Node do
     """
     if node -e "const s=(require('./package.json').scripts)||{};process.exit(s.build?0:1)"; then
       log "Building"
-      npm run build
+      #{CpuLimit.wrap("npm run build")}
     else
       log "No build script found; skipping build"
     fi
