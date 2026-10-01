@@ -1,0 +1,163 @@
+defmodule CleatDeploy.SignalsTest do
+  use CleatDeploy.DataCase, async: false
+
+  alias CleatDeploy.Apps.App
+  alias CleatDeploy.Deployments.Deployment
+  alias CleatDeploy.Observability.LogEvent
+  alias CleatDeploy.Repo
+  alias CleatDeploy.Signals
+  alias CleatDeploy.TenancyFixtures
+
+  setup do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server)
+    healthy = TenancyFixtures.app_fixture(scope, server)
+
+    %{scope: scope, server: server, app: app, healthy: healthy}
+  end
+
+  describe "health_overview/2" do
+    test "flags an app as degraded from an error-rate spike without SSH", ctx do
+      now = DateTime.utc_now(:second)
+
+      for _ <- 1..6 do
+        insert_event(ctx, ctx.app, %{
+          severity: "err",
+          occurred_at: DateTime.add(now, -60, :second)
+        })
+      end
+
+      insert_event(ctx, ctx.app, %{
+        severity: "err",
+        occurred_at: DateTime.add(now, -4_000, :second)
+      })
+
+      insert_event(ctx, ctx.healthy, %{
+        severity: "info",
+        occurred_at: DateTime.add(now, -30, :second)
+      })
+
+      rows = Signals.health_overview(ctx.scope, now: now)
+
+      degraded = Enum.find(rows, &(&1.slug == ctx.app.slug))
+      healthy = Enum.find(rows, &(&1.slug == ctx.healthy.slug))
+
+      assert degraded.status == :degraded
+      assert :error_rate in degraded.reasons
+      assert degraded.error_count == 6
+
+      assert healthy.status == :healthy
+      assert healthy.reasons == []
+    end
+
+    test "does not leak another tenant's error spike", ctx do
+      now = DateTime.utc_now(:second)
+      other = TenancyFixtures.scope_fixture()
+      other_server = TenancyFixtures.server_fixture(other)
+      other_app = TenancyFixtures.app_fixture(other, other_server)
+
+      for _ <- 1..6 do
+        insert_event(
+          %{scope: other, server: other_server},
+          other_app,
+          %{severity: "err", occurred_at: DateTime.add(now, -60, :second)}
+        )
+      end
+
+      rows = Signals.health_overview(ctx.scope, now: now)
+      refute Enum.any?(rows, &(&1.slug == other_app.slug))
+      assert Enum.all?(rows, &(&1.status == :healthy))
+    end
+
+    test "overlays the release that preceded the health change", ctx do
+      now = DateTime.utc_now(:second)
+
+      insert_deploy(ctx.app,
+        git_sha: "aaa1111",
+        finished_at: DateTime.add(now, -7_200, :second)
+      )
+
+      live =
+        insert_deploy(ctx.app,
+          git_sha: "bbb2222",
+          finished_at: DateTime.add(now, -90, :second)
+        )
+
+      for _ <- 1..6 do
+        insert_event(ctx, ctx.app, %{
+          severity: "err",
+          occurred_at: DateTime.add(now, -30, :second)
+        })
+      end
+
+      rows = Signals.health_overview(ctx.scope, now: now)
+      degraded = Enum.find(rows, &(&1.slug == ctx.app.slug))
+
+      assert degraded.status == :degraded
+      assert degraded.preceding_release.id == live.id
+      assert degraded.preceding_release.git_sha == "bbb2222"
+    end
+
+    test "marks an app down when the latest finished deploy failed", ctx do
+      now = DateTime.utc_now(:second)
+
+      failed =
+        insert_deploy(ctx.app,
+          git_sha: "deadbeef",
+          status: :failed,
+          finished_at: DateTime.add(now, -120, :second)
+        )
+
+      rows = Signals.health_overview(ctx.scope, now: now)
+      down = Enum.find(rows, &(&1.slug == ctx.app.slug))
+
+      assert down.status == :down
+      assert :unavailability in down.reasons
+      assert down.preceding_release.id == failed.id
+    end
+
+    test "marks saturation from out-of-memory log lines", ctx do
+      now = DateTime.utc_now(:second)
+
+      insert_event(ctx, ctx.app, %{
+        severity: "err",
+        message: "enospc: no space left on device",
+        occurred_at: DateTime.add(now, -20, :second)
+      })
+
+      rows = Signals.health_overview(ctx.scope, now: now)
+      row = Enum.find(rows, &(&1.slug == ctx.app.slug))
+
+      assert row.status == :degraded
+      assert :saturation in row.reasons
+    end
+  end
+
+  defp insert_deploy(app, attrs) do
+    Repo.insert!(%Deployment{
+      app_id: app.id,
+      git_sha: attrs[:git_sha],
+      git_ref: attrs[:git_ref] || "main",
+      status: attrs[:status] || :success,
+      finished_at: attrs[:finished_at],
+      started_at: attrs[:finished_at]
+    })
+  end
+
+  defp insert_event(ctx, app, attrs) do
+    defaults = %{
+      tenant_id: ctx.scope.tenant.id,
+      app_id: app.id,
+      server_id: ctx.server.id,
+      source: "app",
+      unit: app.systemd_unit || App.default_systemd_unit(app.slug, app.runtime || "phoenix"),
+      cursor: "cursor-#{System.unique_integer([:positive])}",
+      severity: "info",
+      message: "hello",
+      occurred_at: DateTime.utc_now(:second)
+    }
+
+    Repo.insert!(struct!(LogEvent, Map.merge(defaults, attrs)))
+  end
+end
