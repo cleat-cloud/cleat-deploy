@@ -206,8 +206,11 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
       ServerProvision.provision_script(app, config, %AppManifest{runtime: "phoenix"})
 
     # Global option blocks start with `{`, so Caddy guesses JSON unless we
-    # force the Caddyfile adapter.
-    assert script =~ ~s|caddy validate --adapter caddyfile --config "$TMPFILE"|
+    # force the Caddyfile adapter. Validate runs as root so Caddy 2.11's
+    # FileWriter can open /var/log/caddy/access.log (deploy user cannot).
+    assert script =~ "sudo mkdir -p /var/log/caddy"
+    assert script =~ "sudo touch /var/log/caddy/access.log"
+    assert script =~ ~s|sudo caddy validate --adapter caddyfile --config "$TMPFILE"|
     refute script =~ ~r/caddy validate --config "\$TMPFILE"/
   end
 

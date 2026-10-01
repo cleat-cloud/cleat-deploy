@@ -575,7 +575,14 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     #{AccessCounts.ensure_python()}
     PAAS_CADDY_ACCESS
       fi
-      if ! caddy validate --adapter caddyfile --config "$TMPFILE" >"$TMPFILE.validate" 2>&1; then
+      # Caddy 2.11 FileWriter opens the log during validate. The deploy user
+      # cannot create /var/log/caddy/access.log (dir is caddy:caddy 0755).
+      sudo mkdir -p /var/log/caddy
+      sudo touch /var/log/caddy/access.log
+      if id caddy >/dev/null 2>&1; then
+        sudo chown caddy:caddy /var/log/caddy /var/log/caddy/access.log || true
+      fi
+      if ! sudo caddy validate --adapter caddyfile --config "$TMPFILE" >"$TMPFILE.validate" 2>&1; then
         echo "Caddyfile invalid after writing site #{address}; keeping previous file" >&2
         cat "$TMPFILE.validate" >&2
         rm -f "$TMPFILE" "$TMPFILE.validate"
