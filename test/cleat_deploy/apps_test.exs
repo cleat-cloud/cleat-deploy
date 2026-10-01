@@ -26,6 +26,26 @@ defmodule CleatDeploy.AppsTest do
     end
   end
 
+  test "loads apps when sqlite stored custom_domain as lowercase text", %{
+    scope: scope,
+    server: server
+  } do
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    Ecto.Adapters.SQL.query!(
+      Repo,
+      "UPDATE apps SET custom_domain = 'false' WHERE id = ?",
+      [app.id]
+    )
+
+    loaded = Apps.get_app!(scope, app.id)
+    assert loaded.id == app.id
+    assert loaded.custom_domain == false
+
+    page = Apps.page_apps(scope)
+    assert Enum.any?(page.entries, &(&1.id == app.id))
+  end
+
   describe "page_apps/2" do
     test "returns one page and the matching total", %{scope: scope, server: server} do
       for n <- 1..12 do

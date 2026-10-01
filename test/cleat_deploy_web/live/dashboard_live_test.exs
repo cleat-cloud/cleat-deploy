@@ -84,6 +84,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#chart-deploys-plot")
     assert has_element?(view, "#chart-deploys svg[preserveAspectRatio='none']")
     assert has_element?(view, "#chart-deploys-labels")
+    assert has_element?(view, "#chart-access")
     refute has_element?(view, "#dashboard-apps-table")
     refute has_element?(view, "#apps-table")
     refute html =~ "Registered Phoenix Applications"
@@ -116,7 +117,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     refute has_element?(view, "#active-server-name")
 
     view
-    |> element("#active-server-select")
+    |> element("#active-server-form")
     |> render_change(%{"server_id" => to_string(stopped.id)})
 
     assert has_element?(view, "#active-server-select option[selected]", stopped.name)
@@ -138,7 +139,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
 
     html =
       view
-      |> element("#active-server-select")
+      |> element("#active-server-form")
       |> render_change(%{"server_id" => to_string(foreign.id)})
 
     assert html =~ "Unknown server"
@@ -180,7 +181,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#chart-runtimes", "1 registered on this server")
 
     view
-    |> element("#active-server-select")
+    |> element("#active-server-form")
     |> render_change(%{"server_id" => to_string(stopped.id)})
 
     assert has_element?(view, "#metric-apps", "3")
@@ -387,6 +388,58 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     _ = :sys.get_state(view.pid)
     assert has_element?(view, "#chart-cpu")
     assert has_element?(view, "#chart-cpu-current", "14.0%")
+  end
+
+  test "ranks apps by Caddy access log requests", %{conn: conn, scope: scope} do
+    server = TenancyFixtures.server_fixture(scope, %{name: "cx33", instance_status: "running"})
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      name: "NFe Fácil",
+      slug: "nfe-facil",
+      host: "nfe.gestaobem.com"
+    })
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      name: "Plaza",
+      slug: "plaza",
+      host: "plaza.purplestock.com.br"
+    })
+
+    path =
+      Path.join(System.tmp_dir!(), "cleat-dash-access-#{System.unique_integer([:positive])}.log")
+
+    now = System.os_time(:second)
+
+    File.write!(
+      path,
+      [
+        Jason.encode!(%{ts: now, request: %{host: "plaza.purplestock.com.br"}}),
+        Jason.encode!(%{ts: now, request: %{host: "plaza.purplestock.com.br"}}),
+        Jason.encode!(%{ts: now, request: %{host: "nfe.gestaobem.com"}})
+      ]
+      |> Enum.join("\n")
+    )
+
+    previous = Application.get_env(:cleat_deploy, :caddy_access_log_path)
+    Application.put_env(:cleat_deploy, :caddy_access_log_path, path)
+
+    on_exit(fn ->
+      File.rm(path)
+
+      if previous do
+        Application.put_env(:cleat_deploy, :caddy_access_log_path, previous)
+      else
+        Application.delete_env(:cleat_deploy, :caddy_access_log_path)
+      end
+    end)
+
+    {:ok, view, _html} = live(conn, ~p"/")
+    html = render(view)
+
+    assert has_element?(view, "#chart-access", "Plaza")
+    assert has_element?(view, "#chart-access", "NFe Fácil")
+    assert html =~ ~s|href="/apps/|
+    refute has_element?(view, "#chart-access", "No request samples yet")
   end
 
   test "does not show other tenant apps", %{conn: conn, scope: scope} do

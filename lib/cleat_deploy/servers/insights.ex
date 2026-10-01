@@ -8,6 +8,7 @@ defmodule CleatDeploy.Servers.Insights do
   alias CleatDeploy.Deployments
   alias CleatDeploy.Hetzner
   alias CleatDeploy.Repo
+  alias CleatDeploy.Servers.AccessCounts
   alias CleatDeploy.Servers.Server
   alias CleatDeploy.Settings
 
@@ -24,11 +25,15 @@ defmodule CleatDeploy.Servers.Insights do
     metrics =
       if Keyword.get(opts, :metrics, true), do: remote_metrics(server), else: empty_metrics()
 
+    top_apps =
+      if Keyword.get(opts, :metrics, true), do: AccessCounts.for_server(scope, server), else: []
+
     %{
       server: server,
       runtimes: runtimes,
       deploys: deploys,
       metrics: metrics,
+      top_apps: top_apps,
       cpu_now: last_value(metrics.cpu),
       net_in_now: last_value(metrics.network_in),
       net_out_now: last_value(metrics.network_out)
