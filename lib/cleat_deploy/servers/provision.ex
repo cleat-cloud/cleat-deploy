@@ -57,12 +57,40 @@ defmodule CleatDeploy.Servers.Provision do
         shell: /bin/bash
         ssh_authorized_keys:
           - #{String.trim(public_key)}
+    ssh_pwauth: false
+    disable_root: true
     package_update: true
     packages:
       - curl
       - git
       - build-essential
       - ufw
+      - fail2ban
+    write_files:
+      - path: /etc/ssh/sshd_config.d/99-cleat-hardening.conf
+        permissions: "0644"
+        content: |
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin no
+          MaxAuthTries 3
+          AllowUsers ubuntu
+          PubkeyAuthentication yes
+      - path: /etc/fail2ban/jail.d/cleat-sshd.local
+        permissions: "0644"
+        content: |
+          [DEFAULT]
+          bantime.increment = true
+          bantime.factor = 2
+          bantime.maxtime = 1w
+
+          [sshd]
+          enabled = true
+          backend = systemd
+          journalmatch = _COMM=sshd
+          maxretry = 3
+          findtime = 10m
+          bantime = 1h
     runcmd:
       - [ufw, allow, OpenSSH]
       - [ufw, allow, 80/tcp]
@@ -72,6 +100,10 @@ defmodule CleatDeploy.Servers.Provision do
       # ERR_SSL_PROTOCOL_ERROR even though TCP works.
       - [ufw, allow, 443/udp]
       - [ufw, --force, enable]
+      # Panel deploys SSH to itself; never let fail2ban ban this host.
+      - bash -lc 'printf "[DEFAULT]\\nignoreip = 127.0.0.1/8 ::1 %s\\n" "$(hostname -I)" > /etc/fail2ban/jail.d/cleat-ignore.local'
+      - [systemctl, reload, ssh]
+      - [systemctl, enable, --now, fail2ban]
     """
   end
 

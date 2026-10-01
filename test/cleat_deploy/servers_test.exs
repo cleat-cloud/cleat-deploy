@@ -186,5 +186,47 @@ defmodule CleatDeploy.ServersTest do
       # ERR_SSL_PROTOCOL_ERROR even though HTTPS over TCP answers fine.
       assert user_data =~ "- [ufw, allow, 443/udp]"
     end
+
+    test "installs and enables fail2ban" do
+      user_data = CleatDeploy.Servers.Provision.user_data("ssh-ed25519 AAAA test@cleat")
+
+      assert user_data =~ "- fail2ban"
+      assert user_data =~ "- [systemctl, enable, --now, fail2ban]"
+    end
+
+    test "disables SSH password auth and root login" do
+      user_data = CleatDeploy.Servers.Provision.user_data("ssh-ed25519 AAAA test@cleat")
+
+      assert user_data =~ "PasswordAuthentication no"
+      assert user_data =~ "PermitRootLogin no"
+      assert user_data =~ "MaxAuthTries 3"
+      assert user_data =~ "AllowUsers ubuntu"
+    end
+
+    test "configures a progressive sshd jail and never bans the host itself" do
+      user_data = CleatDeploy.Servers.Provision.user_data("ssh-ed25519 AAAA test@cleat")
+
+      assert user_data =~ "maxretry = 3"
+      assert user_data =~ "bantime.increment = true"
+      assert user_data =~ "ignoreip"
+      assert user_data =~ "hostname -I"
+      assert user_data =~ "cleat-ignore.local"
+      # Ubuntu 24 logs sshd as unit ssh.service, not sshd.service.
+      assert user_data =~ "journalmatch = _COMM=sshd"
+    end
+  end
+
+  describe "hetzner host bootstrap" do
+    test "bootstrap and one-off provision install fail2ban and harden sshd" do
+      bootstrap = File.read!("scripts/deploy/bootstrap-hetzner-server.sh")
+      one_off = File.read!("scripts/deploy/provision-hetzner-cx33.sh")
+
+      for script <- [bootstrap, one_off] do
+        assert script =~ "fail2ban"
+        assert script =~ "PasswordAuthentication no"
+        assert script =~ "PermitRootLogin no"
+        assert script =~ "MaxAuthTries 3"
+      end
+    end
   end
 end

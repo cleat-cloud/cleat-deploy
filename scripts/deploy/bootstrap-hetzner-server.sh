@@ -63,7 +63,36 @@ fi
 log "Installing base packages"
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-  git openssh-client tar curl ca-certificates build-essential rsync ufw
+  git openssh-client tar curl ca-certificates build-essential rsync ufw fail2ban
+
+log "Hardening sshd and enabling fail2ban"
+sudo mkdir -p /etc/ssh/sshd_config.d /etc/fail2ban/jail.d
+sudo tee /etc/ssh/sshd_config.d/99-cleat-hardening.conf >/dev/null <<'SSHD'
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+MaxAuthTries 3
+AllowUsers ubuntu
+PubkeyAuthentication yes
+SSHD
+sudo tee /etc/fail2ban/jail.d/cleat-sshd.local >/dev/null <<'JAIL'
+[DEFAULT]
+bantime.increment = true
+bantime.factor = 2
+bantime.maxtime = 1w
+
+[sshd]
+enabled = true
+backend = systemd
+journalmatch = _COMM=sshd
+maxretry = 3
+findtime = 10m
+bantime = 1h
+JAIL
+printf '[DEFAULT]\nignoreip = 127.0.0.1/8 ::1 %s\n' "$(hostname -I)" | sudo tee /etc/fail2ban/jail.d/cleat-ignore.local >/dev/null
+sudo sshd -t
+sudo systemctl reload ssh
+sudo systemctl enable --now fail2ban
 
 if ! command -v caddy >/dev/null 2>&1; then
   log "Installing Caddy"
