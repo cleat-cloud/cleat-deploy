@@ -187,6 +187,7 @@ defmodule CleatDeploy.Deploy.Addons do
     log "Provisioning addon #{@redis} (user #{user})"
     #{redis_install_script()}
     sudo redis-cli ACL SETUSER #{user} on ">#{password}" ~* "&*" +@all > /dev/null
+    #{redis_persist_acl_script()}
     log "Redis user #{user} ready (database #{database})"
     """
   end
@@ -263,6 +264,23 @@ defmodule CleatDeploy.Deploy.Addons do
     |> String.trim()
   end
 
+  # SETUSER lives in memory. Without aclfile, redis-server restart drops the
+  # users and apps loop WRONGPASS (#166, #167). Do not restart Redis here.
+  defp redis_persist_acl_script do
+    """
+    if sudo grep -qE '^# *aclfile ' /etc/redis/redis.conf; then
+      sudo sed -i 's|^# *aclfile .*|aclfile /etc/redis/users.acl|' /etc/redis/redis.conf
+    elif ! sudo grep -qE '^aclfile ' /etc/redis/redis.conf; then
+      printf '\\naclfile /etc/redis/users.acl\\n' | sudo tee -a /etc/redis/redis.conf >/dev/null
+    fi
+    tmp=$(mktemp)
+    redis-cli ACL LIST >"$tmp"
+    sudo install -o redis -g redis -m 640 "$tmp" /etc/redis/users.acl
+    rm -f "$tmp"
+    """
+    |> String.trim()
+  end
+
   @doc """
   Best-effort removal of the app's database/role (Postgres) or ACL user (Redis),
   used when the app is deleted.
@@ -285,6 +303,7 @@ defmodule CleatDeploy.Deploy.Addons do
         """
         if command -v redis-cli >/dev/null 2>&1; then
           sudo redis-cli ACL DELUSER #{credential.user} >/dev/null 2>&1 || true
+          #{redis_persist_acl_script()}
         fi
         """
     end

@@ -61,6 +61,7 @@ defmodule CleatDeploy.Deploy.TeardownTest do
     assert script =~ "DROP DATABASE IF EXISTS cleat_chatwoot"
     assert script =~ "DROP ROLE IF EXISTS cleat_chatwoot"
     assert script =~ "ACL DELUSER cleat_chatwoot"
+    assert script =~ "/etc/redis/users.acl"
   end
 
   test "run/1 is a no-op when the deploy runner is not SSH" do
