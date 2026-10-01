@@ -134,6 +134,53 @@ defmodule CleatDeploy.SignalsTest do
     end
   end
 
+  describe "metrics/3" do
+    test "returns RED counts, a series and deploy markers for an app", ctx do
+      now = DateTime.utc_now(:second)
+
+      deploy =
+        insert_deploy(ctx.app,
+          git_sha: "cafebabe",
+          finished_at: DateTime.add(now, -600, :second)
+        )
+
+      for _ <- 1..3 do
+        insert_event(ctx, ctx.app, %{
+          severity: "err",
+          occurred_at: DateTime.add(now, -120, :second)
+        })
+      end
+
+      insert_event(ctx, ctx.app, %{
+        severity: "info",
+        occurred_at: DateTime.add(now, -90, :second)
+      })
+
+      assert {:ok, metrics} = Signals.metrics(ctx.scope, ctx.app, now: now, range: "1h")
+
+      assert metrics.app_id == ctx.app.id
+      assert metrics.slug == ctx.app.slug
+      assert metrics.range == "1h"
+      assert metrics.red.errors == 3
+      assert metrics.red.logs == 4
+      assert metrics.red.error_rate == 0.75
+      assert metrics.host.restarts == 0
+      assert [%{t: _, errors: 3, logs: 4} | _] = metrics.series
+
+      assert [marker] = metrics.deploy_markers
+      assert marker.id == deploy.id
+      assert marker.git_sha == "cafebabe"
+    end
+
+    test "404s via {:error, :not_found} for another tenant's app", ctx do
+      other = TenancyFixtures.scope_fixture()
+      other_server = TenancyFixtures.server_fixture(other)
+      other_app = TenancyFixtures.app_fixture(other, other_server)
+
+      assert {:error, :not_found} = Signals.metrics(ctx.scope, other_app, now: DateTime.utc_now())
+    end
+  end
+
   defp insert_deploy(app, attrs) do
     Repo.insert!(%Deployment{
       app_id: app.id,
