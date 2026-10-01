@@ -2,6 +2,7 @@ defmodule CleatDeploy.Deploy.SshTest do
   use ExUnit.Case, async: true
 
   alias CleatDeploy.Deploy.Ssh
+  alias CleatDeploy.Deploy.Ssh.Session
 
   test "command/1 quotes each argument so the shell rebuilds the exact argv" do
     argv = ["bash", "-lc", "echo 'hello world' && printf '%s' done"]
@@ -37,6 +38,32 @@ defmodule CleatDeploy.Deploy.SshTest do
     after
       File.rm(leftover)
       File.rm(other)
+    end
+  end
+
+  test "remote script runner does not spawn bash -c around ssh" do
+    source = File.read!(Path.expand("../../../lib/cleat_deploy/deploy/ssh.ex", __DIR__))
+    refute source =~ ~s(System.cmd("bash", ["-c")
+  end
+
+  describe "Session.run_with_stdin/3" do
+    test "sends the script on stdin and returns stdout" do
+      assert {:ok, output} =
+               Session.run_with_stdin("cat", [], "hello ' world && printf\n")
+
+      assert output == "hello ' world && printf\n"
+    end
+
+    test "keeps argv with spaces as a single argument" do
+      assert {:ok, output} = Session.run_with_stdin("printf", ["%s", "a b; rm"], "")
+      assert output == "a b; rm"
+    end
+
+    test "returns stderr on stdout and errors on non-zero status" do
+      assert {:error, output} =
+               Session.run_with_stdin("bash", ["-s"], "echo fail >&2; exit 7\n")
+
+      assert output =~ "fail"
     end
   end
 end
