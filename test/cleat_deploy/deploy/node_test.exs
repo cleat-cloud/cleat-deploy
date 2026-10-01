@@ -167,6 +167,31 @@ defmodule CleatDeploy.Deploy.NodeTest do
 
     assert occurrence(prune_tail, "pnpm install --prod --frozen-lockfile --ignore-scripts") <
              occurrence(prune_tail, "npm prune --omit=dev")
+
+    # pnpm 11 aborts `install --prod` when node_modules must be rebuilt and
+    # stdin is not a TTY (gestao-bem-landing deploy 905):
+    # ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
+    assert prune_tail =~ "CI=true"
+    assert prune_tail =~ "confirmModulesPurge=false"
+  end
+
+  test "build script drops node_modules for nested Nitro start commands", %{
+    app: app,
+    config: config
+  } do
+    manifest = %AppManifest{
+      runtime: "node",
+      start_command: "node apps/landing/.output/server/index.mjs"
+    }
+
+    script = Node.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
+
+    # Exact `node .output/server/index.mjs` misses monorepo output
+    # (`node apps/landing/.output/server/index.mjs`) and falls through to
+    # `pnpm install --prod`, which then dies without a TTY.
+    assert script =~ ~s|if [[ "$START_CMD" == node\ *".output/server/index.mjs" ]]|
+    refute script =~ ~s|if [[ "$START_CMD" == "node .output/server/index.mjs" ]]|
+    assert script =~ "Self-contained Nitro output; dropping node_modules before publish"
   end
 
   test "build script detects Next standalone and drops node_modules", %{
