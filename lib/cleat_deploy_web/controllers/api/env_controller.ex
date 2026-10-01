@@ -5,13 +5,16 @@ defmodule CleatDeployWeb.Api.EnvController do
   Variables are scoped to a branch: `"*"` (the default) applies to every deploy
   and any other value restricts the variable to that branch. Sensitive values
   are masked by default; pass `?reveal=true` to return them in the clear.
-  Changes take effect on the next deploy.
+
+  Vars that apply to the running branch are written to the server env file and
+  active systemd units are restarted. Other branches wait for their next deploy.
   """
 
   use CleatDeployWeb, :controller
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Apps.AppEnvVar
+  alias CleatDeploy.Apps.EnvApply
 
   def index(conn, %{"app_id" => app_id} = params) do
     scope = conn.assigns.current_scope
@@ -31,7 +34,8 @@ defmodule CleatDeployWeb.Api.EnvController do
          {:ok, entries} <- entries(params),
          :ok <- validate_all(app, entries, branch) do
       Enum.each(entries, fn {key, value} -> Apps.put_env_var(app, key, value, branch) end)
-      json(conn, %{data: serialize(Apps.get_app!(scope, app.id), false, nil)})
+      app = Apps.get_app!(scope, app.id)
+      respond_after_apply(conn, app, branch, :updated)
     else
       :error -> not_found(conn)
       {:error, details} -> unprocessable(conn, details)
@@ -42,8 +46,10 @@ defmodule CleatDeployWeb.Api.EnvController do
     scope = conn.assigns.current_scope
 
     with {:ok, app} <- resolve_app(scope, app_id) do
-      case Apps.delete_env_var(app, key, branch_param(params)) do
-        :ok -> send_resp(conn, :no_content, "")
+      branch = branch_param(params)
+
+      case Apps.delete_env_var(app, key, branch) do
+        :ok -> respond_after_apply(conn, Apps.get_app!(scope, app.id), branch, :deleted)
         {:error, :not_found} -> not_found(conn)
       end
     else
@@ -138,6 +144,26 @@ defmodule CleatDeployWeb.Api.EnvController do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: message})
+  end
+
+  defp respond_after_apply(conn, app, branch, :updated) do
+    case EnvApply.apply(app, branch) do
+      :ok -> json(conn, %{data: serialize(app, false, nil)})
+      {:error, reason} -> apply_failed(conn, reason)
+    end
+  end
+
+  defp respond_after_apply(conn, app, branch, :deleted) do
+    case EnvApply.apply(app, branch) do
+      :ok -> send_resp(conn, :no_content, "")
+      {:error, reason} -> apply_failed(conn, reason)
+    end
+  end
+
+  defp apply_failed(conn, reason) do
+    conn
+    |> put_status(:bad_gateway)
+    |> json(%{error: "env_apply_failed", details: reason})
   end
 
   defp not_found(conn) do
