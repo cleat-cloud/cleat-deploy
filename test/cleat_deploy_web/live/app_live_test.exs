@@ -14,6 +14,7 @@ defmodule CleatDeployWeb.AppLiveTest do
   setup :verify_on_exit!
 
   setup %{scope: scope} do
+    stub(CleatDeploy.Apps.RuntimeControlMock, :run, fn _subject, _argv -> {:ok, ""} end)
     RuntimeLogsFixtures.stub_success()
 
     server = TenancyFixtures.server_fixture(scope)
@@ -783,6 +784,39 @@ defmodule CleatDeployWeb.AppLiveTest do
 
     refute has_element?(view, "#env-var-NEXT_PUBLIC_BASE_URL-staging")
     refute Map.has_key?(Apps.env_map(app, "staging"), "NEXT_PUBLIC_BASE_URL")
+  end
+
+  test "saving an all-branches var applies it to the running unit", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "gestao-bem-crm",
+        host: "crm.apps.gestaobem.com",
+        runtime: "node",
+        systemd_unit: "node-gestao-bem-crm",
+        release_path: "/opt/gestao-bem-crm",
+        branch: "main"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+    view |> element("#manage-env-vars-button") |> render_click()
+
+    expect(CleatDeploy.Apps.RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
+      assert script =~ "sudo tee /etc/gestao-bem-crm/env"
+      assert script =~ "sudo systemctl restart 'node-gestao-bem-crm'"
+      {:ok, ""}
+    end)
+
+    html =
+      view
+      |> form("#env-var-form", env: %{key: "GOWA_DEVICE_ID", value: "ednasp1", branch: ""})
+      |> render_submit()
+
+    assert html =~ "applied to the running app"
+    assert Apps.env_map(app)["GOWA_DEVICE_ID"] == "ednasp1"
   end
 
   test "rejects an invalid env var without touching the stored ones", %{
