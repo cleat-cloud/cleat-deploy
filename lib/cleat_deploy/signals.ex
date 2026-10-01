@@ -12,6 +12,7 @@ defmodule CleatDeploy.Signals do
   alias CleatDeploy.Apps
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deployments.Deployment
+  alias CleatDeploy.Observability
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Repo
   alias CleatDeploy.Signals.Alert
@@ -306,6 +307,7 @@ defmodule CleatDeploy.Signals do
         alert
         |> Ecto.Changeset.change(%{status: "acked", acked_at: DateTime.utc_now(:second)})
         |> Repo.update()
+        |> preload_alert_app()
 
       nil ->
         {:error, :not_found}
@@ -316,6 +318,28 @@ defmodule CleatDeploy.Signals do
   end
 
   def ack_alert(%Scope{}, _id), do: {:error, :not_found}
+
+  defp preload_alert_app({:ok, alert}), do: {:ok, Repo.preload(alert, :app)}
+  defp preload_alert_app(other), do: other
+
+  def incident(scope, app, opts \\ [])
+
+  def incident(%Scope{tenant: tenant} = scope, %App{tenant_id: tenant_id} = app, opts)
+      when tenant.id == tenant_id do
+    now = Keyword.get(opts, :now, DateTime.utc_now(:second))
+    range = opts |> Keyword.get(:range, "24h") |> normalize_range()
+    since = DateTime.add(now, -range_seconds(range), :second)
+
+    events =
+      (incident_deploys(app.id, since, now) ++
+         incident_alerts(app.id, since) ++
+         incident_groups(scope, app.id, since))
+      |> Enum.sort_by(& &1.at, {:desc, DateTime})
+
+    {:ok, %{app_id: app.id, slug: app.slug, events: events}}
+  end
+
+  def incident(%Scope{}, %App{}, _opts), do: {:error, :not_found}
 
   defp desired_alerts(rows) do
     for row <- rows, reason <- row.reasons, into: %{} do
@@ -415,5 +439,40 @@ defmodule CleatDeploy.Signals do
 
   defp webhook_req_options do
     Application.get_env(:cleat_deploy, :signals_req_options, [])
+  end
+
+  defp incident_deploys(app_id, since, now) do
+    Enum.map(markers(app_id, since, now), fn marker ->
+      %{
+        at: marker.finished_at,
+        kind: :deploy,
+        summary: marker.git_sha,
+        payload: marker
+      }
+    end)
+  end
+
+  defp incident_alerts(app_id, since) do
+    Repo.all(from a in Alert, where: a.app_id == ^app_id and a.fired_at > ^since)
+    |> Enum.map(fn alert ->
+      %{
+        at: alert.fired_at,
+        kind: :alert,
+        summary: alert.message,
+        payload: %{id: alert.id, rule: alert.rule, status: alert.status}
+      }
+    end)
+  end
+
+  defp incident_groups(scope, app_id, since) do
+    Observability.group_errors(scope, %{app_id: app_id, min_severity: "err", since: since})
+    |> Enum.map(fn group ->
+      %{
+        at: group.last_seen_at,
+        kind: :error_group,
+        summary: group.sample,
+        payload: %{fingerprint: group.fingerprint, count: group.count, severity: group.severity}
+      }
+    end)
   end
 end
