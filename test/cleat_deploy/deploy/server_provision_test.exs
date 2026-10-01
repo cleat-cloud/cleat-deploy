@@ -43,8 +43,11 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "Writing Caddy site tts.gestaobem.com"
     assert script =~ "sudo awk -v site='tts.gestaobem.com'"
     assert script =~ ~s|sudo install -m 0644 -o root -g root "$TMPFILE" "$CADDYFILE"|
-    assert script =~ "default_logger_name access"
+    refute script =~ ~s|SNIPPET = """servers {|
+    assert script =~ "log access {"
+    assert script =~ "include http.log.access"
     assert script =~ "/var/log/caddy/access.log"
+    assert script =~ ~r/tts\.gestaobem\.com \{\n\s+log\n\s+encode gzip/
   end
 
   test "node apps get a persistent data dir outside the release", %{

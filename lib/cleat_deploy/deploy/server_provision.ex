@@ -412,6 +412,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
 
     caddy_site = """
     #{address} {
+      log
       encode gzip
       root * #{static_site_root(app)}
       try_files {path} {path}/index.html /index.html
@@ -435,6 +436,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       # Caddy hand the request to the app.
       caddy_site = """
       #{address} {
+        log
         encode gzip
         forward_auth 127.0.0.1:#{Wake.wake_port()} {
           uri /wake?unit=#{unit}&port=#{app.port}
@@ -450,6 +452,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     else
       caddy_site = """
       #{address} {
+        log
         encode gzip
         reverse_proxy 127.0.0.1:#{app.port}
       }

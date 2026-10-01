@@ -12,12 +12,10 @@ defmodule CleatDeploy.Servers.AccessCounts do
   @window_s 86_400
   @limit 8
 
+  # Caddy 2.11 rejects `servers { logs { default_logger_name … } }` in the
+  # Caddyfile (`unrecognized servers option 'logs'`). Access events are
+  # emitted by a per-site `log` and collected by this named global logger.
   @snippet """
-  servers {
-  logs {
-  default_logger_name access
-  }
-  }
   log access {
   output file /var/log/caddy/access.log {
   roll_size 50MiB
@@ -28,15 +26,13 @@ defmodule CleatDeploy.Servers.AccessCounts do
   }
   """
 
+  @bad_servers_logs ~r/servers\s*\{\s*logs\s*\{\s*default_logger_name\s+access\s*\}\s*\}/s
+
   @ensure_python """
+  import re
   import sys
 
-  SNIPPET = \"\"\"servers {
-  logs {
-  default_logger_name access
-  }
-  }
-  log access {
+  SNIPPET = \"\"\"log access {
   output file /var/log/caddy/access.log {
   roll_size 50MiB
   roll_keep 2
@@ -46,8 +42,11 @@ defmodule CleatDeploy.Servers.AccessCounts do
   }
   \"\"\"
 
+  BAD = re.compile(r"servers\\s*\\{\\s*logs\\s*\\{\\s*default_logger_name\\s+access\\s*\\}\\s*\\}", re.S)
+
   def ensure(text):
-      if "default_logger_name access" in text:
+      text = BAD.sub("", text)
+      if "include http.log.access" in text and "log access {" in text:
           return text
       start = text.find("{")
       prefix = text[:start] if start >= 0 else ""
@@ -75,7 +74,10 @@ defmodule CleatDeploy.Servers.AccessCounts do
   def ensure_python, do: String.trim_trailing(@ensure_python)
 
   def ensure_caddyfile(text) when is_binary(text) do
-    if String.contains?(text, "default_logger_name access") do
+    text = String.replace(text, @bad_servers_logs, "")
+
+    if String.contains?(text, "include http.log.access") and
+         String.contains?(text, "log access {") do
       text
     else
       inject_access_log(text)
