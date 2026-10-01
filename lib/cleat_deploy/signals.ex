@@ -10,6 +10,7 @@ defmodule CleatDeploy.Signals do
 
   alias CleatDeploy.Accounts.Scope
   alias CleatDeploy.Apps
+  alias CleatDeploy.Apps.App
   alias CleatDeploy.Deployments.Deployment
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Repo
@@ -160,5 +161,104 @@ defmodule CleatDeploy.Signals do
       status: deploy.status,
       finished_at: deploy.finished_at
     }
+  end
+
+  @restart ~r/watchdog|restarted|scheduled restart/i
+
+  @doc """
+  RED + host snapshot for one app, plus deploy markers in the window.
+
+  Host CPU/memory/disk stay nil here: those probes are SSH. Restarts are
+  inferred from collected logs.
+  """
+  def metrics(scope, app, opts \\ [])
+
+  def metrics(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, opts)
+      when tenant.id == tenant_id do
+    now = Keyword.get(opts, :now, DateTime.utc_now(:second))
+    range = Keyword.get(opts, :range, "1h") |> normalize_range()
+    window = range_seconds(range)
+    since = DateTime.add(now, -window, :second)
+
+    events = app_events(tenant.id, app.id, since, now)
+    errors = Enum.count(events, &(&1.severity in @error_severities))
+    logs = length(events)
+
+    {:ok,
+     %{
+       app_id: app.id,
+       slug: app.slug,
+       range: range,
+       red: %{
+         requests: logs,
+         errors: errors,
+         logs: logs,
+         error_rate: error_ratio(errors, logs),
+         latency_ms: nil
+       },
+       host: %{cpu: nil, memory: nil, disk: nil, restarts: Enum.count(events, &restart?/1)},
+       series: series(events, since, now),
+       deploy_markers: markers(app.id, since, now)
+     }}
+  end
+
+  def metrics(%Scope{}, %App{}, _opts), do: {:error, :not_found}
+
+  defp normalize_range(range) when range in ["1h", "6h", "24h", "1d"], do: range
+  defp normalize_range(_), do: "1h"
+
+  defp range_seconds("1h"), do: 3_600
+  defp range_seconds("6h"), do: 21_600
+  defp range_seconds("24h"), do: 86_400
+  defp range_seconds("1d"), do: 86_400
+
+  defp app_events(tenant_id, app_id, since, until) do
+    Repo.all(
+      from e in LogEvent,
+        where:
+          e.tenant_id == ^tenant_id and e.app_id == ^app_id and e.occurred_at > ^since and
+            e.occurred_at <= ^until,
+        order_by: [asc: e.occurred_at]
+    )
+  end
+
+  defp error_ratio(_errors, 0), do: 0.0
+  defp error_ratio(errors, logs), do: errors / logs
+
+  defp restart?(event), do: Regex.match?(@restart, event.message)
+
+  defp series(events, since, now) do
+    buckets = 12
+    span = max(DateTime.diff(now, since, :second), 1)
+    size = max(div(span, buckets), 1)
+
+    Enum.flat_map(0..(buckets - 1), fn i ->
+      start = DateTime.add(since, i * size, :second)
+      finish = if i == buckets - 1, do: now, else: DateTime.add(since, (i + 1) * size, :second)
+      slice = Enum.filter(events, &in_bucket?(&1.occurred_at, start, finish))
+
+      point = %{
+        t: finish,
+        errors: Enum.count(slice, &(&1.severity in @error_severities)),
+        logs: length(slice)
+      }
+
+      if point.logs == 0, do: [], else: [point]
+    end)
+  end
+
+  defp in_bucket?(at, start, finish) do
+    DateTime.compare(at, start) == :gt and DateTime.compare(at, finish) != :gt
+  end
+
+  defp markers(app_id, since, now) do
+    Repo.all(
+      from d in Deployment,
+        where:
+          d.app_id == ^app_id and not is_nil(d.finished_at) and d.finished_at > ^since and
+            d.finished_at <= ^now,
+        order_by: [asc: d.finished_at]
+    )
+    |> Enum.map(&release_ref/1)
   end
 end
