@@ -87,6 +87,7 @@ defmodule CleatDeploy.Servers.Provision do
           [sshd]
           enabled = true
           backend = systemd
+          journalmatch = _COMM=sshd
           maxretry = 3
           findtime = 10m
           bantime = 1h
