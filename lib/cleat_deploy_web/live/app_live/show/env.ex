@@ -6,6 +6,7 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Apps.AppEnvVar
+  alias CleatDeploy.Apps.EnvApply
   alias CleatDeploy.Deploy.Addons
   alias CleatDeployWeb.AppLive.Show.Runtime
 
@@ -84,7 +85,7 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
            |> assign(:env_modal_open?, false)
            |> assign(:editing_env_var?, false)
            |> refresh_env_vars()
-           |> put_flash(:info, "#{key} saved for #{branch_label(branch)} — deploy to apply")}
+           |> flash_after_apply(key, branch, :saved)}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Could not save #{key}")}
@@ -102,7 +103,7 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
          |> assign(:env_modal_open?, false)
          |> assign(:editing_env_var?, false)
          |> refresh_env_vars()
-         |> put_flash(:info, "#{key} removed for #{branch_label(branch)}")}
+         |> flash_after_apply(key, branch, :removed)}
 
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "#{key} is not configured for that branch")}
@@ -145,4 +146,39 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
   def branch_label(branch) do
     if AppEnvVar.all_branches?(branch), do: "All branches", else: branch
   end
+
+  defp flash_after_apply(socket, key, branch, action) do
+    label = branch_label(branch)
+
+    case EnvApply.apply(socket.assigns.app, branch) do
+      :ok ->
+        put_flash(socket, :info, apply_ok_message(key, label, action, socket.assigns.app, branch))
+
+      {:error, reason} ->
+        put_flash(socket, :error, apply_error_message(key, label, action, reason))
+    end
+  end
+
+  defp apply_ok_message(key, label, :saved, app, branch) do
+    if live_apply?(app, branch) do
+      "#{key} saved for #{label} and applied to the running app"
+    else
+      "#{key} saved for #{label} — deploy that branch to apply"
+    end
+  end
+
+  defp apply_ok_message(key, label, :removed, app, branch) do
+    if live_apply?(app, branch) do
+      "#{key} removed for #{label} and applied to the running app"
+    else
+      "#{key} removed for #{label}"
+    end
+  end
+
+  defp apply_error_message(key, label, action, reason) do
+    "#{key} #{action} for #{label} but the running app did not pick it up: #{reason}"
+  end
+
+  defp live_apply?(%{runtime: "static"}, _branch), do: false
+  defp live_apply?(app, branch), do: AppEnvVar.applies_to?(branch, app.branch)
 end

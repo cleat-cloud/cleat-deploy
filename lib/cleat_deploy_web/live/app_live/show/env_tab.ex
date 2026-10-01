@@ -15,8 +15,9 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
           </h3>
           <p class="text-[11px] text-hd-muted">
             Synced to <span class="font-mono text-hd-orange">{@env_file}</span>
-            on every deploy: variables for all branches plus the ones scoped to the branch
-            being deployed. <span class="text-hd-text">PHX_HOST</span>
+            when you save a variable that applies to the running branch: the file is
+            rewritten and active units restart. Vars scoped to another branch wait for
+            that deploy. <span class="text-hd-text">PHX_HOST</span>
             is always injected from the app host ({@app.host}).
           </p>
         </div>
@@ -125,8 +126,8 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
                 {if @editing_env_var?, do: "Edit variable", else: "New variable"}
               </h3>
               <p class="text-[13px] leading-relaxed text-hd-muted">
-                The value is written to the env file on the next deploy of the branch it is
-                scoped to.
+                If this variable applies to the running branch, it is written to the env
+                file now and active units restart. Otherwise it waits for that deploy.
               </p>
             </div>
 

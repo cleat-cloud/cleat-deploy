@@ -1,10 +1,18 @@
 defmodule CleatDeployWeb.Api.EnvTest do
   use CleatDeployWeb.ConnCase, async: false
 
+  import Mox
+
   alias CleatDeploy.Accounts
+  alias CleatDeploy.Apps
+  alias CleatDeploy.Apps.RuntimeControlMock
   alias CleatDeploy.TenancyFixtures
 
+  setup :verify_on_exit!
+
   setup do
+    stub(RuntimeControlMock, :run, fn _subject, _argv -> {:ok, ""} end)
+
     scope = TenancyFixtures.scope_fixture()
     server = TenancyFixtures.server_fixture(scope)
     app = TenancyFixtures.app_fixture(scope, server)
@@ -223,6 +231,75 @@ defmodule CleatDeployWeb.Api.EnvTest do
             |> auth(token)
             |> delete(~p"/api/v1/apps/#{app.id}/env/BASE_URL?branch=staging")
             |> json_response(404))["error"] == "not_found"
+  end
+
+  test "PUT applies the env file and restarts an active unit", %{token: token, app: app} do
+    expect(RuntimeControlMock, :run, fn subject, ["bash", "-c", script] ->
+      assert subject.id == app.id
+      assert script =~ "sudo tee #{Apps.App.deploy_config(app).env_file}"
+      assert script =~ "systemctl is-active --quiet '#{Apps.App.unit_name(app)}'"
+      assert script =~ "sudo systemctl restart '#{Apps.App.unit_name(app)}'"
+      {:ok, ""}
+    end)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_put(~p"/api/v1/apps/#{app.slug}/env", %{
+        key: "GOWA_DEVICE_ID",
+        value: "ednasp1"
+      })
+
+    assert json_response(conn, 200)["data"]
+           |> Enum.any?(&(&1["key"] == "GOWA_DEVICE_ID" and &1["value"] == "ednasp1"))
+  end
+
+  test "PUT of a branch-scoped var does not restart the running app", %{token: token, app: app} do
+    expect(RuntimeControlMock, :run, 0, fn _subject, _argv -> {:ok, ""} end)
+
+    build_conn()
+    |> auth(token)
+    |> json_put(~p"/api/v1/apps/#{app.id}/env", %{
+      branch: "staging",
+      vars: %{"STAGING_ONLY" => "yes"}
+    })
+    |> json_response(200)
+  end
+
+  test "PUT returns 502 when the server apply fails, after storing the var", %{
+    token: token,
+    app: app
+  } do
+    expect(RuntimeControlMock, :run, fn _subject, _argv ->
+      {:error, "ssh: connect to host timed out"}
+    end)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_put(~p"/api/v1/apps/#{app.id}/env", %{key: "GOWA_DEVICE_ID", value: "ednasp1"})
+
+    assert json_response(conn, 502)["error"] == "env_apply_failed"
+    assert Apps.env_map(app)["GOWA_DEVICE_ID"] == "ednasp1"
+  end
+
+  test "DELETE applies the remaining env file to the running app", %{token: token, app: app} do
+    stub(RuntimeControlMock, :run, fn _subject, _argv -> {:ok, ""} end)
+
+    build_conn()
+    |> auth(token)
+    |> json_put(~p"/api/v1/apps/#{app.id}/env", %{key: "OLD_KEY", value: "x"})
+    |> json_response(200)
+
+    expect(RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
+      assert script =~ "sudo tee #{Apps.App.deploy_config(app).env_file}"
+      {:ok, ""}
+    end)
+
+    assert build_conn()
+           |> auth(token)
+           |> delete(~p"/api/v1/apps/#{app.id}/env/OLD_KEY")
+           |> response(204) == ""
   end
 
   test "an invalid branch is rejected with 422", %{token: token, app: app} do
