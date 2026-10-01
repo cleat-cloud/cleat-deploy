@@ -27,6 +27,7 @@ defmodule CleatDeploy.Apps.App do
     field :runtime_packages_text, :string, virtual: true
     field :release_name, :string
     field :custom_domain, CleatDeploy.EctoBool, default: false
+    field :trace_sample_rate, :float, default: 0.0
 
     belongs_to :tenant, Tenant
     belongs_to :server, Server
@@ -83,6 +84,16 @@ defmodule CleatDeploy.Apps.App do
     |> foreign_key_constraint(:server_id)
     |> put_default_webhook_secret()
     |> put_deploy_defaults()
+  end
+
+  def sampling_changeset(app, attrs) do
+    app
+    |> cast(attrs, [:trace_sample_rate])
+    |> validate_required([:trace_sample_rate])
+    |> validate_number(:trace_sample_rate,
+      greater_than_or_equal_to: 0.0,
+      less_than_or_equal_to: 1.0
+    )
   end
 
   def branch_changeset(app, attrs) do
