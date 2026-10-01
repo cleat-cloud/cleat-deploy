@@ -3,6 +3,14 @@ defmodule CleatDeploy.Deploy.Ssh.Session do
 
   @identity_prefix "cleat_deploy_ssh"
 
+  @exec_from_file """
+  #!/bin/sh
+  set -eu
+  file=$1
+  shift
+  exec "$@" < "$file"
+  """
+
   def identity_prefix, do: @identity_prefix
 
   def cleanup_stale_identity_files do
@@ -109,6 +117,30 @@ defmodule CleatDeploy.Deploy.Ssh.Session do
     case System.cmd(command, args, stderr_to_stdout: true) do
       {output, 0} -> {:ok, output}
       {output, _code} -> {:error, output}
+    end
+  end
+
+  @doc """
+  Runs `command` with an argv list and feeds `stdin` to the process.
+
+  OTP 28 cannot close a Port's stdin (`port_command(eof)` is iodata-only),
+  so a tiny static wrapper does `exec "$@" < file`. No shell string is
+  built from the arguments.
+  """
+  def run_with_stdin(command, args, stdin)
+      when is_binary(command) and is_list(args) and is_binary(stdin) do
+    exec = System.find_executable(command) || command
+    stdin_path = temp_path("cleat_stdin")
+    wrapper_path = temp_path("cleat_exec_from_file")
+
+    try do
+      :ok = File.write(stdin_path, stdin)
+      :ok = File.write(wrapper_path, @exec_from_file)
+      :ok = File.chmod(wrapper_path, 0o755)
+      cmd(wrapper_path, [stdin_path, exec | args])
+    after
+      File.rm(stdin_path)
+      File.rm(wrapper_path)
     end
   end
 
