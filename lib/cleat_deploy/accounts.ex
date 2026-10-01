@@ -5,6 +5,7 @@ defmodule CleatDeploy.Accounts do
 
   import Ecto.Query, warn: false
   alias CleatDeploy.Repo
+  alias CleatDeploy.Repo.BusyRetry
 
   alias CleatDeploy.Accounts.{
     ApiToken,
@@ -124,6 +125,10 @@ defmodule CleatDeploy.Accounts do
   end
 
   def register_user_with_tenant(attrs) do
+    BusyRetry.call(fn -> do_register_user_with_tenant(attrs) end)
+  end
+
+  defp do_register_user_with_tenant(attrs) do
     Ecto.Multi.new()
     |> Ecto.Multi.insert(:user, User.registration_changeset(%User{}, attrs))
     |> Ecto.Multi.run(:tenant, fn _repo, %{user: user} ->
