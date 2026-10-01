@@ -181,6 +181,72 @@ defmodule CleatDeploy.SignalsTest do
     end
   end
 
+  describe "evaluate_alerts/2" do
+    setup do
+      Application.put_env(:cleat_deploy, :signals_webhook_url, "http://webhook.test/hook")
+      Application.put_env(:cleat_deploy, :signals_req_options, plug: {Req.Test, __MODULE__})
+
+      on_exit(fn ->
+        Application.delete_env(:cleat_deploy, :signals_webhook_url)
+        Application.delete_env(:cleat_deploy, :signals_req_options)
+      end)
+
+      :ok
+    end
+
+    test "fires the default error_rate rule and posts the webhook once", ctx do
+      now = DateTime.utc_now(:second)
+      parent = self()
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        {:ok, raw, conn} = Plug.Conn.read_body(conn)
+        send(parent, {:webhook, conn.method, Jason.decode!(raw)})
+        Req.Test.json(conn, %{ok: true})
+      end)
+
+      for _ <- 1..6 do
+        insert_event(ctx, ctx.app, %{
+          severity: "err",
+          occurred_at: DateTime.add(now, -30, :second)
+        })
+      end
+
+      assert {:ok, [alert]} = Signals.evaluate_alerts(ctx.scope, now: now)
+      assert alert.rule == "error_rate"
+      assert alert.status == "firing"
+      assert alert.app_id == ctx.app.id
+      assert alert.channel == "webhook"
+
+      assert_receive {:webhook, "POST", body}
+      assert body["event"] == "signal.alert"
+      assert body["rule"] == "error_rate"
+      assert body["app"]["slug"] == ctx.app.slug
+
+      assert {:ok, []} = Signals.evaluate_alerts(ctx.scope, now: now)
+      refute_received {:webhook, _, _}
+
+      [open] = Signals.list_alerts(ctx.scope)
+      assert open.id == alert.id
+    end
+
+    test "acks a firing alert", ctx do
+      now = DateTime.utc_now(:second)
+      Req.Test.stub(__MODULE__, fn conn -> Req.Test.json(conn, %{ok: true}) end)
+
+      for _ <- 1..6 do
+        insert_event(ctx, ctx.app, %{
+          severity: "err",
+          occurred_at: DateTime.add(now, -30, :second)
+        })
+      end
+
+      {:ok, [alert]} = Signals.evaluate_alerts(ctx.scope, now: now)
+      assert {:ok, acked} = Signals.ack_alert(ctx.scope, alert.id)
+      assert acked.status == "acked"
+      assert acked.acked_at
+    end
+  end
+
   defp insert_deploy(app, attrs) do
     Repo.insert!(%Deployment{
       app_id: app.id,
