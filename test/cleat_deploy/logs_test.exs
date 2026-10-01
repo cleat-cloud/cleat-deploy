@@ -45,6 +45,35 @@ defmodule CleatDeploy.LogsTest do
       assert hd(result.lines) =~ "started"
     end
 
+    test "greps with regex alternation", %{scope: scope, server: server} do
+      app =
+        TenancyFixtures.app_fixture(scope, server, %{
+          slug: "assistente",
+          systemd_unit: "assistente"
+        })
+
+      assert {:ok, result} = Logs.fetch_app(app, grep: "started|completed")
+      assert length(result.lines) == 2
+      assert Enum.any?(result.lines, &String.contains?(&1, "started"))
+      assert Enum.any?(result.lines, &String.contains?(&1, "completed"))
+    end
+
+    test "falls back to substring when grep is not a valid regex", %{scope: scope, server: server} do
+      app =
+        TenancyFixtures.app_fixture(scope, server, %{
+          slug: "assistente",
+          systemd_unit: "assistente"
+        })
+
+      expect(RuntimeLogsMock, :run, fn _subject, _argv ->
+        {:ok, "2026-09-06T12:00:00Z assistente error: [unclosed\n"}
+      end)
+
+      assert {:ok, result} = Logs.fetch_app(app, grep: "[unclosed")
+      assert length(result.lines) == 1
+      assert hd(result.lines) =~ "[unclosed"
+    end
+
     test "accepts a map of options", %{scope: scope, server: server} do
       app =
         TenancyFixtures.app_fixture(scope, server, %{
