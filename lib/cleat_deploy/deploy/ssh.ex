@@ -247,29 +247,12 @@ defmodule CleatDeploy.Deploy.Ssh do
 
   defp ensure_artifact(_), do: {:error, "Drop artifact missing"}
 
-  defp run_remote_script(script, key_path, target, label, sha) do
-    script_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cleat_deploy_remote_#{sha}_#{:erlang.unique_integer([:positive])}.sh"
-      )
+  defp run_remote_script(script, key_path, target, label, _sha) do
+    args = ssh_base(key_path, target) ++ ["bash", "-s"]
 
-    try do
-      :ok = File.write!(script_path, script)
-
-      ssh_args =
-        (ssh_base(key_path, target) ++ ["bash", "-s"])
-        |> Enum.map(&shell_escape/1)
-        |> Enum.join(" ")
-
-      case System.cmd("bash", ["-c", "ssh #{ssh_args} < #{shell_escape(script_path)}"],
-             stderr_to_stdout: true
-           ) do
-        {output, 0} -> {:ok, output}
-        {output, _code} -> {:error, "#{label} failed:\n#{output}"}
-      end
-    after
-      File.rm(script_path)
+    case Session.run_with_stdin("ssh", args, script) do
+      {:ok, output} -> {:ok, output}
+      {:error, output} -> {:error, "#{label} failed:\n#{output}"}
     end
   end
 
