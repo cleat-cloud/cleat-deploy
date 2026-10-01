@@ -92,6 +92,11 @@ defmodule CleatDeploy.Deploy.AddonsTest do
     assert script =~
              ~s|ACL SETUSER cleat_chatwoot on ">#{redis_password}" ~* "&*" +@all|
 
+    # SETUSER is in-memory only. Without aclfile, a redis-server restart drops
+    # the user and the app loops WRONGPASS (#166, #167).
+    assert script =~ "aclfile /etc/redis/users.acl"
+    assert script =~ "ACL LIST"
+
     # Nothing happens without addons, or without credentials in the config.
     assert Addons.provision_script(app, config, %AppManifest{}) == ""
     assert Addons.provision_script(app, App.deploy_config(app), manifest) == ""
