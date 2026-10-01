@@ -39,6 +39,14 @@ defmodule CleatDeployWeb.Api.Contract do
       id app_id slug rule status message channel fired_at acked_at delivered_at
     ),
     "signal_incident" => ~w(app_id slug events),
+    "signal_trace" => ~w(trace_id root_name services started_at duration_ms span_count error),
+    "signal_span" => ~w(
+      trace_id span_id parent_span_id name kind service_name status_code
+      start_time_unix_nano duration_ms depth attributes
+    ),
+    "signal_service_map" => ~w(nodes edges),
+    "signal_sampling" => ~w(app_id slug trace_sample_rate),
+    "signal_trace_detail" => ~w(trace spans service_map logs),
     "user" => ~w(id email),
     "tenant" => ~w(id name slug),
     "me" => ~w(user tenant role),

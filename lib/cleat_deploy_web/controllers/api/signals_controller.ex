@@ -5,6 +5,7 @@ defmodule CleatDeployWeb.Api.SignalsController do
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Signals
+  alias CleatDeploy.Signals.Traces
   alias CleatDeployWeb.Api.Serializer
 
   def health(conn, params) do
@@ -59,6 +60,96 @@ defmodule CleatDeployWeb.Api.SignalsController do
     end
   end
 
+  def ingest_traces(conn, params) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- require_app(scope, params["app"]) do
+      case Traces.ingest(scope, app, params) do
+        {:ok, result} ->
+          conn
+          |> put_status(:accepted)
+          |> json(%{data: result})
+
+        {:error, :invalid_payload} ->
+          unprocessable(conn, "payload must include resourceSpans")
+
+        {:error, :not_found} ->
+          not_found(conn)
+      end
+    else
+      :error -> not_found(conn)
+    end
+  end
+
+  def traces(conn, params) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- require_app(scope, params["app"]) do
+      case params["trace_id"] do
+        id when id in [nil, ""] ->
+          rows = Traces.list(scope, app, service: params["service"])
+          json(conn, %{data: Enum.map(rows, &Serializer.signal_trace/1)})
+
+        trace_id ->
+          case Traces.waterfall(scope, app, trace_id) do
+            {:error, :not_found} ->
+              not_found(conn)
+
+            {:ok, waterfall} ->
+              trace =
+                scope
+                |> Traces.list(app)
+                |> Enum.find(&(&1.trace_id == waterfall.trace_id))
+
+              json(conn, %{
+                data:
+                  Serializer.signal_trace_detail(%{
+                    trace: trace,
+                    spans: waterfall.spans,
+                    service_map: Traces.service_map(scope, app, trace_id: waterfall.trace_id),
+                    logs: Traces.logs(scope, app, trace_id)
+                  })
+              })
+          end
+      end
+    else
+      :error -> not_found(conn)
+    end
+  end
+
+  def sampling(conn, params) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- require_app(scope, params["app"]),
+         {:ok, sampling} <- Traces.get_sampling(scope, app) do
+      json(conn, %{data: Serializer.signal_sampling(sampling)})
+    else
+      :error -> not_found(conn)
+      {:error, :not_found} -> not_found(conn)
+    end
+  end
+
+  def update_sampling(conn, params) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- require_app(scope, params["app"]),
+         {:ok, rate} <- parse_rate(params["rate"]) do
+      case Traces.set_sampling(scope, app, rate) do
+        {:ok, sampling} ->
+          json(conn, %{data: Serializer.signal_sampling(sampling)})
+
+        {:error, %Ecto.Changeset{}} ->
+          unprocessable(conn, "trace_sample_rate must be between 0 and 1")
+
+        {:error, :not_found} ->
+          not_found(conn)
+      end
+    else
+      :error -> not_found(conn)
+      :invalid_rate -> unprocessable(conn, "trace_sample_rate must be between 0 and 1")
+    end
+  end
+
   def incident(conn, params) do
     scope = conn.assigns.current_scope
 
@@ -88,6 +179,18 @@ defmodule CleatDeployWeb.Api.SignalsController do
       _ -> Apps.get_app_by_slug!(scope, value)
     end
   end
+
+  defp parse_rate(value) when is_integer(value), do: {:ok, value * 1.0}
+  defp parse_rate(value) when is_float(value), do: {:ok, value}
+
+  defp parse_rate(value) when is_binary(value) do
+    case Float.parse(value) do
+      {rate, ""} -> {:ok, rate}
+      _ -> :invalid_rate
+    end
+  end
+
+  defp parse_rate(_), do: :invalid_rate
 
   defp not_found(conn), do: conn |> put_status(:not_found) |> json(%{error: "not_found"})
 

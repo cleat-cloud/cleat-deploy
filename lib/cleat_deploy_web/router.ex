@@ -62,6 +62,9 @@ defmodule CleatDeployWeb.Router do
     get "/signals/metrics", SignalsController, :metrics
     get "/signals/alerts", SignalsController, :alerts
     get "/signals/incidents", SignalsController, :incident
+    get "/signals/traces", SignalsController, :traces
+    get "/signals/sampling", SignalsController, :sampling
+    post "/signals/otlp/v1/traces", SignalsController, :ingest_traces
 
     get "/apps/:app_id/env", EnvController, :index
     get "/apps/:app_id/logs", AppController, :logs
@@ -92,6 +95,7 @@ defmodule CleatDeployWeb.Router do
     delete "/apps/:app_id/env/:key", EnvController, :delete
 
     post "/signals/alerts/:id/ack", SignalsController, :ack
+    patch "/signals/sampling", SignalsController, :update_sampling
   end
 
   scope "/webhooks", CleatDeployWeb do

@@ -110,6 +110,43 @@
     "slug",
     "events"
   ],
+  "signal_trace": [
+    "trace_id",
+    "root_name",
+    "services",
+    "started_at",
+    "duration_ms",
+    "span_count",
+    "error"
+  ],
+  "signal_span": [
+    "trace_id",
+    "span_id",
+    "parent_span_id",
+    "name",
+    "kind",
+    "service_name",
+    "status_code",
+    "start_time_unix_nano",
+    "duration_ms",
+    "depth",
+    "attributes"
+  ],
+  "signal_service_map": [
+    "nodes",
+    "edges"
+  ],
+  "signal_sampling": [
+    "app_id",
+    "slug",
+    "trace_sample_rate"
+  ],
+  "signal_trace_detail": [
+    "trace",
+    "spans",
+    "service_map",
+    "logs"
+  ],
   "me": [
     "user",
     "tenant",

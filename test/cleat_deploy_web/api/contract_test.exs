@@ -61,10 +61,53 @@ defmodule CleatDeployWeb.Api.ContractTest do
 
     incident = %{app_id: app.id, slug: app.slug, events: []}
 
+    trace = %{
+      trace_id: "aa",
+      root_name: "GET /",
+      services: ["web"],
+      started_at_unix_nano: 1_000_000_000,
+      duration_ns: 1_000_000,
+      span_count: 1,
+      error: false
+    }
+
+    span = %{
+      trace_id: "aa",
+      span_id: "bb",
+      parent_span_id: "",
+      name: "GET /",
+      kind: "server",
+      service_name: "web",
+      status_code: "ok",
+      start_time_unix_nano: 1_000_000_000,
+      duration_ns: 1_000_000,
+      depth: 0,
+      attributes: %{}
+    }
+
     assert keys(Serializer.signal_health(health)) == contract_keys("signal_health")
     assert keys(Serializer.signal_metrics(metrics)) == contract_keys("signal_metrics")
     assert keys(Serializer.signal_alert(alert)) == contract_keys("signal_alert")
     assert keys(Serializer.signal_incident(incident)) == contract_keys("signal_incident")
+    assert keys(Serializer.signal_trace(trace)) == contract_keys("signal_trace")
+    assert keys(Serializer.signal_span(span)) == contract_keys("signal_span")
+
+    assert keys(Serializer.signal_service_map(%{nodes: [], edges: []})) ==
+             contract_keys("signal_service_map")
+
+    assert keys(
+             Serializer.signal_sampling(%{app_id: app.id, slug: app.slug, trace_sample_rate: 0.0})
+           ) ==
+             contract_keys("signal_sampling")
+
+    detail = %{
+      trace: trace,
+      spans: [span],
+      service_map: %{nodes: [], edges: []},
+      logs: []
+    }
+
+    assert keys(Serializer.signal_trace_detail(detail)) == contract_keys("signal_trace_detail")
   end
 
   defp contract_keys(resource), do: resource |> Contract.keys() |> Enum.sort()
