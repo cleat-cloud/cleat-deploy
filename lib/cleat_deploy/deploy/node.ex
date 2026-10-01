@@ -268,7 +268,15 @@ defmodule CleatDeploy.Deploy.Node do
       rm -rf node_modules
     elif [[ -d node_modules ]]; then
       log "Pruning dev dependencies for the release"
-      npm prune --omit=dev
+      if [[ -f pnpm-lock.yaml ]]; then
+        pnpm prune --prod
+      elif [[ -f yarn.lock ]]; then
+        yarn install --production --frozen-lockfile || yarn install --production
+      elif [[ -f bun.lock || -f bun.lockb ]]; then
+        bun install --production
+      else
+        npm prune --omit=dev
+      fi
     fi
     """
     |> String.trim()
