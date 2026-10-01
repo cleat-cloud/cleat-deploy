@@ -47,3 +47,9 @@ npm-debug.log
 
 # Relatório local do e2e do Chatwoot (aprendizados, não vai pro repo)
 /e2e-chatwoot.html
+
+# macOS Finder metadata
+.DS_Store
+
+# Local Command Code agent data (not shared config)
+.commandcode/
