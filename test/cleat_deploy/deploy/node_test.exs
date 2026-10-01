@@ -155,15 +155,17 @@ defmodule CleatDeploy.Deploy.NodeTest do
 
     # npm prune on a pnpm node_modules tree dies with
     # "Cannot read properties of null (reading 'matches')" (new-lp deploy 893).
+    # pnpm prune --prod re-runs prepare after husky is gone (new-lp deploy 896).
     assert prune_tail =~ "pnpm-lock.yaml"
-    assert prune_tail =~ "pnpm prune --prod"
+    assert prune_tail =~ "pnpm install --prod --frozen-lockfile --ignore-scripts"
     assert prune_tail =~ "yarn.lock"
     assert prune_tail =~ "yarn install --production"
+    assert prune_tail =~ "--ignore-scripts"
     assert prune_tail =~ "bun.lock"
     assert prune_tail =~ "bun install --production"
     assert prune_tail =~ "npm prune --omit=dev"
 
-    assert occurrence(prune_tail, "pnpm prune --prod") <
+    assert occurrence(prune_tail, "pnpm install --prod --frozen-lockfile --ignore-scripts") <
              occurrence(prune_tail, "npm prune --omit=dev")
   end
 

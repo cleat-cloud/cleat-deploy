@@ -93,9 +93,9 @@ The panel installs Node, runs `npm ci` and `npm run build`, publishes the projec
 to `/opt/<slug>/current`, and keeps it alive with a `node-<slug>` systemd unit
 behind the Caddy reverse proxy. Before publishing it shrinks the release so
 `node_modules` does not fill the disk: prune with the lockfile package manager
-(`pnpm prune --prod`, yarn/bun `--production`, or `npm prune --omit=dev`) for
-regular Node apps, or no `node_modules` at all for TanStack Start / Nitro (the
-`.output` bundle is self-contained). The start command is resolved at build time:
+(`pnpm`/`yarn`/`bun` `--prod`/`--production --ignore-scripts`, or
+`npm prune --omit=dev`) for regular Node apps, or no `node_modules` at all for
+TanStack Start / Nitro (the `.output` bundle is self-contained). The start command is resolved at build time:
 `start_command` from the manifest, else `npm run start`, else
 `node .output/server/index.mjs` (TanStack Start / Nitro), else
 `npm exec -- next start` (Next.js). Override the toolchain with `node_version`
