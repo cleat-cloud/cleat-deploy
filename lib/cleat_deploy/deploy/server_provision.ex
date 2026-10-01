@@ -4,6 +4,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.Wake
+  alias CleatDeploy.Servers.AccessCounts
 
   @doc false
   def provision_script(%App{} = app, config, %AppManifest{runtime: "golang"} = manifest) do
@@ -529,6 +530,11 @@ defmodule CleatDeploy.Deploy.ServerProvision do
         #{caddy_strip_awk()}
       ' "$CADDYFILE" > "$TMPFILE"
       cat >> "$TMPFILE"
+      if command -v python3 >/dev/null 2>&1; then
+        python3 - "$TMPFILE" <<'PAAS_CADDY_ACCESS'
+    #{AccessCounts.ensure_python()}
+    PAAS_CADDY_ACCESS
+      fi
       if ! caddy validate --adapter caddyfile --config "$TMPFILE" >"$TMPFILE.validate" 2>&1; then
         echo "Caddyfile invalid after writing site #{address}; keeping previous file" >&2
         cat "$TMPFILE.validate" >&2

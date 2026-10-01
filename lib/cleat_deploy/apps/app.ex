@@ -26,7 +26,7 @@ defmodule CleatDeploy.Apps.App do
     field :runtime_apt_packages, {:array, :string}, default: []
     field :runtime_packages_text, :string, virtual: true
     field :release_name, :string
-    field :custom_domain, :boolean, default: false
+    field :custom_domain, CleatDeploy.EctoBool, default: false
 
     belongs_to :tenant, Tenant
     belongs_to :server, Server

@@ -92,22 +92,26 @@ defmodule CleatDeployWeb.DashboardLive do
             <p class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
               Active server
             </p>
-            <select
+            <form
               :if={length(@servers) > 1}
-              id="active-server-select"
-              class="paas-select mt-0.5 max-w-[18rem]"
-              name="server_id"
+              id="active-server-form"
               phx-change="select_active_server"
-              aria-label="Active server"
             >
-              <option
-                :for={server <- @servers}
-                value={server.id}
-                selected={server.id == @insights.server.id}
+              <select
+                id="active-server-select"
+                class="paas-select mt-0.5 max-w-[18rem]"
+                name="server_id"
+                aria-label="Active server"
               >
-                {server.name}
-              </option>
-            </select>
+                <option
+                  :for={server <- @servers}
+                  value={server.id}
+                  selected={server.id == @insights.server.id}
+                >
+                  {server.name}
+                </option>
+              </select>
+            </form>
             <h2
               :if={length(@servers) <= 1}
               id="active-server-name"
@@ -197,6 +201,7 @@ defmodule CleatDeployWeb.DashboardLive do
             static={@insights.runtimes.static}
           />
           <.deploy_bars id="chart-deploys" days={@insights.deploys} />
+          <.access_bars id="chart-access" apps={@insights.top_apps} />
         </div>
       </div>
     </Layouts.app>
