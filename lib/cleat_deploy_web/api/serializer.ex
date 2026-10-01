@@ -8,6 +8,7 @@ defmodule CleatDeployWeb.Api.Serializer do
   alias CleatDeploy.Deployments.Deployment
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Servers.Server
+  alias CleatDeploy.Signals.Alert
 
   def scope(%Scope{user: user, tenant: tenant, role: role}) do
     %{user: user(user), tenant: tenant(tenant), role: role}
@@ -111,6 +112,54 @@ defmodule CleatDeployWeb.Api.Serializer do
     }
   end
 
+  def signal_health(row) do
+    %{
+      app_id: row.app_id,
+      slug: row.slug,
+      name: row.name,
+      status: Atom.to_string(row.status),
+      reasons: Enum.map(row.reasons, &Atom.to_string/1),
+      error_count: row.error_count,
+      previous_error_count: row.previous_error_count,
+      preceding_release: json_release(row.preceding_release)
+    }
+  end
+
+  def signal_metrics(metrics) do
+    %{
+      app_id: metrics.app_id,
+      slug: metrics.slug,
+      range: metrics.range,
+      red: metrics.red,
+      host: metrics.host,
+      series: metrics.series,
+      deploy_markers: Enum.map(metrics.deploy_markers, &json_release/1)
+    }
+  end
+
+  def signal_alert(%Alert{} = alert) do
+    %{
+      id: alert.id,
+      app_id: alert.app_id,
+      slug: alert_slug(alert),
+      rule: alert.rule,
+      status: alert.status,
+      message: alert.message,
+      channel: alert.channel,
+      fired_at: alert.fired_at,
+      acked_at: alert.acked_at,
+      delivered_at: alert.delivered_at
+    }
+  end
+
+  def signal_incident(incident) do
+    %{
+      app_id: incident.app_id,
+      slug: incident.slug,
+      events: Enum.map(incident.events, &incident_event/1)
+    }
+  end
+
   def log_group(group) do
     %{
       fingerprint: group.fingerprint,
@@ -141,6 +190,30 @@ defmodule CleatDeployWeb.Api.Serializer do
 
   defp blank_to_nil(value) when value in [nil, ""], do: nil
   defp blank_to_nil(value), do: value
+
+  defp alert_slug(%Alert{app: %App{slug: slug}}), do: slug
+  defp alert_slug(_alert), do: nil
+
+  defp json_release(nil), do: nil
+
+  defp json_release(release) do
+    %{
+      id: release.id,
+      git_sha: release.git_sha,
+      git_ref: Map.get(release, :git_ref) || Map.get(release, "git_ref"),
+      status: release.status |> to_string(),
+      finished_at: Map.get(release, :finished_at) || Map.get(release, "finished_at")
+    }
+  end
+
+  defp incident_event(event) do
+    %{
+      at: event.at,
+      kind: Atom.to_string(event.kind),
+      summary: event.summary,
+      payload: event.payload
+    }
+  end
 
   defp wait_reason(deployment) do
     case CleatDeploy.Deployments.wait_reason(deployment) do
