@@ -13,7 +13,7 @@ defmodule CleatDeploy.Deploy.Ssh do
   alias CleatDeploy.Deploy.Rust
   alias CleatDeploy.Deploy.Static
   alias CleatDeploy.Repo
-  alias CleatDeploy.Deploy.Ssh.{Env, Phoenix, Session}
+  alias CleatDeploy.Deploy.Ssh.{Clone, Env, Phoenix, Session}
 
   @tar_excludes ~w(_build deps node_modules .git tmp priv/static/assets target)
 
@@ -67,10 +67,24 @@ defmodule CleatDeploy.Deploy.Ssh do
     |> Enum.join(" ")
   end
 
+  defdelegate git_clone_plan(git_ref, default_branch), to: Clone
+
   def run_deploy(deployment, app, server) do
-    branch = deployment.git_ref || app.branch
-    config = app |> CleatDeploy.Apps.App.deploy_config() |> Map.put(:branch, branch)
-    sha = short_sha(deployment.git_sha)
+    plan = git_clone_plan(deployment.git_ref, app.branch || "main")
+
+    config_branch =
+      case plan do
+        {:sha, branch, _} -> branch
+        {:branch, branch} -> branch
+      end
+
+    config = app |> CleatDeploy.Apps.App.deploy_config() |> Map.put(:branch, config_branch)
+
+    sha =
+      case plan do
+        {:sha, _, full} -> short_sha(full)
+        {:branch, _} -> short_sha(deployment.git_sha)
+      end
 
     with :ok <- ensure_commands(["git", "ssh", "scp", "tar"]),
          {:ok, key_path} <- write_temp_key(server) do
@@ -79,7 +93,7 @@ defmodule CleatDeploy.Deploy.Ssh do
       # pitfall that left /tmp/cleat_deploy_clone_* forever and broke later
       # deploys when unique_integer collided after a BEAM restart).
       try do
-        with {:ok, work_dir} <- clone_repo(app.github_repo, branch) do
+        with {:ok, work_dir} <- Clone.clone_repo(app.github_repo, plan) do
           try do
             with :ok <- validate_manifest_for_server(work_dir, app, server),
                  :ok <- record_manifest(app, work_dir),
@@ -324,16 +338,6 @@ defmodule CleatDeploy.Deploy.Ssh do
     end
   end
 
-  defp github_clone_url(repo) do
-    case System.get_env("GITHUB_TOKEN") do
-      token when is_binary(token) and token != "" ->
-        "https://x-access-token:#{token}@github.com/#{repo}.git"
-
-      _ ->
-        "https://github.com/#{repo}.git"
-    end
-  end
-
   defp short_sha("manual"), do: Integer.to_string(System.system_time(:second))
   defp short_sha(sha) when is_binary(sha), do: String.slice(sha, 0, 7)
 
@@ -346,17 +350,6 @@ defmodule CleatDeploy.Deploy.Ssh do
   defp ssh_base(key_path, target), do: Session.ssh_base(key_path, target)
   defp scp_base(key_path), do: Session.scp_base(key_path)
   defp log_ssh_base(key_path, target), do: Session.log_ssh_base(key_path, target)
-
-  defp clone_repo(github_repo, branch) do
-    dir = temp_path("cleat_deploy_clone")
-    _ = File.rm_rf(dir)
-    url = github_clone_url(github_repo)
-
-    case cmd("git", ["clone", "--depth", "50", "-b", branch, url, dir]) do
-      {:ok, _output} -> {:ok, dir}
-      {:error, output} -> {:error, "git clone failed:\n" <> output}
-    end
-  end
 
   defp create_tarball(work_dir) do
     path = temp_path("cleat_deploy_src") <> ".tar.gz"
