@@ -135,6 +135,17 @@ defmodule CleatDeploy.LogsTest do
       assert {:ok, %{since: "2026-09-21T10:30:15"}} = Logs.normalize(since: "2026-09-21T10:30:15")
     end
 
+    test "accepts RFC3339 since with a timezone suffix" do
+      assert {:ok, %{since: "2026-09-21T10:30:15Z"}} =
+               Logs.normalize(since: "2026-09-21T10:30:15Z")
+
+      assert {:ok, %{since: "2026-09-21T10:30:15+00:00"}} =
+               Logs.normalize(since: "2026-09-21T10:30:15+00:00")
+
+      assert {:ok, %{since: "2026-09-21T10:30:15-03:00"}} =
+               Logs.normalize(since: "2026-09-21T10:30:15-03:00")
+    end
+
     test "rejects invalid since values" do
       assert {:error, {:invalid, message}} = Logs.normalize(since: "yesterday")
       assert message =~ "invalid since"
