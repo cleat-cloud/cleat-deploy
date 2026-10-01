@@ -54,6 +54,24 @@ defmodule CleatDeployWeb.Internal.DomainAskTest do
     assert conn.status == 403
   end
 
+  test "returns 200 from IPv4-mapped IPv6 loopback (Bandit dual-stack)", %{conn: conn} do
+    conn =
+      conn
+      |> Map.put(:remote_ip, {0, 0, 0, 0, 0, 65535, 32512, 1})
+      |> get("/internal/domains/ask", %{"domain" => "loja.gestaobem.com"})
+
+    assert conn.status == 200
+  end
+
+  test "returns 403 from IPv4-mapped IPv6 of a public address", %{conn: conn} do
+    conn =
+      conn
+      |> Map.put(:remote_ip, {0, 0, 0, 0, 0, 65535, 51968, 28937})
+      |> get("/internal/domains/ask", %{"domain" => "loja.gestaobem.com"})
+
+    assert conn.status == 403
+  end
+
   test "Hetzner Caddyfile asks the panel on 4010, not catalogo on 4000" do
     text = File.read!("deploy/Caddyfile.hetzner")
     assert text =~ "ask http://127.0.0.1:4010/internal/domains/ask"
