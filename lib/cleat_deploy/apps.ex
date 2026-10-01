@@ -224,6 +224,40 @@ defmodule CleatDeploy.Apps do
   end
 
   @doc """
+  True when `domain` is one of an app's hosts (comma-separated aliases included).
+
+  Used by Caddy `on_demand_tls` ask: only registered hosts may mint a cert.
+  """
+  def host_registered?(domain) when is_binary(domain) do
+    needle = normalize_ask_host(domain)
+
+    if needle == "" do
+      false
+    else
+      Repo.all(from a in App, select: a.host)
+      |> Enum.any?(&host_matches?(&1, needle))
+    end
+  end
+
+  def host_registered?(_), do: false
+
+  defp host_matches?(host, needle) when is_binary(host) do
+    host
+    |> String.split(",")
+    |> Enum.map(&normalize_ask_host/1)
+    |> Enum.member?(needle)
+  end
+
+  defp host_matches?(_, _), do: false
+
+  defp normalize_ask_host(host) do
+    host
+    |> String.trim()
+    |> String.downcase()
+    |> String.trim_trailing(".")
+  end
+
+  @doc """
   Other instances of the same project: apps of the tenant deploying the same
   repository from a different branch.
   """

@@ -30,6 +30,11 @@ defmodule CleatDeployWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Caddy on_demand_tls ask. Loopback-only in the controller; no CSRF/session.
+  scope "/internal", CleatDeployWeb.Internal do
+    get "/domains/ask", DomainAskController, :ask
+  end
+
   scope "/api/v1", CleatDeployWeb.Api do
     pipe_through :api
 

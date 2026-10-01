@@ -1,7 +1,7 @@
 {
 	email admin@gestaobem.com
 	on_demand_tls {
-		ask http://127.0.0.1:4000/internal/domains/ask
+		ask http://127.0.0.1:4010/internal/domains/ask
 	}
 }
 

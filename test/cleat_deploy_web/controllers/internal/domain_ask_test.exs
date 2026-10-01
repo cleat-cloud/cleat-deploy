@@ -21,7 +21,11 @@ defmodule CleatDeployWeb.Internal.DomainAskTest do
     assert conn.status == 200
   end
 
-  test "returns 200 for one alias of a compound app host", %{conn: conn, scope: scope, server: server} do
+  test "returns 200 for one alias of a compound app host", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
     TenancyFixtures.app_fixture(scope, server, %{
       host: "plaza.purplestock.com.br, www.plaza.purplestock.com.br, plaza.apps.gestaobem.com",
       slug: "plaza-#{System.unique_integer([:positive])}"
