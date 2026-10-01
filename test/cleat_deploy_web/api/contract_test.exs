@@ -2,6 +2,7 @@ defmodule CleatDeployWeb.Api.ContractTest do
   use CleatDeploy.DataCase, async: false
 
   alias CleatDeploy.Deployments.Deployment
+  alias CleatDeploy.Signals.Alert
   alias CleatDeploy.TenancyFixtures
   alias CleatDeployWeb.Api.{Contract, Serializer}
 
@@ -23,6 +24,47 @@ defmodule CleatDeployWeb.Api.ContractTest do
     assert keys(Serializer.scope(scope)) == contract_keys("me")
     assert keys(Serializer.deployment(deployment)) == contract_keys("deployment")
     assert keys(Serializer.deployment(deployment, log: true)) == contract_keys("deployment_log")
+
+    health = %{
+      app_id: app.id,
+      slug: app.slug,
+      name: app.name,
+      status: :healthy,
+      reasons: [],
+      error_count: 0,
+      previous_error_count: 0,
+      preceding_release: nil
+    }
+
+    metrics = %{
+      app_id: app.id,
+      slug: app.slug,
+      range: "1h",
+      red: %{requests: 0, errors: 0, logs: 0, error_rate: 0.0, latency_ms: nil},
+      host: %{cpu: nil, memory: nil, disk: nil, restarts: 0},
+      series: [],
+      deploy_markers: []
+    }
+
+    alert = %Alert{
+      id: 1,
+      app_id: app.id,
+      app: app,
+      rule: "error_rate",
+      status: "firing",
+      message: "Taxa de erro subiu",
+      channel: "in_app",
+      fired_at: DateTime.utc_now(:second),
+      acked_at: nil,
+      delivered_at: nil
+    }
+
+    incident = %{app_id: app.id, slug: app.slug, events: []}
+
+    assert keys(Serializer.signal_health(health)) == contract_keys("signal_health")
+    assert keys(Serializer.signal_metrics(metrics)) == contract_keys("signal_metrics")
+    assert keys(Serializer.signal_alert(alert)) == contract_keys("signal_alert")
+    assert keys(Serializer.signal_incident(incident)) == contract_keys("signal_incident")
   end
 
   defp contract_keys(resource), do: resource |> Contract.keys() |> Enum.sort()

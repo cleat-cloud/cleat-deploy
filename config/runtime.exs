@@ -48,6 +48,8 @@ if config_env() != :test do
          :log_max_rows_per_tenant,
          String.to_integer(System.get_env("LOG_MAX_ROWS_PER_TENANT", "50000"))
 
+  config :cleat_deploy, :signals_webhook_url, System.get_env("SIGNALS_WEBHOOK_URL")
+
   lightsail_client =
     if System.get_env("AWS_ACCESS_KEY_ID") in [nil, ""] do
       CleatDeploy.AWS.Lightsail.Stub

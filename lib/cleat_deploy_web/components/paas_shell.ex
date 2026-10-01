@@ -98,6 +98,13 @@ defmodule CleatDeployWeb.PaasShell do
             count={@app_count}
           />
           <.nav_link
+            id="nav-signals"
+            navigate={~p"/signals"}
+            active?={@active_tab == :signals}
+            icon="hero-heart"
+            label="Saúde"
+          />
+          <.nav_link
             id="nav-settings"
             navigate={~p"/settings"}
             active?={@active_tab == :settings}
@@ -148,6 +155,14 @@ defmodule CleatDeployWeb.PaasShell do
               icon="hero-globe-alt"
               label="Apps"
               count={@app_count}
+              compact
+            />
+            <.nav_link
+              id="nav-signals-mobile"
+              navigate={~p"/signals"}
+              active?={@active_tab == :signals}
+              icon="hero-heart"
+              label="Saúde"
               compact
             />
             <.nav_link

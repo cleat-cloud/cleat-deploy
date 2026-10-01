@@ -58,6 +58,11 @@ defmodule CleatDeployWeb.Router do
     get "/logs/groups", LogController, :groups
     get "/logs", LogController, :index
 
+    get "/signals/health", SignalsController, :health
+    get "/signals/metrics", SignalsController, :metrics
+    get "/signals/alerts", SignalsController, :alerts
+    get "/signals/incidents", SignalsController, :incident
+
     get "/apps/:app_id/env", EnvController, :index
     get "/apps/:app_id/logs", AppController, :logs
     get "/apps/:app_id/deployments", DeploymentController, :index
@@ -85,6 +90,8 @@ defmodule CleatDeployWeb.Router do
 
     put "/apps/:app_id/env", EnvController, :update
     delete "/apps/:app_id/env/:key", EnvController, :delete
+
+    post "/signals/alerts/:id/ack", SignalsController, :ack
   end
 
   scope "/webhooks", CleatDeployWeb do
@@ -111,6 +118,7 @@ defmodule CleatDeployWeb.Router do
       live "/apps/:id", AppLive.Show, :show
       live "/apps/:app_id/deployments", AppLive.Deployments, :index
       live "/settings", SettingsLive, :index
+      live "/signals", SignalsLive, :index
     end
   end
 
