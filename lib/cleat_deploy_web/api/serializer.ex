@@ -160,6 +160,55 @@ defmodule CleatDeployWeb.Api.Serializer do
     }
   end
 
+  def signal_trace(trace) do
+    %{
+      trace_id: trace.trace_id,
+      root_name: trace.root_name,
+      services: trace.services,
+      started_at: started_at(trace.started_at_unix_nano),
+      duration_ms: div(trace.duration_ns, 1_000_000),
+      span_count: trace.span_count,
+      error: trace.error
+    }
+  end
+
+  def signal_span(span) do
+    %{
+      trace_id: span.trace_id,
+      span_id: span.span_id,
+      parent_span_id: blank_to_nil(span.parent_span_id),
+      name: span.name,
+      kind: span.kind,
+      service_name: span.service_name,
+      status_code: span.status_code,
+      start_time_unix_nano: Integer.to_string(span.start_time_unix_nano),
+      duration_ms: div(span.duration_ns, 1_000_000),
+      depth: span.depth,
+      attributes: span.attributes || %{}
+    }
+  end
+
+  def signal_service_map(map) do
+    %{nodes: map.nodes, edges: map.edges}
+  end
+
+  def signal_sampling(sampling) do
+    %{
+      app_id: sampling.app_id,
+      slug: sampling.slug,
+      trace_sample_rate: sampling.trace_sample_rate
+    }
+  end
+
+  def signal_trace_detail(detail) do
+    %{
+      trace: signal_trace(detail.trace),
+      spans: Enum.map(detail.spans, &signal_span/1),
+      service_map: signal_service_map(detail.service_map),
+      logs: Enum.map(detail.logs, &log_event/1)
+    }
+  end
+
   def log_group(group) do
     %{
       fingerprint: group.fingerprint,
@@ -190,6 +239,15 @@ defmodule CleatDeployWeb.Api.Serializer do
 
   defp blank_to_nil(value) when value in [nil, ""], do: nil
   defp blank_to_nil(value), do: value
+
+  defp started_at(ns) when is_integer(ns) and ns > 0 do
+    ns
+    |> div(1_000_000_000)
+    |> DateTime.from_unix!()
+    |> DateTime.to_iso8601()
+  end
+
+  defp started_at(_), do: nil
 
   defp alert_slug(%Alert{app: %App{slug: slug}}), do: slug
   defp alert_slug(_alert), do: nil
