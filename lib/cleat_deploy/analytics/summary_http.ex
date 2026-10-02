@@ -22,16 +22,25 @@ defmodule CleatDeploy.Analytics.SummaryHttp do
   end
 
   defp get(server, path, params) do
-    if HostStats.local?(server) do
-      local_get(path, params)
-    else
-      ssh_get(server, path, params)
+    cond do
+      not is_map(server) ->
+        {:error, :invalid_server}
+
+      HostStats.local?(server) ->
+        local_get(path, params)
+
+      not match?(%{host_ip: host_ip} when is_binary(host_ip), server) ->
+        {:error, :invalid_server}
+
+      true ->
+        ssh_get(server, path, params)
     end
   end
 
   defp local_get(path, params) do
     case Req.get(loopback_url(path),
            params: params,
+           connect_options: [timeout: 3_000],
            receive_timeout: 3_000,
            retry: false
          ) do
@@ -47,17 +56,45 @@ defmodule CleatDeploy.Analytics.SummaryHttp do
   end
 
   defp ssh_get(server, path, params) do
+    if ssh_ready?(server) do
+      timed_ssh_get(server, path, params)
+    else
+      {:error, :invalid_server}
+    end
+  end
+
+  defp ssh_ready?(server) do
+    user = Map.get(server, :ssh_user)
+    key = Map.get(server, :ssh_private_key_encrypted)
+    is_binary(user) and user != "" and is_binary(key) and key != ""
+  end
+
+  defp timed_ssh_get(server, path, params) do
     url = loopback_url(path) <> "?" <> URI.encode_query(params)
 
-    case Ssh.run(server, %{host: Map.fetch!(server, :host_ip)}, [
-           "curl",
-           "--max-time",
-           "3",
-           "-sS",
-           url
-         ]) do
-      {:ok, output} -> {:ok, output}
-      {:error, reason} -> {:error, reason}
+    task =
+      Task.async(fn ->
+        try do
+          Ssh.run(server, %{host: Map.fetch!(server, :host_ip)}, [
+            "curl",
+            "--max-time",
+            "3",
+            "-sS",
+            url
+          ])
+        rescue
+          exception -> {:error, exception}
+        catch
+          kind, reason -> {:error, {kind, reason}}
+        end
+      end)
+
+    case Task.yield(task, 3_000) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, output}} -> {:ok, output}
+      {:ok, {:error, reason}} -> {:error, reason}
+      {:ok, other} -> {:error, other}
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
     end
   end
 

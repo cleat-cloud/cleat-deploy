@@ -31,6 +31,7 @@ defmodule CleatDeploy.Application do
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
         CleatDeploy.Deploy.Ssh.cleanup_stale_identity_files()
+        CleatDeploy.Analytics.Summary.init_cache()
         maybe_enqueue_auto_deploy_health()
         {:ok, pid}
 

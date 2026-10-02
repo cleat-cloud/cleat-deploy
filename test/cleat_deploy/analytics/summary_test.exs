@@ -2,13 +2,28 @@ defmodule CleatDeploy.Analytics.SummaryTest do
   use ExUnit.Case, async: false
 
   alias CleatDeploy.Analytics.Summary
+  alias CleatDeploy.Analytics.SummaryHttp
   alias CleatDeploy.Analytics.SummaryStub
 
   defmodule FakeHttp do
-    def visited(_server), do: next(:visited)
-    def app(_server, _host, _range), do: next(:app)
+    def visited(server) do
+      count(:visited)
+      next(:visited, server)
+    end
 
-    defp next(kind) do
+    def app(_server, _host, _range) do
+      count(:app)
+      next(:app, nil)
+    end
+
+    def calls(kind), do: Process.get({__MODULE__, :calls, kind}, 0)
+
+    defp count(kind) do
+      key = {__MODULE__, :calls, kind}
+      Process.put(key, Process.get(key, 0) + 1)
+    end
+
+    defp next(kind, _server) do
       key = {__MODULE__, kind}
 
       case Process.get(key, []) do
@@ -66,6 +81,16 @@ defmodule CleatDeploy.Analytics.SummaryTest do
     Application.delete_env(:cleat_deploy, :analytics_app_stub)
   end
 
+  test "visited returns empty list for nil server" do
+    assert {:ok, []} = Summary.visited(nil)
+  end
+
+  test "init_cache is idempotent" do
+    assert :ok = Summary.init_cache()
+    assert :ok = Summary.init_cache()
+    assert is_reference(:ets.whereis(Summary))
+  end
+
   describe "HTTP client" do
     setup do
       Application.put_env(:cleat_deploy, :analytics_client, FakeHttp)
@@ -89,6 +114,14 @@ defmodule CleatDeploy.Analytics.SummaryTest do
       assert {:ok, ^rows} = Summary.visited(server)
       age_visited_cache(server)
       assert {:ok, ^rows, stale: true} = Summary.visited(server)
+      assert {:ok, ^rows, stale: true} = Summary.visited(server)
+      assert FakeHttp.calls(:visited) == 2
+    end
+
+    test "visited returns empty list for nil server without fetching" do
+      Process.put({FakeHttp, :visited}, [{:ok, [%{slug: "nope"}]}])
+      assert {:ok, []} = Summary.visited(nil)
+      assert FakeHttp.calls(:visited) == 0
     end
 
     test "app is pass-through with no cache", %{server: server} do
@@ -109,9 +142,29 @@ defmodule CleatDeploy.Analytics.SummaryTest do
     end
   end
 
+  test "http client rejects invalid servers without SSH" do
+    assert {:error, :invalid_server} = SummaryHttp.visited(nil)
+    assert {:error, :invalid_server} = SummaryHttp.visited("x")
+    assert {:error, :invalid_server} = SummaryHttp.visited(%{id: 1})
+
+    assert {:error, :invalid_server} =
+             SummaryHttp.visited(%{id: 1, host_ip: "203.0.113.9"})
+
+    assert {:error, :invalid_server} =
+             SummaryHttp.app(%{id: 1, host_ip: "203.0.113.9"}, "nfe.gestaobem.com", "24h")
+  end
+
   defp age_visited_cache(%{id: id}) do
     key = {id, :visited}
-    [{^key, value, _inserted_at}] = :ets.lookup(Summary, key)
-    true = :ets.insert(Summary, {key, value, System.monotonic_time(:millisecond) - 60_001})
+
+    case :ets.lookup(Summary, key) do
+      [{^key, {:stale, value}, _inserted_at}] ->
+        true = :ets.insert(Summary, {key, {:stale, value}, aged(60_001)})
+
+      [{^key, value, _inserted_at}] ->
+        true = :ets.insert(Summary, {key, value, aged(60_001)})
+    end
   end
+
+  defp aged(ms), do: System.monotonic_time(:millisecond) - ms
 end
