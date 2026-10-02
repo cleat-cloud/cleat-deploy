@@ -8,6 +8,7 @@ import hmac
 import json
 import os
 import sqlite3
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -348,12 +349,7 @@ class Store:
                 )
             ]
             utm = [
-                {
-                    "utm_source": source,
-                    "utm_medium": medium,
-                    "utm_campaign": campaign,
-                    "pageviews": int(n),
-                }
+                _utm_json(source, medium, campaign, n)
                 for source, medium, campaign, n in self.conn.execute(
                     """
                     SELECT utm_source, utm_medium, utm_campaign, COUNT(*)
@@ -427,12 +423,7 @@ class Store:
                 )
             ]
             utm = [
-                {
-                    "utm_source": source,
-                    "utm_medium": medium,
-                    "utm_campaign": campaign,
-                    "pageviews": int(n),
-                }
+                _utm_json(source, medium, campaign, n)
                 for source, medium, campaign, n in self.conn.execute(
                     """
                     SELECT utm_source, utm_medium, utm_campaign, SUM(pageviews)
@@ -578,7 +569,15 @@ class Store:
             )
             self.conn.commit()
             self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            self.conn.execute("VACUUM")
+
+
+def _utm_json(source, medium, campaign, n):
+    return {
+        "source": source,
+        "medium": medium,
+        "campaign": campaign,
+        "pageviews": int(n),
+    }
 
 
 def _range_seconds(range_key):
@@ -603,13 +602,17 @@ def _query_range(query):
     return key
 
 
-def load_hosts(path):
+def load_hosts(path, previous=None):
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
-        return data if isinstance(data, dict) else {}
+        if isinstance(data, dict):
+            return data
     except (OSError, TypeError, ValueError):
-        return {}
+        pass
+    if previous is not None:
+        return previous
+    return {}
 
 
 def load_salt(path):
@@ -634,8 +637,8 @@ def _rollup_loop(store, stop_event):
     while not stop_event.wait(ROLLUP_INTERVAL):
         try:
             store.rollup_and_prune(now_ts=int(time.time()))
-        except Exception:
-            pass
+        except Exception as exc:
+            sys.stderr.write(f"cleat-analytics rollup failed: {exc}\n")
 
 
 class AnalyticsServer(ThreadingHTTPServer):
@@ -651,7 +654,10 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
         return
 
     def _hosts(self):
-        return load_hosts(self.server.hosts_path)
+        previous = getattr(self.server, "hosts", None)
+        hosts = load_hosts(self.server.hosts_path, previous)
+        self.server.hosts = hosts
+        return hosts
 
     def _salt(self):
         salt = load_salt(self.server.salt_path)
@@ -805,6 +811,7 @@ def make_httpd():
     httpd = AnalyticsServer(("127.0.0.1", port), AnalyticsHandler)
     httpd.store = store
     httpd.hosts_path = hosts_path
+    httpd.hosts = load_hosts(hosts_path)
     httpd.salt_path = salt_path
     httpd.salt = salt
     httpd.stop_event = threading.Event()

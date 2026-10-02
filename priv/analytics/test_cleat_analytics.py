@@ -1,5 +1,7 @@
+import contextlib
 import hashlib
 import hmac
+import io
 import json
 import os
 import shutil
@@ -238,6 +240,60 @@ class ParseTest(unittest.TestCase):
         finally:
             os.remove(path)
 
+    def test_trim_does_not_vacuum(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            store = ca.Store(path)
+            executed = []
+
+            class Cursor:
+                def fetchone(self):
+                    return ("1970-01-01",)
+
+            class Conn:
+                def execute(self, sql, *args, **kwargs):
+                    executed.append(sql if isinstance(sql, str) else str(sql))
+                    return Cursor()
+
+                def commit(self):
+                    return None
+
+            store.conn = Conn()
+            sizes = iter([ca.DB_MAX_BYTES + 1, ca.DB_TARGET_BYTES + 1, 0])
+            store._db_size = lambda: next(sizes, 0)
+            store._trim_if_oversized()
+            joined = "\n".join(executed).upper()
+            self.assertIn("DELETE FROM HITS", joined)
+            self.assertIn("WAL_CHECKPOINT", joined)
+            self.assertNotIn("VACUUM", joined)
+        finally:
+            try:
+                store.close()
+            except Exception:
+                pass
+            os.remove(path)
+
+    def test_rollup_loop_logs_failure(self):
+        class Boom:
+            def rollup_and_prune(self, now_ts):
+                raise RuntimeError("disk full")
+
+        class Once:
+            def __init__(self):
+                self.n = 0
+
+            def wait(self, timeout):
+                self.n += 1
+                return self.n > 1
+
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            ca._rollup_loop(Boom(), Once())
+        err = buf.getvalue()
+        self.assertIn("disk full", err)
+        self.assertNotIn("1.1.1.1", err)
+
 
 class HttpTest(unittest.TestCase):
     def setUp(self):
@@ -388,12 +444,33 @@ class HttpTest(unittest.TestCase):
         self.assertGreaterEqual(payload[0]["pageviews"], 1)
 
     def test_app_summary_24h(self):
-        self.assertEqual(self._post_pageview(), 204)
+        self.assertEqual(
+            self._post_pageview(
+                extra={
+                    "u": "https://nfe.gestaobem.com/login?utm_source=google&utm_medium=cpc&utm_campaign=a"
+                }
+            ),
+            204,
+        )
         status, _, body = self._request("/v1/apps/nfe.gestaobem.com?range=24h")
         self.assertEqual(status, 200)
         payload = json.loads(body)
         for key in ("pageviews", "uniques", "series", "paths", "referrers", "utm"):
             self.assertIn(key, payload)
+        self.assertGreaterEqual(len(payload["utm"]), 1)
+        utm = payload["utm"][0]
+        self.assertEqual(utm.get("source"), "google")
+        self.assertEqual(utm.get("medium"), "cpc")
+        self.assertEqual(utm.get("campaign"), "a")
+        self.assertNotIn("utm_source", utm)
+
+    def test_invalid_hosts_keeps_last_good(self):
+        self.assertEqual(self._post_pageview(), 204)
+        self.assertEqual(self._hit_count(), 1)
+        with open(self.hosts_path, "w", encoding="utf-8") as fh:
+            fh.write("{not-json")
+        self.assertEqual(self._post_pageview(), 204)
+        self.assertEqual(self._hit_count(), 2)
 
     def test_oversized_body_no_row(self):
         status, _, _ = self._request(
