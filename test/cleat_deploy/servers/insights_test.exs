@@ -114,4 +114,61 @@ defmodule CleatDeploy.Servers.InsightsTest do
 
     assert Insights.snapshot(scope).server.id == server.id
   end
+
+  test "joins sidecar pageviews to tenant apps on the active server", %{
+    scope: scope,
+    server: server
+  } do
+    TenancyFixtures.app_fixture(scope, server, %{
+      name: "NFe Fácil",
+      slug: "nfe-facil",
+      host: "nfe.gestaobem.com, www.nfe.gestaobem.com"
+    })
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      name: "Plaza",
+      slug: "plaza",
+      host: "plaza.purplestock.com.br"
+    })
+
+    other = TenancyFixtures.scope_fixture()
+    other_server = TenancyFixtures.server_fixture(other)
+
+    TenancyFixtures.app_fixture(other, other_server, %{
+      name: "Secret App",
+      slug: "secret",
+      host: "secret.example.com"
+    })
+
+    Application.put_env(:cleat_deploy, :analytics_visited_stub, [
+      %{host: "nfe.gestaobem.com", slug: "nfe-facil", pageviews: 10},
+      %{host: "https://www.nfe.gestaobem.com:443", slug: "nfe-facil", pageviews: 4},
+      %{host: "plaza.purplestock.com.br", slug: "plaza", pageviews: 3},
+      %{host: "secret.example.com", slug: "secret", pageviews: 99},
+      %{host: "unknown.example.com", slug: "ghost", pageviews: 50}
+    ])
+
+    snapshot = Insights.snapshot(scope)
+
+    assert snapshot.visited_stale == false
+
+    assert Enum.map(snapshot.top_visited, &{&1.slug, &1.pageviews, &1.name}) == [
+             {"nfe-facil", 14, "NFe Fácil"},
+             {"plaza", 3, "Plaza"}
+           ]
+
+    first_paint = Insights.snapshot(scope, metrics: false)
+    assert first_paint.top_visited == []
+    assert first_paint.visited_stale == false
+  after
+    Application.delete_env(:cleat_deploy, :analytics_visited_stub)
+  end
+
+  test "empty visited ranking when the tenant has no server" do
+    scope = TenancyFixtures.scope_fixture()
+    snapshot = Insights.snapshot(scope)
+    assert snapshot.server == nil
+    assert snapshot.top_visited == []
+    assert snapshot.visited_stale == false
+  end
 end
