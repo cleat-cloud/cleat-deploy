@@ -1,6 +1,7 @@
 import contextlib
 import hashlib
 import hmac
+import http.client
 import io
 import json
 import os
@@ -494,11 +495,23 @@ class UpstreamHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/api"):
             body = b'{"ok":true}'
             ctype = "application/json"
+        elif self.path.startswith("/big"):
+            body = b"<html><body>" + b"x" * 200 + b"</body></html>"
+            ctype = "text/html"
         else:
             body = b"<html><body>hi</body></html>"
             ctype = "text/html"
         self.send_response(200)
         self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length else b""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -579,9 +592,12 @@ class ProxyTest(unittest.TestCase):
             time.sleep(0.05)
         self.fail(f"server did not start: {last}")
 
-    def _request(self, path, host="nfe.gestaobem.com"):
+    def _request(self, path, host="nfe.gestaobem.com", method="GET", data=None, headers=None):
+        hdrs = {"Host": host}
+        if headers:
+            hdrs.update(headers)
         req = urllib.request.Request(
-            self.base + path, method="GET", headers={"Host": host}
+            self.base + path, data=data, method=method, headers=hdrs
         )
         try:
             with urllib.request.urlopen(req, timeout=2) as resp:
@@ -609,6 +625,61 @@ class ProxyTest(unittest.TestCase):
         self.upstream.server_close()
         status, _, _ = self._request("/login")
         self.assertEqual(status, 502)
+
+    def test_oversized_html_streams_without_inject(self):
+        orig_max = ca.HTML_MAX
+        orig_getresponse = http.client.HTTPConnection.getresponse
+        orig_read = http.client.HTTPResponse.read
+        amts = []
+        upstream_port = self.upstream_port
+
+        def spy_getresponse(conn):
+            resp = orig_getresponse(conn)
+            if conn.port == upstream_port:
+                def tracked(amt=None):
+                    amts.append(amt)
+                    return orig_read(resp, amt)
+
+                resp.read = tracked
+            return resp
+
+        ca.HTML_MAX = 64
+        http.client.HTTPConnection.getresponse = spy_getresponse
+        try:
+            status, headers, body = self._request("/big")
+            self.assertEqual(status, 200)
+            self.assertNotIn(b"<script", body)
+            self.assertIn(b"x" * 200, body)
+            self.assertTrue(amts, "sidecar never read upstream")
+            self.assertTrue(all(amt is not None and amt > 0 for amt in amts), amts)
+            cl = headers.get("Content-Length")
+            self.assertTrue(cl in (None, ""), cl)
+        finally:
+            ca.HTML_MAX = orig_max
+            http.client.HTTPConnection.getresponse = orig_getresponse
+
+    def test_post_body_forwarded(self):
+        payload = b"hello-upload"
+        status, _, body = self._request(
+            "/echo",
+            method="POST",
+            data=payload,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, payload)
+
+    def test_post_without_content_length_rejected(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+        try:
+            conn.putrequest("POST", "/echo")
+            conn.putheader("Host", "nfe.gestaobem.com")
+            conn.putheader("Content-Type", "text/plain")
+            conn.endheaders()
+            resp = conn.getresponse()
+            self.assertIn(resp.status, (411, 502))
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

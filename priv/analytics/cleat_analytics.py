@@ -47,6 +47,7 @@ HOP_BY_HOP = frozenset(
         "upgrade",
     }
 )
+METHODS_WITH_BODY = frozenset({"POST", "PUT", "PATCH"})
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS hits (
@@ -630,6 +631,24 @@ def load_hosts(path, previous=None):
     return {}
 
 
+class LimitedReader:
+    """Read at most `remaining` bytes from a file-like, in chunks."""
+
+    def __init__(self, fp, remaining):
+        self._fp = fp
+        self._remaining = max(0, int(remaining))
+
+    def read(self, amt=-1):
+        if self._remaining <= 0:
+            return b""
+        if amt is None or amt < 0:
+            amt = self._remaining
+        amt = min(int(amt), self._remaining)
+        data = self._fp.read(amt)
+        self._remaining -= len(data)
+        return data
+
+
 def split_upstream(upstream):
     raw = (upstream or "").strip()
     if not raw:
@@ -859,14 +878,14 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             return
         host, port = target
         try:
-            body = None
-            if self.command not in ("GET", "HEAD"):
-                body = self._read_proxy_body()
             headers = {}
             for key, value in self.headers.items():
                 if key.lower() in HOP_BY_HOP:
                     continue
                 headers[key] = value
+            body = self._proxy_request_body()
+            if body is False:
+                return
             conn = http.client.HTTPConnection(host, port, timeout=PROXY_TIMEOUT)
             try:
                 conn.request(self.command, self.path, body=body, headers=headers)
@@ -879,17 +898,32 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
-    def _read_proxy_body(self):
+    def _proxy_request_body(self):
+        if self.command in METHODS_WITH_BODY:
+            te = (self.headers.get("Transfer-Encoding") or "").lower()
+            length_hdr = self.headers.get("Content-Length")
+            if "chunked" in te or length_hdr in (None, ""):
+                self.close_connection = True
+                self._send(411, b"")
+                return False
+            try:
+                length = int(length_hdr)
+            except ValueError:
+                self.close_connection = True
+                self._send(502, b"")
+                return False
+            if length < 0:
+                self.close_connection = True
+                self._send(502, b"")
+                return False
+            return LimitedReader(self.rfile, length)
         length_hdr = self.headers.get("Content-Length")
-        if not length_hdr:
-            return b""
-        try:
-            length = int(length_hdr)
-        except ValueError:
-            return b""
-        if length <= 0:
-            return b""
-        return self.rfile.read(length)
+        if length_hdr:
+            try:
+                return LimitedReader(self.rfile, int(length_hdr))
+            except ValueError:
+                return None
+        return None
 
     def _relay(self, resp):
         content_type = (resp.getheader("Content-Type") or "").lower()
@@ -902,17 +936,31 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             data = resp.read(HTML_MAX + 1)
             if len(data) <= HTML_MAX:
                 data = inject_html(data)
-            else:
-                data = data + resp.read()
+                self.send_response(resp.status, resp.reason)
+                for key, value in filtered:
+                    if key.lower() == "content-length":
+                        continue
+                    self.send_header(key, value)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(data)
+                return
             self.send_response(resp.status, resp.reason)
             for key, value in filtered:
                 if key.lower() == "content-length":
                     continue
                 self.send_header(key, value)
-            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Connection", "close")
+            self.close_connection = True
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(data)
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
             return
         self.send_response(resp.status, resp.reason)
         has_length = False
