@@ -2,8 +2,14 @@ import hashlib
 import hmac
 import json
 import os
+import shutil
+import sqlite3
 import tempfile
+import threading
+import time
 import unittest
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 import cleat_analytics as ca
@@ -233,5 +239,173 @@ class ParseTest(unittest.TestCase):
             os.remove(path)
 
 
+class HttpTest(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.mkdtemp(prefix="cleat-analytics-")
+        self.db_path = os.path.join(self._tmpdir, "analytics.db")
+        self.hosts_path = os.path.join(self._tmpdir, "hosts.json")
+        self.salt_path = os.path.join(self._tmpdir, "salt")
+        with open(self.hosts_path, "w", encoding="utf-8") as fh:
+            json.dump(
+                {
+                    "nfe.gestaobem.com": {
+                        "slug": "nfe-facil",
+                        "upstream": "127.0.0.1:9",
+                    }
+                },
+                fh,
+            )
+        with open(self.salt_path, "wb") as fh:
+            fh.write(b"s" * 32)
+        self._env = {
+            "CLEAT_ANALYTICS_DB": self.db_path,
+            "CLEAT_ANALYTICS_HOSTS": self.hosts_path,
+            "CLEAT_ANALYTICS_SALT": self.salt_path,
+            "CLEAT_ANALYTICS_PORT": "0",
+        }
+        self._old_env = {key: os.environ.get(key) for key in self._env}
+        os.environ.update(self._env)
+        self.httpd = ca.make_httpd()
+        self.port = self.httpd.server_address[1]
+        self.base = f"http://127.0.0.1:{self.port}"
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+        self._wait_up()
+
+    def tearDown(self):
+        try:
+            self.httpd.shutdown()
+            self.httpd.server_close()
+        except Exception:
+            pass
+        store = getattr(self.httpd, "store", None)
+        if store is not None:
+            try:
+                store.close()
+            except Exception:
+                pass
+        for key, value in self._old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def _wait_up(self):
+        url = self.base + "/healthz"
+        last = None
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(url, timeout=0.2) as resp:
+                    if resp.status == 200:
+                        return
+            except Exception as exc:
+                last = exc
+            time.sleep(0.05)
+        self.fail(f"server did not start: {last}")
+
+    def _request(self, path, method="GET", data=None, host="nfe.gestaobem.com", headers=None):
+        hdrs = {"Host": host}
+        if headers:
+            hdrs.update(headers)
+        req = urllib.request.Request(self.base + path, data=data, method=method, headers=hdrs)
+        try:
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return resp.status, resp.headers, resp.read()
+        except urllib.error.HTTPError as err:
+            return err.code, err.headers, err.read()
+
+    def _post_pageview(self, host="nfe.gestaobem.com", extra=None):
+        payload = {"n": "pageview", "u": "https://nfe.gestaobem.com/login", "r": "https://google.com/q"}
+        if extra:
+            payload.update(extra)
+        status, _, _ = self._request(
+            "/cleat/a",
+            method="POST",
+            data=json.dumps(payload).encode(),
+            host=host,
+            headers={"Content-Type": "application/json", "User-Agent": "ua"},
+        )
+        return status
+
+    def _hit_count(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            return conn.execute("SELECT COUNT(*) FROM hits").fetchone()[0]
+        finally:
+            conn.close()
+
+    def test_healthz(self):
+        status, _, _ = self._request("/healthz")
+        self.assertEqual(status, 200)
+
+    def test_script(self):
+        status, headers, body = self._request("/cleat/a.js")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get_content_type(), "application/javascript")
+        self.assertIn("max-age=3600", headers.get("Cache-Control", ""))
+        self.assertIn("public", headers.get("Cache-Control", ""))
+        self.assertIn("sendBeacon", body.decode())
+
+    def test_collect_pageview(self):
+        status = self._post_pageview()
+        self.assertEqual(status, 204)
+        self.assertEqual(self._hit_count(), 1)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='hits'"
+            ).fetchone()[0]
+            self.assertNotIn(" ip", " " + sql.lower())
+            cols = [row[1].lower() for row in conn.execute("PRAGMA table_info(hits)")]
+            self.assertNotIn("ip", cols)
+            self.assertNotIn("ua", cols)
+            self.assertNotIn("user_agent", cols)
+            row = dict(
+                zip(
+                    cols,
+                    conn.execute("SELECT * FROM hits").fetchone(),
+                )
+            )
+            self.assertNotIn("ip", row)
+        finally:
+            conn.close()
+
+    def test_unknown_host_no_row(self):
+        status = self._post_pageview(host="nope.example")
+        self.assertEqual(status, 204)
+        self.assertEqual(self._hit_count(), 0)
+
+    def test_visited_24h(self):
+        self.assertEqual(self._post_pageview(), 204)
+        status, _, body = self._request("/v1/visited?range=24h")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertIsInstance(payload, list)
+        self.assertGreaterEqual(len(payload), 1)
+        self.assertEqual(payload[0]["host"], "nfe.gestaobem.com")
+        self.assertEqual(payload[0]["slug"], "nfe-facil")
+        self.assertGreaterEqual(payload[0]["pageviews"], 1)
+
+    def test_app_summary_24h(self):
+        self.assertEqual(self._post_pageview(), 204)
+        status, _, body = self._request("/v1/apps/nfe.gestaobem.com?range=24h")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        for key in ("pageviews", "uniques", "series", "paths", "referrers", "utm"):
+            self.assertIn(key, payload)
+
+    def test_oversized_body_no_row(self):
+        status, _, _ = self._request(
+            "/cleat/a",
+            method="POST",
+            data=b"x" * (8 * 1024 + 1),
+            headers={"Content-Type": "text/plain", "User-Agent": "ua"},
+        )
+        self.assertEqual(status, 204)
+        self.assertEqual(self._hit_count(), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
+
