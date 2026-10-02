@@ -40,4 +40,26 @@ defmodule CleatDeploy.Analytics.HostsTest do
     refute Map.has_key?(payload, "memo.sites.gestaobem.com")
     refute Map.has_key?(payload, "chat.example.com")
   end
+
+  test "expands comma-separated host aliases" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      slug: "nfe-facil",
+      host: "nfe.gestaobem.com, nfe.apps.gestaobem.com",
+      port: 4033,
+      runtime: "phoenix"
+    })
+
+    payload = Hosts.payload(server.id)
+
+    expected = %{
+      "slug" => "nfe-facil",
+      "upstream" => "127.0.0.1:4033"
+    }
+
+    assert payload["nfe.gestaobem.com"] == expected
+    assert payload["nfe.apps.gestaobem.com"] == expected
+  end
 end
