@@ -13,7 +13,7 @@ defmodule CleatDeploy.Analytics.Caddy do
     cond do
       inject? -> inject_on_site(app, opts)
       runtime == "static" -> static_off_site(app, opts)
-      true -> runtime_off_site(app)
+      true -> runtime_off_site(app, opts)
     end
   end
 
@@ -22,12 +22,15 @@ defmodule CleatDeploy.Analytics.Caddy do
     if field(app, :runtime) == "static" and field(app, :analytics_inject) == true do
       port = field(app, :port)
       static_root = Keyword.fetch!(opts, :static_root)
+      robots_header = Keyword.get(opts, :robots_header, "")
 
       """
       http://127.0.0.1:#{port} {
         bind 127.0.0.1
         root * #{static_root}
         try_files {path} {path}/index.html /index.html
+        header Cache-Control "no-cache"
+        #{robots_header}
         file_server
       }
       """
@@ -48,6 +51,8 @@ defmodule CleatDeploy.Analytics.Caddy do
     port = field(app, :port)
     listen = Analytics.listen_port()
 
+    # Caddy 2.11 sorts site-level forward_auth before handle, so collect
+    # paths stay exclusive only if wake+WS+failover live in a fallback handle.
     [
       """
       #{host} {
@@ -60,22 +65,25 @@ defmodule CleatDeploy.Analytics.Caddy do
         handle /cleat/a {
           reverse_proxy 127.0.0.1:#{listen}
         }
+        handle {
       """,
-      wake_block(app, opts),
+      wake_block(app, opts, "    "),
       """
-        @cleat_ws {
-          header Connection *Upgrade*
-          header Upgrade websocket
-        }
-        handle @cleat_ws {
-          reverse_proxy 127.0.0.1:#{port}
-        }
-        reverse_proxy 127.0.0.1:#{listen} 127.0.0.1:#{port} {
-          lb_policy first
-          fail_duration 10s
-          max_fails 1
-          transport http {
-            dial_timeout 250ms
+          @cleat_ws {
+            header Connection *Upgrade*
+            header Upgrade websocket
+          }
+          handle @cleat_ws {
+            reverse_proxy 127.0.0.1:#{port}
+          }
+          reverse_proxy 127.0.0.1:#{listen} 127.0.0.1:#{port} {
+            lb_policy first
+            lb_retries 1
+            fail_duration 10s
+            max_fails 1
+            transport http {
+              dial_timeout 250ms
+            }
           }
         }
       }
@@ -84,13 +92,13 @@ defmodule CleatDeploy.Analytics.Caddy do
     |> IO.iodata_to_binary()
   end
 
-  defp wake_block(app, opts) do
+  defp wake_block(app, opts, pad) do
     case Keyword.get(opts, :wake_unit) do
       unit when is_binary(unit) ->
         """
-          forward_auth 127.0.0.1:#{opts[:wake_port] || 3900} {
-            uri /wake?unit=#{unit}&port=#{field(app, :port)}
-          }
+        #{pad}forward_auth 127.0.0.1:#{opts[:wake_port] || 3900} {
+        #{pad}  uri /wake?unit=#{unit}&port=#{field(app, :port)}
+        #{pad}}
         """
 
       _ ->
@@ -98,19 +106,25 @@ defmodule CleatDeploy.Analytics.Caddy do
     end
   end
 
-  defp runtime_off_site(app) do
+  defp runtime_off_site(app, opts) do
     host = address(field(app, :host))
     slug = field(app, :slug)
     port = field(app, :port)
 
-    """
-    #{host} {
-      # paas:app=#{slug}
-      log
-      encode gzip
-      reverse_proxy 127.0.0.1:#{port}
-    }
-    """
+    [
+      """
+      #{host} {
+        # paas:app=#{slug}
+        log
+        encode gzip
+      """,
+      wake_block(app, opts, "  "),
+      """
+        reverse_proxy 127.0.0.1:#{port}
+      }
+      """
+    ]
+    |> IO.iodata_to_binary()
   end
 
   defp static_off_site(app, opts) do
