@@ -29,6 +29,8 @@ defmodule CleatDeploy.Deploy.TeardownTest do
     assert script =~ ~s(rm -f '/var/lib/cleat/stamps/cifra.stamp')
     assert script =~ ~s(rm -f '/var/lib/cleat/stamps/cifra-worker.stamp')
     assert script =~ "CLEAT_REMOVE_HOST="
+    assert script =~ ~s(CLEAT_REMOVE_HOST='finops.gestaobem.com')
+    assert script =~ ~s(CLEAT_REMOVE_HOST='http://127.0.0.1:#{app.port}')
   end
 
   test "script drops the managed addon data when the app is deleted" do
@@ -76,6 +78,7 @@ defmodule CleatDeploy.Deploy.TeardownTest do
     script = Teardown.remove_host_script("old.sites.gestaobem.com")
 
     assert script =~ "CLEAT_REMOVE_HOST='old.sites.gestaobem.com'"
+    refute script =~ "127.0.0.1"
     assert script =~ "reload caddy"
   end
 
