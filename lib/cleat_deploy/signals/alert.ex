@@ -1,6 +1,6 @@
 defmodule CleatDeploy.Signals.Alert do
   @moduledoc """
-  A default Corte 02 alert: unavailability, error rate or saturation.
+  A default Corte 02 alert: unavailability, deploy failed, error rate or saturation.
   """
 
   use Ecto.Schema
@@ -9,7 +9,7 @@ defmodule CleatDeploy.Signals.Alert do
   alias CleatDeploy.Accounts.Tenant
   alias CleatDeploy.Apps.App
 
-  @rules ~w(unavailability error_rate saturation)
+  @rules ~w(unavailability deploy_failed error_rate saturation)
   @statuses ~w(firing acked resolved)
   @channels ~w(in_app webhook)
 

@@ -99,7 +99,7 @@ defmodule CleatDeploy.SignalsTest do
       assert degraded.preceding_release.git_sha == "bbb2222"
     end
 
-    test "marks an app down when the latest finished deploy failed", ctx do
+    test "flags a recent failed deploy as degraded, not unavailable", ctx do
       now = DateTime.utc_now(:second)
 
       failed =
@@ -110,11 +110,51 @@ defmodule CleatDeploy.SignalsTest do
         )
 
       rows = Signals.health_overview(ctx.scope, now: now)
-      down = Enum.find(rows, &(&1.slug == ctx.app.slug))
+      row = Enum.find(rows, &(&1.slug == ctx.app.slug))
 
-      assert down.status == :down
-      assert :unavailability in down.reasons
-      assert down.preceding_release.id == failed.id
+      assert row.status == :degraded
+      assert :deploy_failed in row.reasons
+      refute :unavailability in row.reasons
+      assert row.preceding_release.id == failed.id
+    end
+
+    test "does not keep a stale failed deploy as down once it is outside the window", ctx do
+      now = DateTime.utc_now(:second)
+
+      insert_deploy(ctx.app,
+        git_sha: "deadbeef",
+        status: :failed,
+        finished_at: DateTime.add(now, -7_200, :second)
+      )
+
+      rows = Signals.health_overview(ctx.scope, now: now)
+      row = Enum.find(rows, &(&1.slug == ctx.app.slug))
+
+      assert row.status == :healthy
+      assert row.reasons == []
+    end
+
+    test "a later successful deploy clears deploy_failed", ctx do
+      now = DateTime.utc_now(:second)
+
+      insert_deploy(ctx.app,
+        git_sha: "deadbeef",
+        status: :failed,
+        finished_at: DateTime.add(now, -180, :second)
+      )
+
+      insert_deploy(ctx.app,
+        git_sha: "cafebabe",
+        status: :success,
+        finished_at: DateTime.add(now, -60, :second)
+      )
+
+      rows = Signals.health_overview(ctx.scope, now: now)
+      row = Enum.find(rows, &(&1.slug == ctx.app.slug))
+
+      assert row.status == :healthy
+      refute :deploy_failed in row.reasons
+      refute :unavailability in row.reasons
     end
 
     test "marks saturation from out-of-memory log lines", ctx do
