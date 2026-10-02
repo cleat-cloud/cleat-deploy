@@ -93,6 +93,13 @@ defmodule CleatDeploy.Deploy.ServerProvision do
         unit_name = golang_unit_name(config.systemd_unit, bin)
         exec = "#{config.release_path}/current/bin/#{bin}"
         description = golang_unit_description(app.name, bin)
+        # Cais parseListenPort wants PORT=:<port>. Panel env can still override.
+        listen_env =
+          if bin == "server" do
+            "Environment=HOST=127.0.0.1\nEnvironment=PORT=:#{app.port}"
+          else
+            ""
+          end
 
         unit = """
         [Unit]
@@ -108,6 +115,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
         WorkingDirectory=#{config.release_path}/current
         EnvironmentFile=#{config.env_file}
         Environment=CLEAT_DATA_DIR=#{data_dir}
+        #{listen_env}
         ExecStart=#{exec}
         Restart=always
         RestartSec=5

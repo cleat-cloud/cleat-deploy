@@ -96,9 +96,11 @@ extra names become `<unit>-<name>`), publishes `bin/` plus `web/static` to
 with a systemd unit behind Caddy. `MemoryMax` defaults to 256M.
 
 If the repo has `package.json`, Node 22 is installed and `npm ci` + `npm run build`
-run **before** `go build` (frontend assets). The unit sources the panel env file
-and `CLEAT_DATA_DIR`; it does not inject `PORT` or `ENV`. Amarra-cais apps
-typically set `PORT=:<port>`, `ENV=production`,
+run **before** `go build` (frontend assets). The HTTP unit (`server`) sources the
+panel env file and injects `CLEAT_DATA_DIR`, `HOST=127.0.0.1` and
+`PORT=:<app.port>` (colon-prefixed for Amarra-cais `parseListenPort`). Workers
+do not get `PORT`. Panel env can override those keys. Typical extras:
+`ENV=production`,
 `DB_PATH=/opt/<slug>/data/app.db`,
 `STATIC_DIR=/opt/<slug>/current/web/static` and `TRUSTED_PROXIES=127.0.0.1`.
 The HTTP unit is not considered ready until it answers on the app port with
