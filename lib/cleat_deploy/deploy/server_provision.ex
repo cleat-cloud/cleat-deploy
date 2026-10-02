@@ -425,7 +425,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     site_opts =
       if static_root, do: Keyword.put(site_opts, :static_root, static_root), else: site_opts
 
-    # Marker must match caddy_site_script's app= slug-origin so a port change
+    # Marker must match awk app= slug-origin so a port change (or inject-off)
     # strips the previous loopback site without touching the public block.
     origin =
       if static_root do
@@ -436,26 +436,27 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       end
 
     block = Analytics.Caddy.public_site(app_map, site_opts)
-    public = caddy_site_script(address, block, app.slug)
 
-    origin_script =
+    bodies =
       case origin do
         origin when is_binary(origin) and origin != "" ->
-          caddy_site_script(
-            "http://127.0.0.1:#{app.port}",
-            origin,
-            app.slug <> "-origin"
-          )
+          String.trim_trailing(block) <> "\n" <> String.trim_trailing(origin)
 
         _ ->
-          ""
+          block
       end
+
+    # Always strip the loopback origin: a former static inject-on site (or a
+    # toggle-off) would otherwise keep file_server bound on the app port.
+    public =
+      caddy_site_script(address, bodies, app.slug, [
+        {"http://127.0.0.1:#{app.port}", app.slug <> "-origin"}
+      ])
 
     arm = if wake?, do: Wake.arm_script(config.systemd_unit), else: ""
 
     """
     #{public}
-    #{origin_script}
     #{arm}
     #{AnalyticsProvision.install_script(app)}
     """
@@ -572,7 +573,17 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     |> String.trim()
   end
 
-  defp caddy_site_script(address, caddy_site, slug) do
+  defp caddy_site_script(address, caddy_site, slug, extra_strips) do
+    extra_awk =
+      Enum.map_join(extra_strips, "\n", fn {site, app} ->
+        """
+        sudo awk -v site=#{shell_escape(site)} -v app=#{shell_escape(app)} '
+          #{caddy_strip_awk()}
+        ' "$TMPFILE" > "$TMPFILE.next"
+        mv "$TMPFILE.next" "$TMPFILE"
+        """
+      end)
+
     """
     #{ensure_caddy_script()}
 
@@ -583,6 +594,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       sudo awk -v site=#{shell_escape(address)} -v app=#{shell_escape(slug)} '
         #{caddy_strip_awk()}
       ' "$CADDYFILE" > "$TMPFILE"
+      #{extra_awk}
       cat >> "$TMPFILE"
       if command -v python3 >/dev/null 2>&1; then
         python3 - "$TMPFILE" <<'PAAS_CADDY_ACCESS'

@@ -17,17 +17,20 @@ defmodule CleatDeploy.Deploy.AnalyticsProvision do
   @doc """
   Installs or refreshes the sidecar on the host.
 
-  No-op when this app is inject-off and no other inject-on app lives on the
-  same server. A toggle-off deploy with siblings still rewrites hosts JSON so
-  the disabled host disappears.
+  Hosts JSON is always rewritten when `server_id` is set, including `{}` on the
+  last inject-off so a disabled host disappears. Python and the systemd unit
+  are installed only when this app is inject-on or another inject-on app still
+  lives on the server — a first-time generic static drop must not enable a
+  crashing placeholder unit.
   """
   def install_script(%App{} = app) do
     payload = hosts_payload(app)
+    install_unit? = app.analytics_inject == true or payload != %{}
 
-    if app.analytics_inject != true and payload == %{} do
-      ""
-    else
-      render_install_script(payload)
+    cond do
+      install_unit? -> render_install_script(payload)
+      is_integer(app.server_id) -> render_hosts_script(payload)
+      true -> ""
     end
   end
 
@@ -56,9 +59,7 @@ defmodule CleatDeploy.Deploy.AnalyticsProvision do
     #{String.trim_trailing(unit_file())}
     CLEAT_ANALYTICS_UNIT
 
-    cat > /tmp/cleat_analytics_hosts.json <<'CLEAT_ANALYTICS_HOSTS'
-    #{Jason.encode!(payload)}
-    CLEAT_ANALYTICS_HOSTS
+    #{hosts_heredoc(payload)}
 
     PY_CHANGED=0
     if ! sudo cmp -s /tmp/cleat_analytics.py #{@python_path}; then PY_CHANGED=1; fi
@@ -78,6 +79,28 @@ defmodule CleatDeploy.Deploy.AnalyticsProvision do
     else
       sudo systemctl start #{@unit} 2>/dev/null || true
     fi
+    """
+    |> String.trim()
+  end
+
+  defp render_hosts_script(payload) do
+    """
+    log "Refreshing analytics hosts"
+    sudo mkdir -p /etc/cleat
+
+    #{hosts_heredoc(payload)}
+
+    sudo install -m 0644 -o root -g root /tmp/cleat_analytics_hosts.json #{@hosts_path}
+    rm -f /tmp/cleat_analytics_hosts.json
+    """
+    |> String.trim()
+  end
+
+  defp hosts_heredoc(payload) do
+    """
+    cat > /tmp/cleat_analytics_hosts.json <<'CLEAT_ANALYTICS_HOSTS'
+    #{Jason.encode!(payload)}
+    CLEAT_ANALYTICS_HOSTS
     """
     |> String.trim()
   end
