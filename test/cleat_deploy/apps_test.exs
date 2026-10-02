@@ -826,6 +826,40 @@ defmodule CleatDeploy.AppsTest do
 
   defp restore_app_env(key, nil), do: Application.delete_env(:cleat_deploy, key)
   defp restore_app_env(key, value), do: Application.put_env(:cleat_deploy, key, value)
+
+  describe "analytics_inject" do
+    test "phoenix insert defaults on", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix", slug: "nfe-x"})
+      assert app.analytics_inject
+    end
+
+    test "static insert defaults off", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{runtime: "static", slug: "memo-x"})
+      refute app.analytics_inject
+    end
+
+    test "static product LP defaults on", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{runtime: "static", slug: "cleat"})
+      assert app.analytics_inject
+    end
+
+    test "explicit false wins on insert", %{scope: scope, server: server} do
+      app =
+        TenancyFixtures.app_fixture(scope, server, %{
+          runtime: "phoenix",
+          analytics_inject: false
+        })
+
+      refute app.analytics_inject
+    end
+
+    test "set_analytics_inject/3 flips the flag", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{runtime: "static", slug: "memo-y"})
+      refute app.analytics_inject
+      assert {:ok, updated} = Apps.set_analytics_inject(scope, app, true)
+      assert updated.analytics_inject
+    end
+  end
 end
 
 defmodule CleatDeploy.AppsTest.GithubErrorStub do

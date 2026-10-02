@@ -28,6 +28,7 @@ defmodule CleatDeploy.Apps.App do
     field :release_name, :string
     field :custom_domain, CleatDeploy.EctoBool, default: false
     field :trace_sample_rate, :float, default: 0.0
+    field :analytics_inject, :boolean, default: false
 
     belongs_to :tenant, Tenant
     belongs_to :server, Server
@@ -56,6 +57,7 @@ defmodule CleatDeploy.Apps.App do
       :runtime_packages_text,
       :release_name,
       :custom_domain,
+      :analytics_inject,
       :server_id,
       :tenant_id
     ])
@@ -84,6 +86,7 @@ defmodule CleatDeploy.Apps.App do
     |> foreign_key_constraint(:server_id)
     |> put_default_webhook_secret()
     |> put_deploy_defaults()
+    |> put_analytics_inject_default()
   end
 
   def sampling_changeset(app, attrs) do
@@ -94,6 +97,27 @@ defmodule CleatDeploy.Apps.App do
       greater_than_or_equal_to: 0.0,
       less_than_or_equal_to: 1.0
     )
+  end
+
+  def analytics_inject_changeset(app, attrs) do
+    app
+    |> cast(attrs, [:analytics_inject])
+    |> validate_required([:analytics_inject])
+  end
+
+  defp put_analytics_inject_default(%Ecto.Changeset{} = changeset) do
+    if Map.has_key?(changeset.params || %{}, "analytics_inject") do
+      changeset
+    else
+      runtime = get_field(changeset, :runtime) || "phoenix"
+      slug = get_field(changeset, :slug) || ""
+
+      put_change(
+        changeset,
+        :analytics_inject,
+        CleatDeploy.Analytics.default_inject?(runtime, slug)
+      )
+    end
   end
 
   def branch_changeset(app, attrs) do
