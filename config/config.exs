@@ -121,6 +121,7 @@ config :phoenix, :json_library, Jason
 # Spine analytics defaults. Collection lives on the VPS sidecar, not in cleat.db.
 config :cleat_deploy, :analytics_listen_port, 8799
 config :cleat_deploy, :analytics_product_lp_slugs, ~w(cleat cleat-paas fagulha)
+config :cleat_deploy, :analytics_client, CleatDeploy.Analytics.SummaryHttp
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
