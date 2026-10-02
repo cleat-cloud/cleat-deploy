@@ -371,7 +371,10 @@ class HttpTest(unittest.TestCase):
             with urllib.request.urlopen(req, timeout=2) as resp:
                 return resp.status, resp.headers, resp.read()
         except urllib.error.HTTPError as err:
-            return err.code, err.headers, err.read()
+            try:
+                return err.code, err.headers, err.read()
+            finally:
+                err.close()
 
     def _post_pageview(self, host="nfe.gestaobem.com", extra=None):
         payload = {"n": "pageview", "u": "https://nfe.gestaobem.com/login", "r": "https://google.com/q"}
@@ -394,11 +397,17 @@ class HttpTest(unittest.TestCase):
             conn.close()
 
     def test_healthz(self):
-        status, _, _ = self._request("/healthz")
+        status, _, body = self._request("/healthz", host="127.0.0.1")
         self.assertEqual(status, 200)
+        self.assertEqual(body, b"ok")
+
+    def test_public_host_does_not_serve_healthz(self):
+        status, _, body = self._request("/healthz", host="nfe.gestaobem.com")
+        self.assertNotEqual(body, b"ok")
+        self.assertNotEqual(status, 200)
 
     def test_script(self):
-        status, headers, body = self._request("/cleat/a.js")
+        status, headers, body = self._request("/cleat/a.js", host="nfe.gestaobem.com")
         self.assertEqual(status, 200)
         self.assertEqual(headers.get_content_type(), "application/javascript")
         self.assertIn("max-age=3600", headers.get("Cache-Control", ""))
@@ -436,7 +445,7 @@ class HttpTest(unittest.TestCase):
 
     def test_visited_24h(self):
         self.assertEqual(self._post_pageview(), 204)
-        status, _, body = self._request("/v1/visited?range=24h")
+        status, _, body = self._request("/v1/visited?range=24h", host="127.0.0.1")
         self.assertEqual(status, 200)
         payload = json.loads(body)
         self.assertIsInstance(payload, list)
@@ -444,6 +453,16 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(payload[0]["host"], "nfe.gestaobem.com")
         self.assertEqual(payload[0]["slug"], "nfe-facil")
         self.assertGreaterEqual(payload[0]["pageviews"], 1)
+
+    def test_public_host_does_not_serve_visited(self):
+        self.assertEqual(self._post_pageview(), 204)
+        status, _, body = self._request("/v1/visited?range=90d", host="nfe.gestaobem.com")
+        self.assertNotEqual(status, 200)
+        try:
+            payload = json.loads(body)
+        except (TypeError, ValueError):
+            payload = None
+        self.assertFalse(isinstance(payload, list))
 
     def test_app_summary_24h(self):
         self.assertEqual(
@@ -454,7 +473,9 @@ class HttpTest(unittest.TestCase):
             ),
             204,
         )
-        status, _, body = self._request("/v1/apps/nfe.gestaobem.com?range=24h")
+        status, _, body = self._request(
+            "/v1/apps/nfe.gestaobem.com?range=24h", host="127.0.0.1"
+        )
         self.assertEqual(status, 200)
         payload = json.loads(body)
         for key in ("pageviews", "uniques", "series", "paths", "referrers", "utm"):
@@ -465,6 +486,18 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(utm.get("medium"), "cpc")
         self.assertEqual(utm.get("campaign"), "a")
         self.assertNotIn("utm_source", utm)
+
+    def test_public_host_does_not_serve_app_summary(self):
+        self.assertEqual(self._post_pageview(), 204)
+        status, _, body = self._request(
+            "/v1/apps/nfe.gestaobem.com", host="nfe.gestaobem.com"
+        )
+        self.assertNotEqual(status, 200)
+        try:
+            payload = json.loads(body)
+        except (TypeError, ValueError):
+            payload = None
+        self.assertFalse(isinstance(payload, dict) and "pageviews" in payload)
 
     def test_invalid_hosts_keeps_last_good(self):
         self.assertEqual(self._post_pageview(), 204)

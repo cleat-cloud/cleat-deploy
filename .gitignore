@@ -56,3 +56,6 @@ npm-debug.log
 
 # Git worktrees (subagent-driven development)
 .worktrees/
+
+# Python bytecode from the analytics sidecar tests
+__pycache__/

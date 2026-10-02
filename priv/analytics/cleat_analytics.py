@@ -775,12 +775,12 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
     def _send_json(self, payload):
         self._send(200, json.dumps(payload).encode(), "application/json")
 
+    def _is_loopback_host(self):
+        return canonical_host(self.headers.get("Host")) in ("127.0.0.1", "localhost")
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
-        if path == "/healthz":
-            self._send(200, b"ok")
-            return
         if path == "/cleat/a.js":
             self._send(
                 200,
@@ -789,7 +789,11 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
                 extra={"Cache-Control": "public, max-age=3600"},
             )
             return
-        if path == "/v1/visited":
+        loopback = self._is_loopback_host()
+        if loopback and path == "/healthz":
+            self._send(200, b"ok")
+            return
+        if loopback and path == "/v1/visited":
             try:
                 hosts = self._hosts()
                 payload = self.server.store.visited(
@@ -801,7 +805,7 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             except Exception:
                 self._send_json([])
             return
-        if path.startswith("/v1/apps/"):
+        if loopback and path.startswith("/v1/apps/"):
             host = unquote(path[len("/v1/apps/") :])
             try:
                 hosts = self._hosts()
