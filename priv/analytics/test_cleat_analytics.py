@@ -669,17 +669,28 @@ class ProxyTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body, payload)
 
-    def test_post_without_content_length_rejected(self):
+    def _post_mapped_host(self, extra_headers=None):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
         try:
-            conn.putrequest("POST", "/echo")
+            conn.putrequest("POST", "/echo", skip_host=True)
             conn.putheader("Host", "nfe.gestaobem.com")
             conn.putheader("Content-Type", "text/plain")
+            for key, value in extra_headers or []:
+                conn.putheader(key, value)
             conn.endheaders()
             resp = conn.getresponse()
-            self.assertIn(resp.status, (411, 502))
+            return resp.status
         finally:
             conn.close()
+
+    def test_post_without_content_length_rejected(self):
+        self.assertEqual(self._post_mapped_host(), 411)
+
+    def test_post_chunked_rejected(self):
+        self.assertEqual(
+            self._post_mapped_host([("Transfer-Encoding", "chunked")]),
+            411,
+        )
 
 
 if __name__ == "__main__":
