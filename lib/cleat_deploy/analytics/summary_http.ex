@@ -89,7 +89,7 @@ defmodule CleatDeploy.Analytics.SummaryHttp do
         end
       end)
 
-    case Task.yield(task, 3_000) || Task.shutdown(task, :brutal_kill) do
+    case Task.yield(task, 3_000) || Task.shutdown(task, 100) do
       {:ok, {:ok, output}} -> {:ok, output}
       {:ok, {:error, reason}} -> {:error, reason}
       {:ok, other} -> {:error, other}
