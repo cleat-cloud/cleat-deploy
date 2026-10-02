@@ -3,7 +3,8 @@ defmodule CleatDeploy.Apps.EnvApply do
   Writes the panel env file onto the server and restarts units that are already
   active, so `env_set` takes effect without a deploy.
 
-  Hibernated units stay down: the file is updated and they pick it up on wake.
+  Failed / start-limit-hit units are reset and started: a crash from bad env
+  is not hibernate. Hibernated units (inactive with a wake stamp) stay down.
   Static apps have no unit. Vars scoped to a branch other than the running
   deploy are stored only; they apply on the next deploy of that branch.
   """
@@ -12,6 +13,7 @@ defmodule CleatDeploy.Apps.EnvApply do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Apps.AppEnvVar
   alias CleatDeploy.Deploy.Ssh
+  alias CleatDeploy.Deploy.Wake
 
   def apply(app, changed_branch \\ nil)
 
@@ -48,21 +50,80 @@ defmodule CleatDeploy.Apps.EnvApply do
     sudo mkdir -p "$(dirname #{config.env_file})"
     echo '#{encoded}' | base64 -d | sudo tee #{config.env_file} > /dev/null
     sudo chmod 600 #{config.env_file}
-    #{restart_active(App.unit_names(app))}
+    #{restart_units(app)}
     """
     |> String.trim()
   end
 
-  defp restart_active(units) do
-    Enum.map_join(units, "\n", fn unit ->
-      quoted = sh_quote(unit)
+  defp restart_units(%App{} = app) do
+    primary = App.unit_name(app)
 
-      """
-      if systemctl is-active --quiet #{quoted}; then
-        sudo systemctl restart #{quoted}
-      fi
-      """
+    Enum.map_join(App.unit_names(app), "\n", fn unit ->
+      http_port = if unit == primary, do: app.port
+      restart_unit(unit, http_port)
     end)
+  end
+
+  defp restart_unit(unit, http_port) do
+    quoted = sh_quote(unit)
+    stamp = sh_quote(Wake.stamp_path(unit))
+    wait = wait_for_unit(quoted, http_port)
+
+    """
+    if systemctl is-active --quiet #{quoted}; then
+      sudo systemctl restart #{quoted}
+    elif systemctl is-failed --quiet #{quoted}; then
+      sudo systemctl reset-failed #{quoted} || true
+      sudo systemctl start #{quoted}
+    #{wait}
+    elif [ -f #{stamp} ]; then
+      : # hibernated; env file updated, unit stays down
+    else
+      sudo systemctl reset-failed #{quoted} || true
+      sudo systemctl start #{quoted}
+    #{wait}
+    fi
+    """
+  end
+
+  # Mirror the golang deploy gate: is-active + NRestarts=0, and HTTP on the
+  # web unit. Failed recovery must not return 200 with the process still down.
+  defp wait_for_unit(quoted, http_port) do
+    http_check =
+      case http_port do
+        port when is_integer(port) ->
+          """
+            code=$(curl -sS -o /dev/null --max-time 2 -w '%{http_code}' "http://127.0.0.1:#{port}/" || true)
+            if [[ "$code" == "000" || -z "$code" ]]; then
+              sleep 1
+              continue
+            fi
+          """
+
+        _ ->
+          ""
+      end
+
+    """
+      ready=0
+      for i in $(seq 1 30); do
+        if sudo systemctl is-active --quiet #{quoted}; then
+          n=$(systemctl show #{quoted} -p NRestarts --value 2>/dev/null || echo 0)
+          if [[ "${n:-0}" -ne 0 ]]; then
+            sleep 1
+            continue
+          fi
+    #{http_check}
+          ready=1
+          break
+        fi
+        sleep 1
+      done
+      if [[ "$ready" -ne 1 ]]; then
+        sudo journalctl -u #{quoted} -n 30 --no-pager
+        exit 1
+      fi
+    """
   end
 
   defp client do

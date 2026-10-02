@@ -49,7 +49,16 @@ defmodule CleatDeploy.Signals do
     Enum.map(apps, fn app ->
       cur = Map.get(current, app.id, 0)
       prev = Map.get(previous, app.id, 0)
-      reasons = reasons(cur, prev, Map.get(latest, app.id), MapSet.member?(saturated, app.id))
+
+      reasons =
+        reasons(
+          cur,
+          prev,
+          Map.get(latest, app.id),
+          MapSet.member?(saturated, app.id),
+          now,
+          window
+        )
 
       %{
         app_id: app.id,
@@ -64,12 +73,19 @@ defmodule CleatDeploy.Signals do
     end)
   end
 
-  defp reasons(current, previous, latest, saturated?) do
+  defp reasons(current, previous, latest, saturated?, now, window) do
     []
-    |> maybe_reason(:unavailability, match?(%{status: :failed}, latest))
+    |> maybe_reason(:deploy_failed, recent_failed_deploy?(latest, now, window))
     |> maybe_reason(:error_rate, error_rate?(current, previous))
     |> maybe_reason(:saturation, saturated?)
   end
+
+  defp recent_failed_deploy?(%{status: :failed, finished_at: at}, now, window)
+       when not is_nil(at) and is_integer(window) do
+    DateTime.diff(now, at, :second) <= window
+  end
+
+  defp recent_failed_deploy?(_latest, _now, _window), do: false
 
   defp maybe_reason(reasons, reason, true), do: reasons ++ [reason]
   defp maybe_reason(reasons, _reason, false), do: reasons
@@ -380,6 +396,7 @@ defmodule CleatDeploy.Signals do
   end
 
   defp alert_message("unavailability", row), do: "Aplicação #{row.slug} indisponível"
+  defp alert_message("deploy_failed", row), do: "Deploy falhou em #{row.slug}"
   defp alert_message("error_rate", row), do: "Taxa de erro subiu em #{row.slug}"
   defp alert_message("saturation", row), do: "Saturação em #{row.slug}"
   defp alert_message(_rule, row), do: "Alerta em #{row.slug}"

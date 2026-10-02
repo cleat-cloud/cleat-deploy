@@ -467,6 +467,7 @@ defmodule CleatDeployWeb.SignalsLive do
 
   defp reason_name(:error_rate), do: "taxa de erro"
   defp reason_name(:unavailability), do: "indisponibilidade"
+  defp reason_name(:deploy_failed), do: "deploy falhou"
   defp reason_name(:saturation), do: "saturação"
   defp reason_name(other), do: to_string(other)
 

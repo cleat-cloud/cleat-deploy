@@ -51,6 +51,29 @@ defmodule CleatDeploy.Deploy.GolangTest do
     assert script =~ "atelie.gestaobem.com {"
   end
 
+  test "golang HTTP unit injects HOST and colon-prefixed PORT; workers do not", %{
+    app: app,
+    config: config
+  } do
+    manifest = %{
+      AppManifest.resolve(nil, app)
+      | runtime: "golang",
+        binaries: ["server", "worker"]
+    }
+
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    [web_unit, worker_unit] =
+      script
+      |> String.split("PAAS_SYSTEMD_UNIT")
+      |> Enum.filter(&String.contains?(&1, "[Service]"))
+
+    assert web_unit =~ "Environment=HOST=127.0.0.1"
+    assert web_unit =~ "Environment=PORT=:4020"
+    refute worker_unit =~ "Environment=PORT="
+    refute worker_unit =~ "Environment=HOST="
+  end
+
   test "golang remote build installs Go and builds linux binaries", %{
     app: app,
     config: config,

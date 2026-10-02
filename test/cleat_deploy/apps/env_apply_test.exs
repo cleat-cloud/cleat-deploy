@@ -37,6 +37,25 @@ defmodule CleatDeploy.Apps.EnvApplyTest do
       assert script =~ "sudo tee /etc/gestao-bem-crm/env"
       assert script =~ "if systemctl is-active --quiet 'node-gestao-bem-crm'"
       assert script =~ "sudo systemctl restart 'node-gestao-bem-crm'"
+      assert script =~ "/var/lib/cleat/stamps/node-gestao-bem-crm.stamp"
+      assert script =~ "hibernated"
+      {:ok, ""}
+    end)
+
+    assert EnvApply.apply(app) == :ok
+  end
+
+  test "reset-failed and starts a crashed unit instead of leaving it down" do
+    app = node_app()
+    {:ok, _} = Apps.put_env_var(app, "PORT", ":4000")
+
+    expect(RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
+      assert script =~ "systemctl is-failed --quiet 'node-gestao-bem-crm'"
+      assert script =~ "sudo systemctl reset-failed 'node-gestao-bem-crm'"
+      assert script =~ "sudo systemctl start 'node-gestao-bem-crm'"
+      assert script =~ "NRestarts"
+      assert script =~ "http://127.0.0.1:#{app.port}/"
+      assert script =~ "journalctl -u 'node-gestao-bem-crm'"
       {:ok, ""}
     end)
 

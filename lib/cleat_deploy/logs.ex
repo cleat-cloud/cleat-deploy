@@ -7,6 +7,7 @@ defmodule CleatDeploy.Logs do
   """
 
   alias CleatDeploy.Apps.App
+  alias CleatDeploy.Observability.Redact
   alias CleatDeploy.Repo
   alias CleatDeploy.Servers.Server
 
@@ -185,6 +186,7 @@ defmodule CleatDeploy.Logs do
     |> String.split("\n")
     |> Enum.map(&String.trim_trailing/1)
     |> Enum.reject(&(&1 == ""))
+    |> Enum.map(&Redact.message/1)
   end
 
   defp format_error(reason) when is_binary(reason) do
