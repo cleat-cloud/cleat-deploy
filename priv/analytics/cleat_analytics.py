@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import sqlite3
@@ -32,6 +33,20 @@ DEFAULT_SALT = "/etc/cleat/analytics.salt"
 DB_MAX_BYTES = 200 * 1024 * 1024
 DB_TARGET_BYTES = 150 * 1024 * 1024
 ROLLUP_INTERVAL = 3600
+HTML_MAX = 1024 * 1024
+PROXY_TIMEOUT = 2.0
+HOP_BY_HOP = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS hits (
@@ -615,6 +630,33 @@ def load_hosts(path, previous=None):
     return {}
 
 
+def split_upstream(upstream):
+    raw = (upstream or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("http://") or raw.startswith("https://"):
+        parsed = urlparse(raw)
+        if not parsed.hostname:
+            return None
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        return parsed.hostname, port
+    if raw.startswith("["):
+        end = raw.find("]")
+        if end == -1:
+            return None
+        host = raw[1:end]
+        rest = raw[end + 1 :]
+        if rest.startswith(":") and rest[1:].isdigit():
+            return host, int(rest[1:])
+        return host, 80
+    if ":" in raw:
+        host, port_s = raw.rsplit(":", 1)
+        if not port_s.isdigit():
+            return None
+        return host, int(port_s)
+    return raw, 80
+
+
 def load_salt(path):
     try:
         with open(path, "rb") as fh:
@@ -763,37 +805,132 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
                     }
                 )
             return
-        self._send(502, b"")
+        self._proxy()
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        try:
-            body = self._read_body()
-        except Exception:
+        if parsed.path == "/cleat/a":
+            try:
+                body = self._read_body()
+            except Exception:
+                self._send_204()
+                return
+            try:
+                if body is not None:
+                    hosts = self._hosts()
+                    salt = self._salt()
+                    now = datetime.now(timezone.utc)
+                    row = parse_event(
+                        host=self.headers.get("Host"),
+                        payload=body,
+                        hosts=hosts,
+                        salt=salt,
+                        ip=self._client_ip(),
+                        ua=self.headers.get("User-Agent") or "",
+                        day=now.strftime("%Y-%m-%d"),
+                    )
+                    if row:
+                        self.server.store.insert_hit(ts=int(now.timestamp()), **row)
+            except Exception:
+                pass
             self._send_204()
             return
-        if parsed.path != "/cleat/a":
+        self._proxy()
+
+    def do_HEAD(self):
+        self._proxy()
+
+    def do_PUT(self):
+        self._proxy()
+
+    def do_DELETE(self):
+        self._proxy()
+
+    def do_PATCH(self):
+        self._proxy()
+
+    def _proxy(self):
+        hosts = self._hosts()
+        resolved = resolve_host(self.headers.get("Host"), hosts)
+        info = hosts.get(resolved) if resolved else None
+        target = split_upstream((info or {}).get("upstream") if isinstance(info, dict) else "")
+        if not target:
             self._send(502, b"")
             return
+        host, port = target
         try:
-            if body is not None:
-                hosts = self._hosts()
-                salt = self._salt()
-                now = datetime.now(timezone.utc)
-                row = parse_event(
-                    host=self.headers.get("Host"),
-                    payload=body,
-                    hosts=hosts,
-                    salt=salt,
-                    ip=self._client_ip(),
-                    ua=self.headers.get("User-Agent") or "",
-                    day=now.strftime("%Y-%m-%d"),
-                )
-                if row:
-                    self.server.store.insert_hit(ts=int(now.timestamp()), **row)
+            body = None
+            if self.command not in ("GET", "HEAD"):
+                body = self._read_proxy_body()
+            headers = {}
+            for key, value in self.headers.items():
+                if key.lower() in HOP_BY_HOP:
+                    continue
+                headers[key] = value
+            conn = http.client.HTTPConnection(host, port, timeout=PROXY_TIMEOUT)
+            try:
+                conn.request(self.command, self.path, body=body, headers=headers)
+                self._relay(conn.getresponse())
+            finally:
+                conn.close()
         except Exception:
-            pass
-        self._send_204()
+            try:
+                self._send(502, b"")
+            except Exception:
+                pass
+
+    def _read_proxy_body(self):
+        length_hdr = self.headers.get("Content-Length")
+        if not length_hdr:
+            return b""
+        try:
+            length = int(length_hdr)
+        except ValueError:
+            return b""
+        if length <= 0:
+            return b""
+        return self.rfile.read(length)
+
+    def _relay(self, resp):
+        content_type = (resp.getheader("Content-Type") or "").lower()
+        filtered = [
+            (key, value)
+            for key, value in resp.getheaders()
+            if key.lower() not in HOP_BY_HOP
+        ]
+        if content_type.startswith("text/html"):
+            data = resp.read(HTML_MAX + 1)
+            if len(data) <= HTML_MAX:
+                data = inject_html(data)
+            else:
+                data = data + resp.read()
+            self.send_response(resp.status, resp.reason)
+            for key, value in filtered:
+                if key.lower() == "content-length":
+                    continue
+                self.send_header(key, value)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
+            return
+        self.send_response(resp.status, resp.reason)
+        has_length = False
+        for key, value in filtered:
+            if key.lower() == "content-length":
+                has_length = True
+            self.send_header(key, value)
+        if not has_length:
+            self.send_header("Connection", "close")
+            self.close_connection = True
+        self.end_headers()
+        if self.command == "HEAD":
+            return
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            self.wfile.write(chunk)
 
 
 def make_httpd():

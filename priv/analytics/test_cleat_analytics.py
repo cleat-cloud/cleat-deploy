@@ -13,6 +13,7 @@ import unittest
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cleat_analytics as ca
 
@@ -483,6 +484,134 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(self._hit_count(), 0)
 
 
+class UpstreamHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, format, *args):
+        return
+
+    def do_GET(self):
+        if self.path.startswith("/api"):
+            body = b'{"ok":true}'
+            ctype = "application/json"
+        else:
+            body = b"<html><body>hi</body></html>"
+            ctype = "text/html"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class ProxyTest(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.mkdtemp(prefix="cleat-analytics-proxy-")
+        self.db_path = os.path.join(self._tmpdir, "analytics.db")
+        self.hosts_path = os.path.join(self._tmpdir, "hosts.json")
+        self.salt_path = os.path.join(self._tmpdir, "salt")
+        with open(self.salt_path, "wb") as fh:
+            fh.write(b"s" * 32)
+        self.upstream = ThreadingHTTPServer(("127.0.0.1", 0), UpstreamHandler)
+        self.upstream.daemon_threads = True
+        self.upstream_port = self.upstream.server_address[1]
+        self.upstream_thread = threading.Thread(
+            target=self.upstream.serve_forever, daemon=True
+        )
+        self.upstream_thread.start()
+        with open(self.hosts_path, "w", encoding="utf-8") as fh:
+            json.dump(
+                {
+                    "nfe.gestaobem.com": {
+                        "slug": "nfe-facil",
+                        "upstream": f"127.0.0.1:{self.upstream_port}",
+                    }
+                },
+                fh,
+            )
+        self._env = {
+            "CLEAT_ANALYTICS_DB": self.db_path,
+            "CLEAT_ANALYTICS_HOSTS": self.hosts_path,
+            "CLEAT_ANALYTICS_SALT": self.salt_path,
+            "CLEAT_ANALYTICS_PORT": "0",
+        }
+        self._old_env = {key: os.environ.get(key) for key in self._env}
+        os.environ.update(self._env)
+        self.httpd = ca.make_httpd()
+        self.port = self.httpd.server_address[1]
+        self.base = f"http://127.0.0.1:{self.port}"
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+        self._wait_up()
+
+    def tearDown(self):
+        for server in (getattr(self, "httpd", None), getattr(self, "upstream", None)):
+            if server is None:
+                continue
+            try:
+                server.shutdown()
+                server.server_close()
+            except Exception:
+                pass
+        store = getattr(getattr(self, "httpd", None), "store", None)
+        if store is not None:
+            try:
+                store.close()
+            except Exception:
+                pass
+        for key, value in self._old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def _wait_up(self):
+        url = self.base + "/healthz"
+        last = None
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(url, timeout=0.2) as resp:
+                    if resp.status == 200:
+                        return
+            except Exception as exc:
+                last = exc
+            time.sleep(0.05)
+        self.fail(f"server did not start: {last}")
+
+    def _request(self, path, host="nfe.gestaobem.com"):
+        req = urllib.request.Request(
+            self.base + path, method="GET", headers={"Host": host}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return resp.status, resp.headers, resp.read()
+        except urllib.error.HTTPError as err:
+            try:
+                return err.code, err.headers, err.read()
+            finally:
+                err.close()
+
+    def test_injects_script_into_html(self):
+        status, _, body = self._request("/login")
+        self.assertEqual(status, 200)
+        self.assertIn(b'<script src="/cleat/a.js" defer></script>', body)
+        self.assertIn(b"hi", body)
+
+    def test_json_body_unchanged(self):
+        status, _, body = self._request("/api")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b'{"ok":true}')
+        self.assertNotIn(b"<script", body)
+
+    def test_upstream_down_502(self):
+        self.upstream.shutdown()
+        self.upstream.server_close()
+        status, _, _ = self._request("/login")
+        self.assertEqual(status, 502)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
