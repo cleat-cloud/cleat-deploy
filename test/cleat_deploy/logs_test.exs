@@ -103,6 +103,27 @@ defmodule CleatDeploy.LogsTest do
       assert {:ok, result} = Logs.fetch_app(app, %{unit: "other"})
       assert result.unit == "assistente"
     end
+
+    test "redacts Signal session keys before returning journal lines", %{
+      scope: scope,
+      server: server
+    } do
+      app =
+        TenancyFixtures.app_fixture(scope, server, %{
+          slug: "waha",
+          systemd_unit: "node-waha"
+        })
+
+      expect(RuntimeLogsMock, :run, fn _subject, _argv ->
+        {:ok,
+         "2026-10-02T01:00:41Z node-waha privKey: <Buffer 05 12 97 5f 65 ef 7e fb>\n"}
+      end)
+
+      assert {:ok, result} = Logs.fetch_app(app, [])
+      assert [line] = result.lines
+      refute line =~ "05 12 97 5f"
+      assert line =~ "[redacted]"
+    end
   end
 
   describe "fetch_server/2" do
