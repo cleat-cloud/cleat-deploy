@@ -82,6 +82,7 @@ defmodule CleatDeploy.Analytics.CaddyTest do
 
     loopback = Caddy.loopback_site(@cleat, static_root: @static_root)
     assert loopback =~ "http://127.0.0.1:4010"
+    assert loopback =~ "# paas:app=cleat"
     assert loopback =~ "bind 127.0.0.1"
     assert loopback =~ "root *"
     assert loopback =~ "file_server"

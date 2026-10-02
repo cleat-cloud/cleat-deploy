@@ -26,6 +26,7 @@ defmodule CleatDeploy.Analytics.Caddy do
 
       """
       http://127.0.0.1:#{port} {
+        # paas:app=#{field(app, :slug)}
         bind 127.0.0.1
         root * #{static_root}
         try_files {path} {path}/index.html /index.html

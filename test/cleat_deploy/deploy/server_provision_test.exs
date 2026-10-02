@@ -40,6 +40,14 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "Environment=CLEAT_DATA_DIR=/var/lib/phoenix_tts"
     assert script =~ "tts.gestaobem.com {"
     assert script =~ "reverse_proxy 127.0.0.1:4004"
+    assert script =~ "handle /cleat/a.js"
+    assert script =~ "handle /cleat/a"
+    assert script =~ "127.0.0.1:8799"
+    assert script =~ "lb_policy first"
+    assert script =~ "cleat-analytics.service"
+    assert script =~ "/etc/cleat/analytics-hosts.json"
+    assert script =~ "/usr/local/lib/cleat/cleat_analytics.py"
+    assert script =~ "sudo systemctl restart cleat-analytics || true"
     assert script =~ "Writing Caddy site tts.gestaobem.com"
     assert script =~ "sudo awk -v site='tts.gestaobem.com'"
     assert script =~ ~s|sudo install -m 0644 -o root -g root "$TMPFILE" "$CADDYFILE"|
@@ -303,6 +311,63 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "sudo rm -f '/var/lib/cleat/stamps/phoenix_tts.stamp'"
   end
 
+  test "analytics_inject false is a single reverse_proxy without collect handles", %{
+    app: app,
+    config: config,
+    scope: scope
+  } do
+    assert {:ok, app} = CleatDeploy.Apps.set_analytics_inject(scope, app, false)
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    assert script =~ "reverse_proxy 127.0.0.1:4004"
+    refute script =~ "handle /cleat/a"
+    refute script =~ "127.0.0.1:8799"
+    refute script =~ "lb_policy first"
+    refute script =~ "cleat-analytics.service"
+  end
+
+  test "wake plus inject keeps collect handles before forward_auth", %{app: app, config: config} do
+    app = %{app | idle_shutdown_enabled: true}
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+    site = caddy_site_body(script)
+
+    assert site =~ "/cleat/a"
+    assert site =~ "forward_auth"
+    assert site =~ "@cleat_ws"
+    assert site =~ "handle {"
+    assert occurrence(site, "/cleat/a") < occurrence(site, "forward_auth")
+    assert occurrence(site, "forward_auth") < occurrence(site, "@cleat_ws")
+  end
+
+  test "static inject-on proxies the public host and serves files on loopback", %{
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Cleat LP",
+        slug: "cleat",
+        runtime: "static",
+        analytics_inject: true,
+        host: "cleat.example.com"
+      })
+
+    config = App.deploy_config(app)
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    assert script =~ "http://127.0.0.1:"
+    assert script =~ "bind 127.0.0.1"
+    assert script =~ ~s|header Cache-Control "no-cache"|
+    assert script =~ ~s|header X-Robots-Tag "noindex, nofollow"|
+    assert script =~ "handle /cleat/a"
+    assert script =~ "reverse_proxy 127.0.0.1:8799 127.0.0.1:#{app.port}"
+    assert script =~ "# paas:app=cleat-origin"
+    assert script =~ "sudo awk -v site='http://127.0.0.1:#{app.port}' -v app='cleat-origin'"
+  end
+
   test "never arms a custom caddyfile or a static site", %{app: app, config: config} do
     opted_in = %{app | idle_shutdown_enabled: true}
 
@@ -448,6 +513,13 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
   defp occurrence(script, snippet) do
     {position, _length} = :binary.match(script, snippet)
     position
+  end
+
+  defp caddy_site_body(script) do
+    case Regex.run(~r/write_caddy_site <<'PAAS_CADDY_SITE'\n(.*?)\nPAAS_CADDY_SITE/s, script) do
+      [_, body] -> body
+      nil -> flunk("no Caddy site block in provision script")
+    end
   end
 
   test "release_command_script runs each command in order with the app env", %{
