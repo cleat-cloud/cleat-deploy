@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 
 import cleat_analytics as ca
 
@@ -129,6 +130,26 @@ class ParseTest(unittest.TestCase):
         self.assertNotIn("ip", row)
         self.assertNotIn("ua", row)
 
+    def test_host_accepts_case_and_port(self):
+        salt = b"x" * 32
+        payload = b'{"n":"pageview","u":"https://nfe.gestaobem.com/login","r":""}'
+        expected_hash = ca.visitor_hash(
+            salt, "1.1.1.1", "ua", "nfe.gestaobem.com", "2026-10-01"
+        )
+        for incoming in ("NFE.gestaobem.com", "nfe.gestaobem.com:443"):
+            row = ca.parse_event(
+                host=incoming,
+                payload=payload,
+                hosts=HOSTS,
+                salt=salt,
+                ip="1.1.1.1",
+                ua="ua",
+                day="2026-10-01",
+            )
+            self.assertIsNotNone(row, incoming)
+            self.assertEqual(row["host"], "nfe.gestaobem.com")
+            self.assertEqual(row["visitor_hash"], expected_hash)
+
     def test_store_and_prune(self):
         fd, path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
@@ -138,6 +159,76 @@ class ParseTest(unittest.TestCase):
             store.rollup_and_prune(now_ts=1 + 8 * 86400)
             self.assertEqual(store.count_hits(), 0)
             self.assertGreater(store.count_daily_totals(), 0)
+            self.assertEqual(
+                store.conn.execute(
+                    "SELECT pageviews, unique_visitors FROM daily_totals WHERE host=?",
+                    ("nfe.gestaobem.com",),
+                ).fetchone(),
+                (1, 1),
+            )
+            self.assertEqual(
+                store.conn.execute(
+                    "SELECT path, pageviews FROM daily_paths"
+                ).fetchone(),
+                ("/", 1),
+            )
+            self.assertEqual(
+                store.conn.execute(
+                    "SELECT referrer, pageviews FROM daily_referrers"
+                ).fetchone(),
+                ("", 1),
+            )
+            self.assertEqual(
+                store.conn.execute(
+                    "SELECT utm_source, utm_medium, utm_campaign, pageviews FROM daily_utm"
+                ).fetchone(),
+                ("g", "", "", 1),
+            )
+        finally:
+            os.remove(path)
+
+    def test_rollup_freezes_partial_raw_day(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        host = "nfe.gestaobem.com"
+        day_start = int(datetime(2026, 9, 24, tzinfo=timezone.utc).timestamp())
+        try:
+            store = ca.Store(path)
+            for _ in range(100):
+                store.insert_hit(
+                    ts=day_start,
+                    host=host,
+                    path="/",
+                    referrer="",
+                    utm_source="g",
+                    utm_medium="",
+                    utm_campaign="",
+                    visitor_hash="aa",
+                    name="pageview",
+                )
+            for _ in range(50):
+                store.insert_hit(
+                    ts=day_start + 12 * 3600,
+                    host=host,
+                    path="/",
+                    referrer="",
+                    utm_source="g",
+                    utm_medium="",
+                    utm_campaign="",
+                    visitor_hash="bb",
+                    name="pageview",
+                )
+            # now_ts such that the 7d cutoff splits this UTC day.
+            now_ts = day_start + 6 * 3600 + 7 * 86400
+            store.rollup_and_prune(now_ts=now_ts)
+            store.rollup_and_prune(now_ts=now_ts)
+            self.assertEqual(
+                store.conn.execute(
+                    "SELECT pageviews, unique_visitors FROM daily_totals WHERE day=? AND host=?",
+                    ("2026-09-24", host),
+                ).fetchone(),
+                (150, 2),
+            )
         finally:
             os.remove(path)
 

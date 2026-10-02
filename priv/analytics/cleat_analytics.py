@@ -125,8 +125,33 @@ def inject_html(html):
     return raw[:idx] + SCRIPT_TAG + raw[idx:]
 
 
+def canonical_host(host):
+    if not host:
+        return ""
+    host = host.strip()
+    if host.startswith("["):
+        end = host.find("]")
+        if end != -1:
+            host = host[1:end]
+        return host.lower()
+    if ":" in host:
+        name, port = host.rsplit(":", 1)
+        if port.isdigit():
+            host = name
+    return host.lower()
+
+
+def resolve_host(host, hosts):
+    key = canonical_host(host)
+    if not key or not hosts:
+        return None
+    folded = {canonical_host(name): name for name in hosts}
+    return folded.get(key)
+
+
 def parse_event(*, host, payload, hosts, salt, ip, ua, day):
-    if not host or host not in hosts:
+    resolved = resolve_host(host, hosts)
+    if not resolved:
         return None
     try:
         data = json.loads(payload)
@@ -140,13 +165,13 @@ def parse_event(*, host, payload, hosts, salt, ip, ua, day):
         return None
     utm_source, utm_medium, utm_campaign = utm_from(url)
     return {
-        "host": host,
+        "host": resolved,
         "path": normalize_path(url),
-        "referrer": normalize_referrer(referrer, host),
+        "referrer": normalize_referrer(referrer, resolved),
         "utm_source": utm_source,
         "utm_medium": utm_medium,
         "utm_campaign": utm_campaign,
-        "visitor_hash": visitor_hash(salt, ip, ua, host, day),
+        "visitor_hash": visitor_hash(salt, ip, ua, resolved, day),
         "name": "pageview",
     }
 
@@ -202,7 +227,7 @@ class Store:
 
     def rollup_and_prune(self, now_ts):
         now_ts = int(now_ts)
-        self._rollup()
+        self._rollup(now_ts)
         raw_cutoff = now_ts - RAW_DAYS * 86400
         self.conn.execute("DELETE FROM hits WHERE ts < ?", (raw_cutoff,))
         rollup_day = (
@@ -218,7 +243,17 @@ class Store:
             self.conn.close()
             self.conn = None
 
-    def _rollup(self):
+    def _fresh_day(self, now_ts):
+        cutoff = datetime.fromtimestamp(
+            now_ts - RAW_DAYS * 86400, tz=timezone.utc
+        )
+        return cutoff.strftime("%Y-%m-%d")
+
+    def _rollup(self, now_ts):
+        # Refresh only days fully inside the raw window (day > date(now-7d)).
+        # Older days: insert-if-missing, never update (a split UTC day would
+        # otherwise clobber 90d totals with the remaining partial raw count).
+        fresh_after = self._fresh_day(now_ts)
         self.conn.execute(
             """
             INSERT INTO daily_totals (day, host, pageviews, unique_visitors)
@@ -232,7 +267,9 @@ class Store:
             ON CONFLICT(day, host) DO UPDATE SET
               pageviews = excluded.pageviews,
               unique_visitors = excluded.unique_visitors
-            """
+            WHERE excluded.day > ?
+            """,
+            (fresh_after,),
         )
         self.conn.execute(
             """
@@ -246,7 +283,9 @@ class Store:
             GROUP BY day, host, path
             ON CONFLICT(day, host, path) DO UPDATE SET
               pageviews = excluded.pageviews
-            """
+            WHERE excluded.day > ?
+            """,
+            (fresh_after,),
         )
         self.conn.execute(
             """
@@ -260,7 +299,9 @@ class Store:
             GROUP BY day, host, referrer
             ON CONFLICT(day, host, referrer) DO UPDATE SET
               pageviews = excluded.pageviews
-            """
+            WHERE excluded.day > ?
+            """,
+            (fresh_after,),
         )
         self.conn.execute(
             """
@@ -278,7 +319,9 @@ class Store:
             GROUP BY day, host, utm_source, utm_medium, utm_campaign
             ON CONFLICT(day, host, utm_source, utm_medium, utm_campaign) DO UPDATE SET
               pageviews = excluded.pageviews
-            """
+            WHERE excluded.day > ?
+            """,
+            (fresh_after,),
         )
 
     def _db_size(self):
