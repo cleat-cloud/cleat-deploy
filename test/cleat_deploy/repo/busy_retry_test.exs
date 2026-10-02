@@ -23,6 +23,24 @@ defmodule CleatDeploy.Repo.BusyRetryTest do
     assert Agent.get(counter, & &1) == 3
   end
 
+  test "retries Exqlite Database busy then returns the successful value" do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    result =
+      BusyRetry.call(fn ->
+        n = Agent.get_and_update(counter, &{&1 + 1, &1 + 1})
+
+        if n < 3 do
+          raise %Exqlite.Error{message: "Database busy"}
+        else
+          :ok
+        end
+      end)
+
+    assert result == :ok
+    assert Agent.get(counter, & &1) == 3
+  end
+
   test "reraises errors that are not SQLITE_BUSY" do
     assert_raise RuntimeError, "boom", fn ->
       BusyRetry.call(fn -> raise "boom" end)

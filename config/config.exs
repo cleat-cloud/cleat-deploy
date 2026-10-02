@@ -36,6 +36,11 @@ config :cleat_deploy, :auto_deploy_health_on_boot, true
 # Public /users/register. Production overrides this in runtime.exs.
 config :cleat_deploy, :allow_registration, true
 
+# GitHub push webhooks after app register. Tests disable this so the suite
+# does not call api.github.com or spam "GITHUB_TOKEN is not set" warnings.
+config :cleat_deploy, :github, CleatDeploy.Github
+config :cleat_deploy, :github_webhook_sync, true
+
 # Git-less "drop" uploads (CLEAT_DROPS_DIR / CLEAT_DROP_MAX_BYTES override at runtime).
 config :cleat_deploy, :drop_max_bytes, 52_428_800
 

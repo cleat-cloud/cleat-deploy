@@ -1,5 +1,5 @@
 defmodule CleatDeploy.Deploy.TeardownTest do
-  use CleatDeploy.DataCase, async: true
+  use CleatDeploy.DataCase, async: false
 
   alias CleatDeploy.Deploy.Teardown
   alias CleatDeploy.TenancyFixtures

@@ -20,12 +20,12 @@ defmodule CleatDeploy.Repo.BusyRetry do
       end
   end
 
-  defp sqlite_busy?(%EctoLibSql.Error{message: message}) when is_binary(message) do
-    String.contains?(message, "SQLITE_BUSY") or String.contains?(message, "database is locked")
-  end
-
   defp sqlite_busy?(%{message: message}) when is_binary(message) do
-    String.contains?(message, "SQLITE_BUSY") or String.contains?(message, "database is locked")
+    down = String.downcase(message)
+
+    String.contains?(down, "sqlite_busy") or
+      String.contains?(down, "database is locked") or
+      String.contains?(down, "database busy")
   end
 
   defp sqlite_busy?(_), do: false

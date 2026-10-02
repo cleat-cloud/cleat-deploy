@@ -1,6 +1,8 @@
 defmodule CleatDeploy.AppsTest do
   use CleatDeploy.DataCase
 
+  import ExUnit.CaptureLog
+
   alias CleatDeploy.Apps
   alias CleatDeploy.Apps.App
   alias CleatDeploy.TenancyFixtures
@@ -754,4 +756,78 @@ defmodule CleatDeploy.AppsTest do
       refute App.wake_armed?(Apps.get_app!(scope, app.id))
     end
   end
+
+  describe "sync_github_webhook/1" do
+    test "does not warn about a missing token in the test env", %{scope: scope, server: server} do
+      log =
+        capture_log(fn ->
+          assert {:ok, _app, :skipped} =
+                   Apps.create_app(scope, %{
+                     name: "Quiet",
+                     slug: "quiet-hook",
+                     github_repo: "owner/quiet-hook",
+                     host: "quiet-hook.example.com",
+                     server_id: server.id
+                   })
+        end)
+
+      refute log =~ "GitHub webhook not synced"
+    end
+
+    test "warns about a missing token when sync is enabled", %{scope: scope, server: server} do
+      previous = Application.get_env(:cleat_deploy, :github_webhook_sync)
+      Application.put_env(:cleat_deploy, :github_webhook_sync, true)
+
+      on_exit(fn -> restore_app_env(:github_webhook_sync, previous) end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, _app, :no_token} =
+                   Apps.create_app(scope, %{
+                     name: "No Token",
+                     slug: "no-token-hook",
+                     github_repo: "owner/no-token-hook",
+                     host: "no-token-hook.example.com",
+                     server_id: server.id
+                   })
+        end)
+
+      assert log =~ "GITHUB_TOKEN is not set"
+    end
+
+    test "warns with the API error when sync fails", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Hook Fail",
+          slug: "hook-fail",
+          github_repo: "owner/hook-fail",
+          host: "hook-fail.example.com",
+          server_id: server.id
+        })
+
+      previous_sync = Application.get_env(:cleat_deploy, :github_webhook_sync)
+      previous_github = Application.get_env(:cleat_deploy, :github)
+      Application.put_env(:cleat_deploy, :github_webhook_sync, true)
+      Application.put_env(:cleat_deploy, :github, CleatDeploy.AppsTest.GithubErrorStub)
+
+      on_exit(fn ->
+        restore_app_env(:github_webhook_sync, previous_sync)
+        restore_app_env(:github, previous_github)
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {{:error, "api rate limit"}, ^app} = Apps.sync_github_webhook(app)
+        end)
+
+      assert log =~ "api rate limit"
+    end
+  end
+
+  defp restore_app_env(key, nil), do: Application.delete_env(:cleat_deploy, key)
+  defp restore_app_env(key, value), do: Application.put_env(:cleat_deploy, key, value)
+end
+
+defmodule CleatDeploy.AppsTest.GithubErrorStub do
+  def ensure_webhook(_app), do: {:error, "api rate limit"}
 end

@@ -8,10 +8,8 @@ defmodule CleatDeploy.DataCase do
 
   Finally, if the test case interacts with the database,
   we enable the SQL sandbox, so changes done to the database
-  are reverted at the end of every test. If you are using
-  PostgreSQL, you can even run database tests asynchronously
-  by setting `use CleatDeploy.DataCase, async: true`, although
-  this option is not recommended for other databases.
+  are reverted at the end of every test. This project uses SQLite:
+  `async: true` is not supported on DataCase (see issue #201).
   """
 
   use ExUnit.CaseTemplate
@@ -37,6 +35,13 @@ defmodule CleatDeploy.DataCase do
   Sets up the sandbox based on the test tags.
   """
   def setup_sandbox(tags) do
+    if tags[:async] do
+      raise ArgumentError, """
+      SQLite DataCase/ConnCase tests cannot run with async: true (issue #201).
+      Use `async: false`, or ExUnit.Case for tests that do not touch the database.
+      """
+    end
+
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(CleatDeploy.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
   end
