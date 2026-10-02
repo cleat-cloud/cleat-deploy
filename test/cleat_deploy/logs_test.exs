@@ -115,8 +115,7 @@ defmodule CleatDeploy.LogsTest do
         })
 
       expect(RuntimeLogsMock, :run, fn _subject, _argv ->
-        {:ok,
-         "2026-10-02T01:00:41Z node-waha privKey: <Buffer 05 12 97 5f 65 ef 7e fb>\n"}
+        {:ok, "2026-10-02T01:00:41Z node-waha privKey: <Buffer 05 12 97 5f 65 ef 7e fb>\n"}
       end)
 
       assert {:ok, result} = Logs.fetch_app(app, [])

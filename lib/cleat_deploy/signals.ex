@@ -49,6 +49,7 @@ defmodule CleatDeploy.Signals do
     Enum.map(apps, fn app ->
       cur = Map.get(current, app.id, 0)
       prev = Map.get(previous, app.id, 0)
+
       reasons =
         reasons(
           cur,
