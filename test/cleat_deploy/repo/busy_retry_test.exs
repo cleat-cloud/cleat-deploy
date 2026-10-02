@@ -47,4 +47,3 @@ defmodule CleatDeploy.Repo.BusyRetryTest do
     end
   end
 end
-

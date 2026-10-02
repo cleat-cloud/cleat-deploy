@@ -100,6 +100,8 @@ defmodule CleatDeployWeb.AppLive.Index.Listing do
   def app_registered_message(:no_token),
     do: "App registered — set GITHUB_TOKEN on the panel to auto-configure webhooks"
 
+  def app_registered_message(:skipped), do: "App registered"
+
   def app_registered_message({:error, message}),
     do: "App registered — webhook not configured (#{message})"
 

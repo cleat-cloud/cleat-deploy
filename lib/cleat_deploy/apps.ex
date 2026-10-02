@@ -530,7 +530,11 @@ defmodule CleatDeploy.Apps do
     # Best-effort remote cleanup (systemd unit, release dir, Caddy site) so the
     # CLI/API path does not leave orphans behind.
     _ = CleatDeploy.Deploy.Teardown.run(Repo.preload(app, :server))
-    _ = Github.delete_webhook(app)
+
+    if github_webhook_sync?() do
+      _ = github_client().delete_webhook(app)
+    end
+
     Repo.delete(app)
   end
 
@@ -539,14 +543,23 @@ defmodule CleatDeploy.Apps do
   @doc """
   Provisions (or updates) the GitHub push webhook for an app.
 
-  Returns `{status, app}` where status is `:synced`, `:no_token`, or `{:error, message}`.
+  Returns `{status, app}` where status is `:synced`, `:skipped`, `:no_token`,
+  or `{:error, message}`.
   """
   def sync_github_webhook(%App{github_repo: repo} = app) when repo in [nil, ""] do
     {:skipped, app}
   end
 
   def sync_github_webhook(%App{} = app) do
-    case Github.ensure_webhook(app) do
+    if github_webhook_sync?() do
+      do_sync_github_webhook(app)
+    else
+      {:skipped, app}
+    end
+  end
+
+  defp do_sync_github_webhook(%App{} = app) do
+    case github_client().ensure_webhook(app) do
       :ok ->
         {:synced, app}
 
@@ -559,6 +572,14 @@ defmodule CleatDeploy.Apps do
         Logger.warning("GitHub webhook not synced for #{app.slug}: #{message}")
         {{:error, message}, app}
     end
+  end
+
+  defp github_webhook_sync? do
+    Application.get_env(:cleat_deploy, :github_webhook_sync, true)
+  end
+
+  defp github_client do
+    Application.get_env(:cleat_deploy, :github, Github)
   end
 
   @doc """

@@ -41,6 +41,7 @@ config :phoenix,
   sort_verified_routes_query_params: true
 
 config :cleat_deploy, :auto_deploy_health_on_boot, false
+config :cleat_deploy, :github_webhook_sync, false
 config :cleat_deploy, :dns_resolver, CleatDeploy.Deploy.DnsStub
 
 config :cleat_deploy, Oban,
