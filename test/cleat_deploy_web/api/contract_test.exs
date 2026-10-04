@@ -18,6 +18,17 @@ defmodule CleatDeployWeb.Api.ContractTest do
     deployment = %Deployment{id: 1, app_id: app.id}
 
     assert keys(Serializer.app(app)) == contract_keys("app")
+
+    query = %{
+      app_id: app.id,
+      slug: app.slug,
+      engine: "sqlite",
+      columns: ["id"],
+      rows: [["1"]],
+      truncated: false
+    }
+
+    assert keys(Serializer.app_query(query)) == contract_keys("app_query")
     assert keys(Serializer.server(server)) == contract_keys("server")
     assert keys(Serializer.user(scope.user)) == contract_keys("user")
     assert keys(Serializer.tenant(scope.tenant)) == contract_keys("tenant")

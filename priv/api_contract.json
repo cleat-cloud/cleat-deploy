@@ -20,6 +20,14 @@
     "server",
     "inserted_at"
   ],
+  "app_query": [
+    "app_id",
+    "slug",
+    "engine",
+    "columns",
+    "rows",
+    "truncated"
+  ],
   "deployment": [
     "id",
     "app_id",

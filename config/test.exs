@@ -58,6 +58,7 @@ config :cleat_deploy, :analytics_client, CleatDeploy.Analytics.SummaryStub
 config :cleat_deploy, :addons, CleatDeploy.Deploy.AddonsStub
 config :cleat_deploy, :idle_shutdown_runner, CleatDeploy.Apps.IdleShutdownMock
 config :cleat_deploy, :runtime_control_runner, CleatDeploy.Apps.RuntimeControlMock
+config :cleat_deploy, :app_query, CleatDeploy.Apps.QueryMock
 
 config :cleat_deploy, CleatDeploy.Vault,
   ciphers: [

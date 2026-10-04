@@ -30,6 +30,7 @@ config :cleat_deploy, :runtime_logs, CleatDeploy.Apps.RuntimeLogsSsh
 config :cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeLogsSsh
 config :cleat_deploy, :idle_shutdown_runner, CleatDeploy.Apps.IdleShutdownSsh
 config :cleat_deploy, :runtime_control_runner, CleatDeploy.Apps.RuntimeControlSsh
+config :cleat_deploy, :app_query, CleatDeploy.Apps.QuerySsh
 
 config :cleat_deploy, :auto_deploy_health_on_boot, true
 

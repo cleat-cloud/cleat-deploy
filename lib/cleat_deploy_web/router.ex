@@ -95,6 +95,8 @@ defmodule CleatDeployWeb.Router do
     put "/apps/:app_id/env", EnvController, :update
     delete "/apps/:app_id/env/:key", EnvController, :delete
 
+    post "/apps/:app_id/query", AppController, :query
+
     post "/signals/alerts/:id/ack", SignalsController, :ack
     patch "/signals/sampling", SignalsController, :update_sampling
   end

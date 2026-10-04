@@ -74,6 +74,17 @@ defmodule CleatDeployWeb.Api.Serializer do
     }
   end
 
+  def app_query(result) do
+    %{
+      app_id: result.app_id,
+      slug: result.slug,
+      engine: result.engine,
+      columns: result.columns,
+      rows: result.rows,
+      truncated: result.truncated
+    }
+  end
+
   def deployment(%Deployment{} = deployment, opts \\ []) do
     base = %{
       id: deployment.id,
