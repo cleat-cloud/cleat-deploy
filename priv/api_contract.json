@@ -93,6 +93,15 @@
     "series",
     "deploy_markers"
   ],
+  "signal_pages": [
+    "app_id",
+    "slug",
+    "range",
+    "requested",
+    "visited",
+    "pageviews",
+    "uniques"
+  ],
   "signal_alert": [
     "id",
     "app_id",

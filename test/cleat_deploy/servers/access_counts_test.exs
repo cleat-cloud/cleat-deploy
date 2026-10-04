@@ -236,6 +236,137 @@ defmodule CleatDeploy.Servers.AccessCountsTest do
     validate_caddyfile!(fixed)
   end
 
+  test "counts GET page paths per host and drops assets, posts and old rows" do
+    log =
+      Enum.join(
+        [
+          jason(%{
+            ts: @now,
+            status: 200,
+            request: %{host: "www.purplestock.com.br", method: "GET", uri: "/blog?utm=1"}
+          }),
+          jason(%{
+            ts: @now,
+            status: 200,
+            request: %{host: "www.purplestock.com.br", method: "GET", uri: "/blog"}
+          }),
+          jason(%{
+            ts: @now,
+            status: 200,
+            request: %{host: "www.purplestock.com.br", method: "GET", uri: "/assets/app.js"}
+          }),
+          jason(%{
+            ts: @now,
+            status: 200,
+            request: %{
+              host: "www.purplestock.com.br",
+              method: "GET",
+              uri: "/_next/static/chunk.js"
+            }
+          }),
+          jason(%{
+            ts: @now,
+            status: 308,
+            request: %{host: "www.purplestock.com.br", method: "POST", uri: "/"}
+          }),
+          jason(%{
+            ts: @now - 100_000,
+            status: 200,
+            request: %{host: "www.purplestock.com.br", method: "GET", uri: "/old"}
+          }),
+          jason(%{
+            ts: @now,
+            status: 200,
+            request: %{host: "app.purplestock.com.br", method: "GET", uri: "/dashboard"}
+          })
+        ],
+        "\n"
+      )
+
+    counts = AccessCounts.count_paths(log, since: @now - 86_400, now: @now)
+
+    assert counts[{"www.purplestock.com.br", "/blog"}] == 2
+    refute Map.has_key?(counts, {"www.purplestock.com.br", "/assets/app.js"})
+    refute Map.has_key?(counts, {"www.purplestock.com.br", "/"})
+    refute Map.has_key?(counts, {"www.purplestock.com.br", "/old"})
+    assert counts[{"app.purplestock.com.br", "/dashboard"}] == 1
+  end
+
+  test "ranks page paths for one app from the access log" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "new-lp",
+        host: "www.purplestock.com.br, purplestock.com.br"
+      })
+
+    other =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "other-app",
+        host: "other.example.com"
+      })
+
+    path = Path.join(System.tmp_dir!(), "cleat-access-#{System.unique_integer([:positive])}.log")
+
+    File.write!(
+      path,
+      Enum.join(
+        [
+          jason(%{
+            ts: System.os_time(:second),
+            status: 200,
+            request: %{
+              host: "www.purplestock.com.br",
+              method: "GET",
+              uri: "/politica-de-privacidade"
+            }
+          }),
+          jason(%{
+            ts: System.os_time(:second),
+            status: 200,
+            request: %{host: "purplestock.com.br", method: "GET", uri: "/"}
+          }),
+          jason(%{
+            ts: System.os_time(:second),
+            status: 200,
+            request: %{host: "www.purplestock.com.br", method: "GET", uri: "/"}
+          }),
+          jason(%{
+            ts: System.os_time(:second),
+            status: 200,
+            request: %{host: "other.example.com", method: "GET", uri: "/secret"}
+          })
+        ],
+        "\n"
+      )
+    )
+
+    previous = Application.get_env(:cleat_deploy, :caddy_access_log_path)
+    Application.put_env(:cleat_deploy, :caddy_access_log_path, path)
+
+    on_exit(fn ->
+      File.rm(path)
+
+      if previous do
+        Application.put_env(:cleat_deploy, :caddy_access_log_path, previous)
+      else
+        Application.delete_env(:cleat_deploy, :caddy_access_log_path)
+      end
+    end)
+
+    ranked = AccessCounts.for_app(scope, app, range: "24h", limit: 8)
+    assert Enum.map(ranked, & &1.path) == ["/", "/politica-de-privacidade"]
+    assert hd(ranked).requests == 2
+    assert hd(ranked).path == "/"
+    refute Enum.any?(ranked, &(&1.path == "/secret"))
+
+    assert AccessCounts.for_app(scope, other, range: "24h") == [
+             %{path: "/secret", host: "other.example.com", requests: 1}
+           ]
+  end
+
   defp jason(map), do: Jason.encode!(map)
 
   defp validate_caddyfile!(contents) do

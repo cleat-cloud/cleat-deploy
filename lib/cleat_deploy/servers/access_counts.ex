@@ -6,7 +6,9 @@ defmodule CleatDeploy.Servers.AccessCounts do
   alias CleatDeploy.Accounts.Scope
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Repo
-  alias CleatDeploy.Servers.HostStats
+  alias CleatDeploy.Servers.{HostStats, Server}
+
+  @static_ext ~w(.js .css .map .png .jpg .jpeg .gif .svg .ico .woff .woff2 .ttf .eot .webp .avif)
 
   @default_log "/var/log/caddy/access.log"
   @window_s 86_400
@@ -131,6 +133,15 @@ defmodule CleatDeploy.Servers.AccessCounts do
     |> Enum.reduce(%{}, fn line, acc -> add_line(acc, line, since) end)
   end
 
+  def count_paths(log, opts \\ []) when is_binary(log) do
+    now = Keyword.get(opts, :now, System.os_time(:second))
+    since = Keyword.get(opts, :since, now - @window_s)
+
+    log
+    |> String.split("\n")
+    |> Enum.reduce(%{}, fn line, acc -> add_path_line(acc, line, since) end)
+  end
+
   def rank(apps, counts, opts \\ []) when is_list(apps) and is_map(counts) do
     limit = Keyword.get(opts, :limit, @limit)
 
@@ -161,6 +172,37 @@ defmodule CleatDeploy.Servers.AccessCounts do
     rank(apps, host_counts(server))
   end
 
+  def for_app(scope, app, opts \\ [])
+
+  def for_app(%Scope{tenant: tenant}, %{tenant_id: tenant_id} = app, opts)
+      when tenant.id == tenant_id do
+    limit = Keyword.get(opts, :limit, @limit)
+    now = Keyword.get(opts, :now, System.os_time(:second))
+    since = now - range_seconds(Keyword.get(opts, :range, "24h"))
+    hosts = MapSet.new(app_hosts(app))
+
+    app
+    |> path_counts(since)
+    |> Enum.reduce(%{}, fn {{host, path}, n}, acc ->
+      if MapSet.member?(hosts, host) do
+        Map.update(acc, path, %{path: path, host: host, requests: n}, fn row ->
+          %{
+            row
+            | host: if(n > row.requests, do: host, else: row.host),
+              requests: row.requests + n
+          }
+        end)
+      else
+        acc
+      end
+    end)
+    |> Map.values()
+    |> Enum.sort_by(&{&1.requests, &1.path}, :desc)
+    |> Enum.take(limit)
+  end
+
+  def for_app(%Scope{}, _app, _opts), do: []
+
   defp host_counts(server) do
     case Application.get_env(:cleat_deploy, :caddy_access_log_path) do
       path when is_binary(path) ->
@@ -183,6 +225,30 @@ defmodule CleatDeploy.Servers.AccessCounts do
     end
   end
 
+  defp path_counts(app, since) do
+    case Application.get_env(:cleat_deploy, :caddy_access_log_path) do
+      path when is_binary(path) ->
+        read_paths(path, since)
+
+      _ ->
+        server = loaded_server(app)
+        if server && HostStats.local?(server), do: read_paths(@default_log, since), else: %{}
+    end
+  end
+
+  defp loaded_server(%{server: %Server{} = server}), do: server
+  defp loaded_server(_), do: nil
+
+  defp read_paths(path, since) do
+    if File.exists?(path) do
+      path
+      |> File.stream!()
+      |> Enum.reduce(%{}, fn line, acc -> add_path_line(acc, line, since) end)
+    else
+      %{}
+    end
+  end
+
   defp add_line(acc, line, since) do
     case Jason.decode(line) do
       {:ok, %{"request" => %{"host" => host}} = row} when is_binary(host) and host != "" ->
@@ -196,6 +262,61 @@ defmodule CleatDeploy.Servers.AccessCounts do
         acc
     end
   end
+
+  defp add_path_line(acc, line, since) do
+    case Jason.decode(line) do
+      {:ok, %{"request" => request} = row} when is_map(request) ->
+        if in_window?(row, since), do: maybe_count_path(acc, request), else: acc
+
+      _ ->
+        acc
+    end
+  end
+
+  defp maybe_count_path(acc, %{"host" => host, "method" => method, "uri" => uri})
+       when is_binary(host) and host != "" and is_binary(uri) do
+    path = strip_query(uri)
+
+    if get_method?(method) and page_path?(path) do
+      Map.update(acc, {normalize_host(host), path}, 1, &(&1 + 1))
+    else
+      acc
+    end
+  end
+
+  defp maybe_count_path(acc, _), do: acc
+
+  defp get_method?(method) when is_binary(method), do: String.upcase(method) == "GET"
+  defp get_method?(_), do: false
+
+  defp strip_query(uri) do
+    uri
+    |> String.split("?", parts: 2)
+    |> hd()
+    |> String.split("#", parts: 2)
+    |> hd()
+  end
+
+  defp page_path?(path) when is_binary(path) and path != "" do
+    ext = path |> Path.extname() |> String.downcase()
+
+    cond do
+      String.starts_with?(path, "/_next/static") -> false
+      String.starts_with?(path, "/cleat/a") -> false
+      ext in @static_ext -> false
+      true -> true
+    end
+  end
+
+  defp page_path?(_), do: false
+
+  defp range_seconds("1h"), do: 3_600
+  defp range_seconds("6h"), do: 21_600
+  defp range_seconds("24h"), do: 86_400
+  defp range_seconds("1d"), do: 86_400
+  defp range_seconds("7d"), do: 604_800
+  defp range_seconds("90d"), do: 7_776_000
+  defp range_seconds(_), do: 86_400
 
   defp in_window?(%{"ts" => ts}, since) when is_number(ts), do: ts >= since
   defp in_window?(_, _), do: true

@@ -219,6 +219,84 @@ defmodule CleatDeployWeb.Api.SignalsTest do
     assert json_response(conn, 404)["error"] == "not_found"
   end
 
+  test "GET /api/v1/signals/pages requires an app", %{token: token} do
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/signals/pages")
+    assert json_response(conn, 404)["error"] == "not_found"
+  end
+
+  test "returns requested HTTP paths and visited pageviews", %{
+    token: token,
+    app: app,
+    scope: scope,
+    server: server
+  } do
+    path = Path.join(System.tmp_dir!(), "cleat-access-#{System.unique_integer([:positive])}.log")
+
+    File.write!(
+      path,
+      Jason.encode!(%{
+        ts: System.os_time(:second),
+        status: 200,
+        request: %{host: app.host, method: "GET", uri: "/blog"}
+      }) <> "\n"
+    )
+
+    previous = Application.get_env(:cleat_deploy, :caddy_access_log_path)
+    Application.put_env(:cleat_deploy, :caddy_access_log_path, path)
+
+    Application.put_env(:cleat_deploy, :analytics_app_stub, %{
+      pageviews: 9,
+      uniques: 3,
+      series: [],
+      paths: [%{path: "/login", pageviews: 7}],
+      referrers: [],
+      utm: [],
+      stale: false
+    })
+
+    on_exit(fn ->
+      File.rm(path)
+
+      if previous do
+        Application.put_env(:cleat_deploy, :caddy_access_log_path, previous)
+      else
+        Application.delete_env(:cleat_deploy, :caddy_access_log_path)
+      end
+
+      Application.delete_env(:cleat_deploy, :analytics_app_stub)
+    end)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/signals/pages?app=#{app.slug}&range=24h")
+
+    data = json_response(conn, 200)["data"]
+
+    assert data["slug"] == app.slug
+    assert data["range"] == "24h"
+    assert [%{"path" => "/blog", "requests" => 1}] = data["requested"]
+    assert [%{"path" => "/login", "pageviews" => 7}] = data["visited"]
+    assert data["pageviews"] == 9
+    assert data["uniques"] == 3
+
+    assert data |> Map.keys() |> Enum.sort() ==
+             Contract.keys("signal_pages") |> Enum.sort()
+
+    other = TenancyFixtures.scope_fixture()
+    other_server = TenancyFixtures.server_fixture(other)
+    other_app = TenancyFixtures.app_fixture(other, other_server)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/signals/pages?app=#{other_app.slug}")
+
+    assert json_response(conn, 404)["error"] == "not_found"
+
+    _ = {scope, server}
+  end
+
   defp insert_deploy(app, attrs) do
     Repo.insert!(%Deployment{
       app_id: app.id,

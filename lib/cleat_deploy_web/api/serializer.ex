@@ -137,6 +137,18 @@ defmodule CleatDeployWeb.Api.Serializer do
     }
   end
 
+  def signal_pages(pages) do
+    %{
+      app_id: pages.app_id,
+      slug: pages.slug,
+      range: pages.range,
+      requested: Enum.map(pages.requested, &requested_path/1),
+      visited: Enum.map(pages.visited, &visited_path/1),
+      pageviews: pages.pageviews,
+      uniques: pages.uniques
+    }
+  end
+
   def signal_alert(%Alert{} = alert) do
     %{
       id: alert.id,
@@ -251,6 +263,10 @@ defmodule CleatDeployWeb.Api.Serializer do
 
   defp alert_slug(%Alert{app: %App{slug: slug}}), do: slug
   defp alert_slug(_alert), do: nil
+
+  defp requested_path(row), do: %{path: row.path, requests: row.requests}
+
+  defp visited_path(row), do: %{path: row.path, pageviews: row.pageviews}
 
   defp json_release(nil), do: nil
 

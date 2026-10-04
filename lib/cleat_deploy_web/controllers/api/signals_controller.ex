@@ -5,7 +5,7 @@ defmodule CleatDeployWeb.Api.SignalsController do
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Signals
-  alias CleatDeploy.Signals.Traces
+  alias CleatDeploy.Signals.{Pages, Traces}
   alias CleatDeployWeb.Api.Serializer
 
   def health(conn, params) do
@@ -35,6 +35,18 @@ defmodule CleatDeployWeb.Api.SignalsController do
     with {:ok, app} <- require_app(scope, params["app"]),
          {:ok, metrics} <- Signals.metrics(scope, app, range: params["range"] || "1h") do
       json(conn, %{data: Serializer.signal_metrics(metrics)})
+    else
+      :error -> not_found(conn)
+      {:error, :not_found} -> not_found(conn)
+    end
+  end
+
+  def pages(conn, params) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- require_app(scope, params["app"]),
+         {:ok, pages} <- Pages.for_app(scope, app, range: params["range"] || "24h") do
+      json(conn, %{data: Serializer.signal_pages(pages)})
     else
       :error -> not_found(conn)
       {:error, :not_found} -> not_found(conn)

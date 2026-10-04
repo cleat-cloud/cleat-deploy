@@ -60,6 +60,7 @@ defmodule CleatDeployWeb.Router do
 
     get "/signals/health", SignalsController, :health
     get "/signals/metrics", SignalsController, :metrics
+    get "/signals/pages", SignalsController, :pages
     get "/signals/alerts", SignalsController, :alerts
     get "/signals/incidents", SignalsController, :incident
     get "/signals/traces", SignalsController, :traces
