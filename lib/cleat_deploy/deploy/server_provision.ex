@@ -1,7 +1,9 @@
 defmodule CleatDeploy.Deploy.ServerProvision do
   @moduledoc false
 
+  alias CleatDeploy.Analytics
   alias CleatDeploy.Apps.App
+  alias CleatDeploy.Deploy.AnalyticsProvision
   alias CleatDeploy.Deploy.AppManifest
   alias CleatDeploy.Deploy.Wake
   alias CleatDeploy.Servers.AccessCounts
@@ -389,7 +391,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   end
 
   defp caddy_provision_script(
-         %App{},
+         %App{} = app,
          _config,
          %AppManifest{caddy_mode: "replace", caddyfile: path}
        )
@@ -403,74 +405,73 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       exit 1
     fi
     sudo cp "$BUILD_DIR/#{path}" /etc/caddy/Caddyfile
+    #{AnalyticsProvision.install_script(app)}
     """
   end
 
-  # Caddy's `file_server` sends only `ETag`/`Last-Modified`, so browsers fall
-  # back to heuristic freshness and keep serving a previous deploy's page
-  # without ever revalidating. `no-cache` forces a conditional request on every
-  # load: unchanged files still answer 304, changed ones are refetched. The
-  # filenames published here are not content-hashed, so nothing can be cached
-  # immutably.
-  #
-  # `X-Robots-Tag` keeps Google (and other crawlers) from indexing a drop
-  # until the app is marked indexable.
-  defp caddy_provision_script(%App{} = app, _config, %AppManifest{runtime: "static"}) do
-    address = caddy_site_address(app)
-
-    caddy_site = """
-    #{address} {
-      # paas:app=#{app.slug}
-      log
-      encode gzip
-      root * #{static_site_root(app)}
-      try_files {path} {path}/index.html /index.html
-      header Cache-Control "no-cache"
-      #{robots_header(app)}
-      file_server
-    }
-    """
-
-    caddy_site_script(address, caddy_site, app.slug)
-  end
-
+  # Site bodies come from Analytics.Caddy. Custom `caddy_mode: replace` above
+  # is not wrapped (same as wake). Cache-Control / X-Robots-Tag live on the
+  # static origin (inject-off public host, or inject-on loopback).
   defp caddy_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
-    address = caddy_site_address(app)
+    address = Analytics.Caddy.address(app.host)
+    robots = robots_header(app)
+    wake? = Wake.enabled?(app, manifest)
+    wake_unit = if wake?, do: config.systemd_unit
+    app_map = caddy_app_map(app)
+    static_root = if app.runtime == "static", do: static_site_root(app)
 
-    if Wake.enabled?(app, manifest) do
-      unit = config.systemd_unit
+    site_opts = [wake_unit: wake_unit, wake_port: Wake.wake_port(), robots_header: robots]
 
-      # `forward_auth` runs before the proxy: the agent answers 2xx once the app
-      # is listening (starting it first when it is not), and only then does
-      # Caddy hand the request to the app.
-      caddy_site = """
-      #{address} {
-        # paas:app=#{app.slug}
-        log
-        encode gzip
-        forward_auth 127.0.0.1:#{Wake.wake_port()} {
-          uri /wake?unit=#{unit}&port=#{app.port}
-        }
-        reverse_proxy 127.0.0.1:#{app.port}
-      }
-      """
+    site_opts =
+      if static_root, do: Keyword.put(site_opts, :static_root, static_root), else: site_opts
 
-      """
-      #{caddy_site_script(address, caddy_site, app.slug)}
-      #{Wake.arm_script(unit)}
-      """
-    else
-      caddy_site = """
-      #{address} {
-        # paas:app=#{app.slug}
-        log
-        encode gzip
-        reverse_proxy 127.0.0.1:#{app.port}
-      }
-      """
+    # Marker must match awk app= slug-origin so a port change (or inject-off)
+    # strips the previous loopback site without touching the public block.
+    origin =
+      if static_root do
+        Analytics.Caddy.loopback_site(%{app_map | slug: "#{app.slug}-origin"},
+          static_root: static_root,
+          robots_header: robots
+        )
+      end
 
-      caddy_site_script(address, caddy_site, app.slug)
-    end
+    block = Analytics.Caddy.public_site(app_map, site_opts)
+
+    bodies =
+      case origin do
+        origin when is_binary(origin) and origin != "" ->
+          String.trim_trailing(block) <> "\n" <> String.trim_trailing(origin)
+
+        _ ->
+          block
+      end
+
+    # Always strip the loopback origin: a former static inject-on site (or a
+    # toggle-off) would otherwise keep file_server bound on the app port.
+    public =
+      caddy_site_script(address, bodies, app.slug, [
+        {"http://127.0.0.1:#{app.port}", app.slug <> "-origin"}
+      ])
+
+    arm = if wake?, do: Wake.arm_script(config.systemd_unit), else: ""
+
+    """
+    #{public}
+    #{arm}
+    #{AnalyticsProvision.install_script(app)}
+    """
+  end
+
+  defp caddy_app_map(%App{} = app) do
+    %{
+      slug: app.slug,
+      host: app.host,
+      port: app.port,
+      runtime: app.runtime,
+      analytics_inject: app.analytics_inject,
+      idle_shutdown_enabled: app.idle_shutdown_enabled,
+      indexable: app.indexable
+    }
   end
 
   # Installs (or refreshes) the wake agent for opted-in apps. Apps that are not
@@ -572,7 +573,17 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     |> String.trim()
   end
 
-  defp caddy_site_script(address, caddy_site, slug) do
+  defp caddy_site_script(address, caddy_site, slug, extra_strips) do
+    extra_awk =
+      Enum.map_join(extra_strips, "\n", fn {site, app} ->
+        """
+        sudo awk -v site=#{shell_escape(site)} -v app=#{shell_escape(app)} '
+          #{caddy_strip_awk()}
+        ' "$TMPFILE" > "$TMPFILE.next"
+        mv "$TMPFILE.next" "$TMPFILE"
+        """
+      end)
+
     """
     #{ensure_caddy_script()}
 
@@ -583,6 +594,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       sudo awk -v site=#{shell_escape(address)} -v app=#{shell_escape(slug)} '
         #{caddy_strip_awk()}
       ' "$CADDYFILE" > "$TMPFILE"
+      #{extra_awk}
       cat >> "$TMPFILE"
       if command -v python3 >/dev/null 2>&1; then
         python3 - "$TMPFILE" <<'PAAS_CADDY_ACCESS'
@@ -611,15 +623,6 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     #{String.trim_trailing(caddy_site)}
     PAAS_CADDY_SITE
     """
-  end
-
-  # Caddy would force HTTPS for a bare IP and have no certificate to serve it,
-  # so an IP host gets an explicit http:// site (port 80, no redirect).
-  defp caddy_site_address(%App{host: host}) when is_binary(host) do
-    case :inet.parse_address(String.to_charlist(host)) do
-      {:ok, _ip} -> "http://#{host}"
-      _ -> host
-    end
   end
 
   defp static_site_root(%App{} = app) do

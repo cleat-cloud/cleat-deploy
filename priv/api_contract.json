@@ -20,6 +20,14 @@
     "server",
     "inserted_at"
   ],
+  "app_query": [
+    "app_id",
+    "slug",
+    "engine",
+    "columns",
+    "rows",
+    "truncated"
+  ],
   "deployment": [
     "id",
     "app_id",
@@ -92,6 +100,15 @@
     "host",
     "series",
     "deploy_markers"
+  ],
+  "signal_pages": [
+    "app_id",
+    "slug",
+    "range",
+    "requested",
+    "visited",
+    "pageviews",
+    "uniques"
   ],
   "signal_alert": [
     "id",

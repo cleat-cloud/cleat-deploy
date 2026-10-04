@@ -18,6 +18,17 @@ defmodule CleatDeployWeb.Api.ContractTest do
     deployment = %Deployment{id: 1, app_id: app.id}
 
     assert keys(Serializer.app(app)) == contract_keys("app")
+
+    query = %{
+      app_id: app.id,
+      slug: app.slug,
+      engine: "sqlite",
+      columns: ["id"],
+      rows: [["1"]],
+      truncated: false
+    }
+
+    assert keys(Serializer.app_query(query)) == contract_keys("app_query")
     assert keys(Serializer.server(server)) == contract_keys("server")
     assert keys(Serializer.user(scope.user)) == contract_keys("user")
     assert keys(Serializer.tenant(scope.tenant)) == contract_keys("tenant")
@@ -85,8 +96,19 @@ defmodule CleatDeployWeb.Api.ContractTest do
       attributes: %{}
     }
 
+    pages = %{
+      app_id: app.id,
+      slug: app.slug,
+      range: "24h",
+      requested: [],
+      visited: [],
+      pageviews: 0,
+      uniques: 0
+    }
+
     assert keys(Serializer.signal_health(health)) == contract_keys("signal_health")
     assert keys(Serializer.signal_metrics(metrics)) == contract_keys("signal_metrics")
+    assert keys(Serializer.signal_pages(pages)) == contract_keys("signal_pages")
     assert keys(Serializer.signal_alert(alert)) == contract_keys("signal_alert")
     assert keys(Serializer.signal_incident(incident)) == contract_keys("signal_incident")
     assert keys(Serializer.signal_trace(trace)) == contract_keys("signal_trace")

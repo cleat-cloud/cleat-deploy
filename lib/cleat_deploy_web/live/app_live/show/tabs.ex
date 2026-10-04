@@ -3,7 +3,7 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
   use CleatDeployWeb, :html
 
   alias CleatDeploy.Apps.RuntimeLogs
-  alias CleatDeployWeb.AppLive.Show.{EnvTab, LogsTab, Runtime}
+  alias CleatDeployWeb.AppLive.Show.{AnalyticsTab, EnvTab, LogsTab, Runtime}
 
   def panel(assigns) do
     ~H"""
@@ -116,6 +116,7 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
       </div>
     </div>
 
+    <AnalyticsTab.render {assigns} />
     <EnvTab.panel {assigns} />
     <div :if={@app_detail_tab == :runtime} id="runtime-packages" class="space-y-3">
       <div class="space-y-0.5">

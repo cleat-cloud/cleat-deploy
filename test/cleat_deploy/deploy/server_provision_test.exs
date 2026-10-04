@@ -40,8 +40,18 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "Environment=CLEAT_DATA_DIR=/var/lib/phoenix_tts"
     assert script =~ "tts.gestaobem.com {"
     assert script =~ "reverse_proxy 127.0.0.1:4004"
+    assert script =~ "handle /cleat/a.js"
+    assert script =~ "handle /cleat/a"
+    assert script =~ "127.0.0.1:8799"
+    assert script =~ "lb_policy first"
+    assert script =~ "cleat-analytics.service"
+    assert script =~ "/etc/cleat/analytics-hosts.json"
+    assert script =~ "/usr/local/lib/cleat/cleat_analytics.py"
+    assert script =~ "sudo systemctl restart cleat-analytics || true"
     assert script =~ "Writing Caddy site tts.gestaobem.com"
     assert script =~ "sudo awk -v site='tts.gestaobem.com'"
+    assert script =~ "sudo awk -v site='http://127.0.0.1:4004' -v app='phoenix-tts-origin'"
+    assert length(Regex.scan(~r/sudo caddy validate --adapter caddyfile/, script)) == 1
     assert script =~ ~s|sudo install -m 0644 -o root -g root "$TMPFILE" "$CADDYFILE"|
     refute script =~ ~s|SNIPPET = """servers {|
     assert script =~ "log access {"
@@ -303,6 +313,127 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "sudo rm -f '/var/lib/cleat/stamps/phoenix_tts.stamp'"
   end
 
+  test "analytics_inject false is a single reverse_proxy without collect handles", %{
+    app: app,
+    config: config,
+    scope: scope
+  } do
+    assert {:ok, app} = CleatDeploy.Apps.set_analytics_inject(scope, app, false)
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    assert script =~ "reverse_proxy 127.0.0.1:4004"
+    refute script =~ "handle /cleat/a"
+    refute script =~ "127.0.0.1:8799"
+    refute script =~ "lb_policy first"
+    refute script =~ "cleat-analytics.service"
+    refute script =~ "/usr/local/lib/cleat/cleat_analytics.py"
+    assert script =~ "/etc/cleat/analytics-hosts.json"
+    assert analytics_hosts_json(script) == %{}
+  end
+
+  test "inject-off still refreshes hosts when a sibling is inject-on", %{
+    app: app,
+    config: config,
+    scope: scope,
+    server: server
+  } do
+    assert {:ok, app} = CleatDeploy.Apps.set_analytics_inject(scope, app, false)
+
+    sibling =
+      TenancyFixtures.app_fixture(scope, server, %{
+        runtime: "phoenix",
+        slug: "nfe-x",
+        host: "nfe-x.example.com"
+      })
+
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    refute script =~ "handle /cleat/a"
+    assert script =~ "cleat-analytics.service"
+    hosts = analytics_hosts_json(script)
+    assert hosts[sibling.host]["slug"] == sibling.slug
+    refute Map.has_key?(hosts, "tts.gestaobem.com")
+  end
+
+  test "wake plus inject keeps collect handles before forward_auth", %{app: app, config: config} do
+    app = %{app | idle_shutdown_enabled: true}
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+    site = caddy_site_body(script)
+
+    assert site =~ "/cleat/a"
+    assert site =~ "forward_auth"
+    assert site =~ "@cleat_ws"
+    assert site =~ "handle {"
+    assert occurrence(site, "/cleat/a") < occurrence(site, "forward_auth")
+    assert occurrence(site, "forward_auth") < occurrence(site, "@cleat_ws")
+  end
+
+  test "static inject-on proxies the public host and serves files on loopback", %{
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Cleat LP",
+        slug: "cleat",
+        runtime: "static",
+        analytics_inject: true,
+        host: "cleat.example.com"
+      })
+
+    config = App.deploy_config(app)
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    assert script =~ "http://127.0.0.1:"
+    assert script =~ "bind 127.0.0.1"
+    assert script =~ ~s|header Cache-Control "no-cache"|
+    assert script =~ ~s|header X-Robots-Tag "noindex, nofollow"|
+    assert script =~ "handle /cleat/a"
+    assert script =~ "reverse_proxy 127.0.0.1:8799 127.0.0.1:#{app.port}"
+    assert script =~ "# paas:app=cleat-origin"
+    assert script =~ "sudo awk -v site='http://127.0.0.1:#{app.port}' -v app='cleat-origin'"
+    assert length(Regex.scan(~r/sudo caddy validate --adapter caddyfile/, script)) == 1
+
+    assert length(
+             Regex.scan(
+               ~r/sudo install -m 0644 -o root -g root "\$TMPFILE" "\$CADDYFILE"/,
+               script
+             )
+           ) ==
+             1
+  end
+
+  test "static inject-off strips the loopback origin and does not re-append it", %{
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Cleat LP",
+        slug: "cleat",
+        runtime: "static",
+        analytics_inject: true,
+        host: "cleat.example.com"
+      })
+
+    assert {:ok, app} = CleatDeploy.Apps.set_analytics_inject(scope, app, false)
+    config = App.deploy_config(app)
+    manifest = AppManifest.resolve(nil, app)
+    script = ServerProvision.provision_script(app, config, manifest)
+
+    assert script =~ "sudo awk -v site='cleat.example.com'"
+    assert script =~ "sudo awk -v site='http://127.0.0.1:#{app.port}' -v app='cleat-origin'"
+    assert script =~ "file_server"
+    refute script =~ "bind 127.0.0.1"
+    refute script =~ "# paas:app=cleat-origin"
+    refute script =~ "handle /cleat/a"
+    assert length(Regex.scan(~r/sudo caddy validate --adapter caddyfile/, script)) == 1
+  end
+
   test "never arms a custom caddyfile or a static site", %{app: app, config: config} do
     opted_in = %{app | idle_shutdown_enabled: true}
 
@@ -448,6 +579,26 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
   defp occurrence(script, snippet) do
     {position, _length} = :binary.match(script, snippet)
     position
+  end
+
+  defp caddy_site_body(script) do
+    case Regex.run(~r/write_caddy_site <<'PAAS_CADDY_SITE'\n(.*?)\nPAAS_CADDY_SITE/s, script) do
+      [_, body] -> body
+      nil -> flunk("no Caddy site block in provision script")
+    end
+  end
+
+  defp analytics_hosts_json(script) do
+    case Regex.run(~r/<<'CLEAT_ANALYTICS_HOSTS'\n(.*?)\nCLEAT_ANALYTICS_HOSTS/s, script) do
+      [_, body] ->
+        case Jason.decode(body) do
+          {:ok, map} -> map
+          {:error, error} -> flunk("hosts JSON is not valid: #{inspect(error)}\n#{body}")
+        end
+
+      nil ->
+        flunk("no analytics hosts JSON in provision script")
+    end
   end
 
   test "release_command_script runs each command in order with the app env", %{

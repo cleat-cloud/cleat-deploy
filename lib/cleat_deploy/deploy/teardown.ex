@@ -35,6 +35,7 @@ defmodule CleatDeploy.Deploy.Teardown do
     #{addons_teardown_script(app)}
 
     #{remove_host_script(host)}
+    #{remove_host_script("http://127.0.0.1:#{app.port}")}
     """
   end
 

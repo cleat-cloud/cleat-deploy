@@ -56,6 +56,13 @@ defmodule CleatDeployWeb.Api.SecurityTest do
       |> json_put(~p"/api/v1/apps/#{app.id}/env", %{key: "X", value: "y"})
 
     assert json_response(env, 403)["error"] == "forbidden"
+
+    query =
+      build_conn()
+      |> auth(token)
+      |> json_post(~p"/api/v1/apps/#{app.id}/query", %{sql: "SELECT 1"})
+
+    assert json_response(query, 403)["error"] == "forbidden"
   end
 
   defp auth(conn, token), do: put_req_header(conn, "authorization", "Bearer #{token}")

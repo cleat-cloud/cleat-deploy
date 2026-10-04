@@ -457,6 +457,15 @@ defmodule CleatDeploy.Apps do
 
   def update_app_settings(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
 
+  def set_analytics_inject(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, enabled)
+      when tenant_id == tenant.id and is_boolean(enabled) do
+    app
+    |> App.analytics_inject_changeset(%{analytics_inject: enabled})
+    |> Repo.update()
+  end
+
+  def set_analytics_inject(%Scope{}, %App{}, _), do: {:error, :unauthorized}
+
   # Repointing an app at another repo should refresh its push webhook.
   defp sync_repo_change(%App{} = app, previous_repo) do
     if is_binary(app.github_repo) and app.github_repo != "" and app.github_repo != previous_repo do

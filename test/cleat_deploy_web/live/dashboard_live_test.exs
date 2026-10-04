@@ -85,6 +85,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#chart-deploys svg[preserveAspectRatio='none']")
     assert has_element?(view, "#chart-deploys-labels")
     assert has_element?(view, "#chart-access")
+    assert has_element?(view, "#chart-visited", "No pageviews yet")
     refute has_element?(view, "#dashboard-apps-table")
     refute has_element?(view, "#apps-table")
     refute html =~ "Registered Phoenix Applications"
@@ -440,6 +441,54 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#chart-access", "NFe Fácil")
     assert html =~ ~s|href="/apps/|
     refute has_element?(view, "#chart-access", "No request samples yet")
+    assert has_element?(view, "#chart-visited", "No pageviews yet")
+  end
+
+  test "ranks apps by sidecar pageviews", %{conn: conn, scope: scope} do
+    server = TenancyFixtures.server_fixture(scope, %{name: "cx33", instance_status: "running"})
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "NFe Fácil",
+        slug: "nfe-facil",
+        host: "nfe.gestaobem.com"
+      })
+
+    previous = Application.get_env(:cleat_deploy, :analytics_visited_stub)
+
+    Application.put_env(:cleat_deploy, :analytics_visited_stub, [
+      %{host: "nfe.gestaobem.com", slug: "nfe-facil", pageviews: 10},
+      %{host: "secret.example.com", slug: "secret", pageviews: 99}
+    ])
+
+    on_exit(fn ->
+      if previous do
+        Application.put_env(:cleat_deploy, :analytics_visited_stub, previous)
+      else
+        Application.delete_env(:cleat_deploy, :analytics_visited_stub)
+      end
+    end)
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#chart-visited", "NFe Fácil")
+    assert has_element?(view, "#chart-access")
+    refute has_element?(view, "#chart-visited", "No pageviews yet")
+    refute has_element?(view, "#chart-visited", "secret")
+    assert has_element?(view, ~s|#chart-visited-nfe-facil[href="/apps/#{app.id}?tab=analytics"]|)
+  end
+
+  test "visited bars mark stale summaries in the title" do
+    html =
+      render_component(&CleatDeployWeb.PaasComponents.Bars.visited_bars/1, %{
+        id: "chart-visited",
+        apps: [%{id: 1, name: "NFe Fácil", slug: "nfe-facil", pageviews: 10}],
+        stale: true
+      })
+
+    assert html =~ "Most visited · 24h · stale"
+    assert html =~ "10 pageviews"
+    refute html =~ "No pageviews yet"
   end
 
   test "does not show other tenant apps", %{conn: conn, scope: scope} do

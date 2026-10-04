@@ -12,6 +12,7 @@ defmodule CleatDeployWeb.Api.Contract do
       id name slug github_repo branch host port systemd_unit release_path data_dir
       auto_deploy idle_shutdown_enabled indexable units addons runtime runtime_apt_packages server inserted_at
     ),
+    "app_query" => ~w(app_id slug engine columns rows truncated),
     "server" => ~w(
       id name host_ip ssh_user region provider deploy_mode instance_status
       bundle_id bundle_name cpu_count ram_mb disk_gb monthly_price_usd
@@ -35,6 +36,7 @@ defmodule CleatDeployWeb.Api.Contract do
       app_id slug name status reasons error_count previous_error_count preceding_release
     ),
     "signal_metrics" => ~w(app_id slug range red host series deploy_markers),
+    "signal_pages" => ~w(app_id slug range requested visited pageviews uniques),
     "signal_alert" => ~w(
       id app_id slug rule status message channel fired_at acked_at delivered_at
     ),

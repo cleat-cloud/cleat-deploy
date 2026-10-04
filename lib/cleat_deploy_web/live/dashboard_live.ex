@@ -201,6 +201,11 @@ defmodule CleatDeployWeb.DashboardLive do
             static={@insights.runtimes.static}
           />
           <.deploy_bars id="chart-deploys" days={@insights.deploys} />
+          <.visited_bars
+            id="chart-visited"
+            apps={@insights.top_visited}
+            stale={@insights.visited_stale}
+          />
           <.access_bars id="chart-access" apps={@insights.top_apps} />
         </div>
       </div>

@@ -30,6 +30,7 @@ config :cleat_deploy, :runtime_logs, CleatDeploy.Apps.RuntimeLogsSsh
 config :cleat_deploy, :runtime_memory, CleatDeploy.Apps.RuntimeLogsSsh
 config :cleat_deploy, :idle_shutdown_runner, CleatDeploy.Apps.IdleShutdownSsh
 config :cleat_deploy, :runtime_control_runner, CleatDeploy.Apps.RuntimeControlSsh
+config :cleat_deploy, :app_query, CleatDeploy.Apps.QuerySsh
 
 config :cleat_deploy, :auto_deploy_health_on_boot, true
 
@@ -117,6 +118,11 @@ config :logger, :default_formatter,
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
+
+# Spine analytics defaults. Collection lives on the VPS sidecar, not in cleat.db.
+config :cleat_deploy, :analytics_listen_port, 8799
+config :cleat_deploy, :analytics_product_lp_slugs, ~w(cleat cleat-paas fagulha)
+config :cleat_deploy, :analytics_client, CleatDeploy.Analytics.SummaryHttp
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

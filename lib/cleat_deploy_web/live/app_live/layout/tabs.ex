@@ -28,6 +28,13 @@ defmodule CleatDeployWeb.AppLive.Layout.Tabs do
         href={~p"/apps/#{@app.id}?tab=logs"}
       />
       <.detail_tab_link
+        tab={:analytics}
+        label="Analytics"
+        icon="hero-chart-bar"
+        active?={@active_tab == :analytics}
+        href={~p"/apps/#{@app.id}?tab=analytics"}
+      />
+      <.detail_tab_link
         :if={:domains in @detail_tabs}
         tab={:domains}
         label="Tenant domains"
@@ -98,7 +105,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Tabs do
   end
 
   def detail_tabs(custom_domain_app?, runtime_packages) do
-    [:deployments, :logs]
+    [:deployments, :logs, :analytics]
     |> then(fn tabs -> if custom_domain_app?, do: tabs ++ [:domains], else: tabs end)
     |> Kernel.++([:environment])
     |> then(fn tabs -> if runtime_packages != [], do: tabs ++ [:runtime], else: tabs end)
@@ -106,7 +113,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Tabs do
   end
 
   def parse_detail_tab(tab)
-      when tab in ["logs", "domains", "environment", "runtime", "webhook", "danger"] do
+      when tab in ["logs", "analytics", "domains", "environment", "runtime", "webhook", "danger"] do
     String.to_existing_atom(tab)
   end
 

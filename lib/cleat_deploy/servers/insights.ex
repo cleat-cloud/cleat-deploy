@@ -4,7 +4,9 @@ defmodule CleatDeploy.Servers.Insights do
   import Ecto.Query, warn: false
 
   alias CleatDeploy.Accounts.Scope
+  alias CleatDeploy.Analytics.Summary
   alias CleatDeploy.Apps
+  alias CleatDeploy.Apps.App
   alias CleatDeploy.Deployments
   alias CleatDeploy.Hetzner
   alias CleatDeploy.Repo
@@ -14,6 +16,7 @@ defmodule CleatDeploy.Servers.Insights do
 
   @deploy_days 14
   @metric_points 48
+  @visited_limit 20
 
   def snapshot(%Scope{} = scope, opts \\ []) do
     server = active_server(scope)
@@ -22,11 +25,12 @@ defmodule CleatDeploy.Servers.Insights do
     deploys =
       fill_deploy_days(Deployments.daily_status_counts(scope, @deploy_days, server), @deploy_days)
 
-    metrics =
-      if Keyword.get(opts, :metrics, true), do: remote_metrics(server), else: empty_metrics()
+    metrics? = Keyword.get(opts, :metrics, true)
+    metrics = if metrics?, do: remote_metrics(server), else: empty_metrics()
+    top_apps = if metrics?, do: AccessCounts.for_server(scope, server), else: []
 
-    top_apps =
-      if Keyword.get(opts, :metrics, true), do: AccessCounts.for_server(scope, server), else: []
+    {top_visited, visited_stale} =
+      if metrics?, do: visited_ranking(scope, server), else: {[], false}
 
     %{
       server: server,
@@ -34,6 +38,8 @@ defmodule CleatDeploy.Servers.Insights do
       deploys: deploys,
       metrics: metrics,
       top_apps: top_apps,
+      top_visited: top_visited,
+      visited_stale: visited_stale,
       cpu_now: last_value(metrics.cpu),
       net_in_now: last_value(metrics.network_in),
       net_out_now: last_value(metrics.network_out)
@@ -115,6 +121,120 @@ defmodule CleatDeploy.Servers.Insights do
 
   defp last_value([]), do: nil
   defp last_value(series), do: List.last(series).v
+
+  defp visited_ranking(_scope, nil), do: {[], false}
+
+  defp visited_ranking(scope, %Server{} = server) do
+    {rows, stale} =
+      case Summary.visited(server) do
+        {:ok, rows, stale: true} -> {List.wrap(rows), true}
+        {:ok, rows} when is_list(rows) -> {rows, false}
+        _ -> {[], false}
+      end
+
+    {rank_visited(tenant_apps(scope, server), rows), stale}
+  end
+
+  defp tenant_apps(%Scope{tenant: tenant}, server) do
+    Repo.all(
+      from a in App,
+        where: a.tenant_id == ^tenant.id and a.server_id == ^server.id,
+        select: %{id: a.id, name: a.name, slug: a.slug, host: a.host}
+    )
+  end
+
+  defp rank_visited(apps, rows) do
+    by_slug = Map.new(apps, &{&1.slug, &1})
+
+    by_host =
+      for app <- apps, host <- app_hosts(app), into: %{}, do: {host, app}
+
+    rows
+    |> Enum.reduce(%{}, fn row, acc -> add_visited_row(acc, row, by_slug, by_host) end)
+    |> Map.values()
+    |> Enum.filter(&(&1.pageviews > 0))
+    |> Enum.sort_by(&{&1.pageviews, &1.slug}, :desc)
+    |> Enum.take(@visited_limit)
+  end
+
+  defp add_visited_row(acc, row, by_slug, by_host) do
+    case matched_app(row, by_slug, by_host) do
+      nil ->
+        acc
+
+      app ->
+        n = pageviews(row)
+
+        Map.update(
+          acc,
+          app.id,
+          %{id: app.id, name: app.name, slug: app.slug, pageviews: n},
+          fn existing -> %{existing | pageviews: existing.pageviews + n} end
+        )
+    end
+  end
+
+  defp matched_app(row, by_slug, by_host) when is_map(row) do
+    slug = string_field(row, :slug)
+    host = row |> string_field(:host) |> normalize_host()
+
+    cond do
+      slug != "" and is_map_key(by_slug, slug) -> Map.fetch!(by_slug, slug)
+      host != "" -> Map.get(by_host, host)
+      true -> nil
+    end
+  end
+
+  defp matched_app(_row, _by_slug, _by_host), do: nil
+
+  defp pageviews(row) when is_map(row) do
+    case Map.get(row, :pageviews) || Map.get(row, "pageviews") do
+      n when is_integer(n) ->
+        n
+
+      n when is_float(n) ->
+        trunc(n)
+
+      n when is_binary(n) ->
+        case Integer.parse(n) do
+          {int, _} -> int
+          :error -> 0
+        end
+
+      _ ->
+        0
+    end
+  end
+
+  defp pageviews(_row), do: 0
+
+  defp string_field(row, key) do
+    case Map.get(row, key) || Map.get(row, Atom.to_string(key)) do
+      value when is_binary(value) -> value
+      _ -> ""
+    end
+  end
+
+  defp app_hosts(%{host: host}) when is_binary(host) do
+    host
+    |> String.split(",")
+    |> Enum.map(&normalize_host/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp app_hosts(_), do: []
+
+  defp normalize_host(host) when is_binary(host) do
+    host
+    |> String.trim()
+    |> String.downcase()
+    |> String.replace_prefix("http://", "")
+    |> String.replace_prefix("https://", "")
+    |> String.split(":")
+    |> hd()
+  end
+
+  defp normalize_host(_), do: ""
 
   defp fill_deploy_days(rows, days) do
     counts =

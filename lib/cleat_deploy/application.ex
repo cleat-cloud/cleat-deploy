@@ -28,6 +28,8 @@ defmodule CleatDeploy.Application do
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: CleatDeploy.Supervisor]
 
+    CleatDeploy.Analytics.Summary.init_cache()
+
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
         CleatDeploy.Deploy.Ssh.cleanup_stale_identity_files()

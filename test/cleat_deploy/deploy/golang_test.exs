@@ -63,7 +63,7 @@ defmodule CleatDeploy.Deploy.GolangTest do
 
     script = ServerProvision.provision_script(app, config, manifest)
 
-    [web_unit, worker_unit] =
+    [web_unit, worker_unit | _] =
       script
       |> String.split("PAAS_SYSTEMD_UNIT")
       |> Enum.filter(&String.contains?(&1, "[Service]"))

@@ -311,4 +311,56 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
     </section>
     """
   end
+
+  attr :id, :string, required: true
+  attr :apps, :list, default: []
+  attr :stale, :boolean, default: false
+
+  def visited_bars(assigns) do
+    max_v =
+      assigns.apps
+      |> Enum.map(& &1.pageviews)
+      |> Enum.max(fn -> 1 end)
+      |> max(1)
+
+    rows =
+      Enum.map(assigns.apps, fn app ->
+        Map.put(app, :pct, round(app.pageviews / max_v * 100))
+      end)
+
+    assigns = assign(assigns, rows: rows)
+
+    ~H"""
+    <section id={@id} class="paas-card p-4 lg:col-span-2">
+      <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+        Most visited · 24h{if(@stale, do: " · stale")}
+      </h3>
+      <p class="text-[11px] text-hd-muted">Pageviews on this server</p>
+      <div :if={@rows == []} class="mt-8 text-center font-mono text-[11px] text-hd-muted">
+        No pageviews yet
+      </div>
+      <div :if={@rows != []} class="mt-5 space-y-4">
+        <.link
+          :for={row <- @rows}
+          id={"#{@id}-#{row.slug}"}
+          navigate={~p"/apps/#{row.id}?tab=analytics"}
+          class="group/row block"
+        >
+          <div class="mb-1 flex items-center justify-between gap-3 font-mono text-[11px]">
+            <span class="truncate text-hd-text group-hover/row:text-hd-orange group-hover/row:underline">
+              {row.name}
+            </span>
+            <span class="shrink-0 tabular-nums text-hd-muted">{row.pageviews}</span>
+          </div>
+          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
+            <div class="h-2 rounded-full bg-hd-orange" style={"width: #{row.pct}%"} />
+            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
+              {row.pageviews} pageviews
+            </span>
+          </div>
+        </.link>
+      </div>
+    </section>
+    """
+  end
 end

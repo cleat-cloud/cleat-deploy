@@ -53,3 +53,9 @@ npm-debug.log
 
 # Local Command Code agent data (not shared config)
 .commandcode/
+
+# Git worktrees (subagent-driven development)
+.worktrees/
+
+# Python bytecode from the analytics sidecar tests
+__pycache__/

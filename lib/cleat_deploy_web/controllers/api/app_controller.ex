@@ -4,6 +4,7 @@ defmodule CleatDeployWeb.Api.AppController do
   use CleatDeployWeb, :controller
 
   alias CleatDeploy.Apps
+  alias CleatDeploy.Apps.Query
   alias CleatDeploy.Logs
   alias CleatDeployWeb.Api.LogError
   alias CleatDeployWeb.Api.Serializer
@@ -101,6 +102,64 @@ defmodule CleatDeployWeb.Api.AppController do
     %{since: params["since"], tail: params["tail"], grep: params["grep"]}
   end
 
+  def query(conn, %{"app_id" => app_id} = params) do
+    scope = conn.assigns.current_scope
+
+    with {:ok, app} <- resolve_app(scope, app_id),
+         {:ok, sql} <- sql_param(params) do
+      respond_query(conn, Query.run(scope, app, sql, limit: limit_param(params)))
+    else
+      :error -> not_found(conn)
+      {:error, :invalid_sql, message} -> unprocessable(conn, "invalid_sql", message)
+    end
+  end
+
+  defp respond_query(conn, {:ok, result}) do
+    json(conn, %{data: Serializer.app_query(result)})
+  end
+
+  defp respond_query(conn, {:error, :not_found}), do: not_found(conn)
+
+  defp respond_query(conn, {:error, :invalid_sql, message}) do
+    unprocessable(conn, "invalid_sql", message)
+  end
+
+  defp respond_query(conn, {:error, :no_database}) do
+    unprocessable(conn, "no_database", "app has no local Postgres or SQLite")
+  end
+
+  defp respond_query(conn, {:error, :unsupported_database}) do
+    unprocessable(
+      conn,
+      "unsupported_database",
+      "remote Turso/libSQL is not queryable from the panel"
+    )
+  end
+
+  defp respond_query(conn, {:error, :unsafe_path}) do
+    unprocessable(conn, "unsafe_path", "DATABASE_PATH must be an absolute path")
+  end
+
+  defp respond_query(conn, {:error, :query_failed, message}) do
+    conn
+    |> put_status(:bad_gateway)
+    |> json(%{error: "query_failed", message: message})
+  end
+
+  defp sql_param(%{"sql" => sql}) when is_binary(sql) and sql != "", do: {:ok, sql}
+  defp sql_param(_), do: {:error, :invalid_sql, "provide sql"}
+
+  defp limit_param(%{"limit" => limit}) when is_integer(limit), do: limit
+
+  defp limit_param(%{"limit" => limit}) when is_binary(limit) do
+    case Integer.parse(limit) do
+      {int, ""} -> int
+      _ -> 50
+    end
+  end
+
+  defp limit_param(_), do: 50
+
   def delete(conn, %{"id" => id}) do
     scope = conn.assigns.current_scope
 
@@ -148,5 +207,11 @@ defmodule CleatDeployWeb.Api.AppController do
 
   defp not_found(conn) do
     conn |> put_status(:not_found) |> json(%{error: "not_found"})
+  end
+
+  defp unprocessable(conn, error, message) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: error, message: message})
   end
 end
