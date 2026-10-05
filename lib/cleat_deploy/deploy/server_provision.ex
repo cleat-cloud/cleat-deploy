@@ -303,7 +303,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     # the launcher) keeps the port and makes every restart fail to bind, which
     # without a start limit becomes an infinite restart loop.
     KillMode=control-group
-    TimeoutStopSec=15
+    # Node/Rails servers may wait for in-flight requests before exiting; 15s
+    # cut graceful handlers short and systemd escalated to SIGKILL (#212).
+    # restart_units_script warns when a stop still needs the SIGKILL.
+    TimeoutStopSec=30
     MemoryMax=#{memory_max}M
     LimitNOFILE=65535
 
@@ -318,6 +321,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   @doc """
   Restarts every unit of the app and fails the deploy when one of them does not
   come up. `web` goes first so the HTTP endpoint is ready before the workers.
+
+  A stop that needed SIGKILL is surfaced as a warning: the app ignored SIGTERM
+  (no graceful shutdown), and a hard kill on an app with SQLite/Litestream can
+  leave WAL state behind.
   """
   def restart_units_script(config, %AppManifest{} = manifest) do
     manifest
@@ -330,6 +337,9 @@ defmodule CleatDeploy.Deploy.ServerProvision do
 
       if sudo systemctl is-active --quiet #{unit_name}; then
         log "Service #{unit_name} is active"
+        if sudo journalctl -u #{unit_name} --since "3 min ago" --no-pager 2>/dev/null | grep -q "timed out. Killing."; then
+          log "WARN: #{unit_name} ignored SIGTERM and was SIGKILLed on stop — add a graceful shutdown handler"
+        fi
       else
         sudo journalctl -u #{unit_name} -n 50 --no-pager
         exit 1

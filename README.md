@@ -122,6 +122,12 @@ TanStack Start / Nitro (the `.output` bundle is self-contained). The start comma
 (e.g. `"20"`; defaults to the latest 22.x), `build_command`, and `build_dir` for
 monorepos.
 
+Apps should handle `SIGTERM` (close the server, stop accepting connections) so
+deploys and restarts shut them down gracefully. The unit waits up to 30s before
+systemd escalates to `SIGKILL`; when a stop needs the hard kill the deploy log
+prints a warning, since a SIGKILLed process with SQLite/Litestream can leave WAL
+state behind.
+
 ### Ruby on Rails apps
 
 Set `runtime: "rails"` (or `"runtime": "rails"` in `.cleat_deploy/deploy.json`).

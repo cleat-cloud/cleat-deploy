@@ -523,6 +523,16 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "exit 1"
   end
 
+  test "restart_units_script warns when a stop needed SIGKILL", %{config: config} do
+    manifest = %AppManifest{runtime: "node", processes: %{"web" => "npm run start"}}
+
+    script = ServerProvision.restart_units_script(config, manifest)
+
+    assert script =~ ~s|journalctl -u phoenix_tts --since "3 min ago"|
+    assert script =~ ~s|grep -q "timed out. Killing."|
+    assert script =~ "WARN: phoenix_tts ignored SIGTERM and was SIGKILLed on stop"
+  end
+
   test "extra_start_commands writes one command file per non-web process", %{config: config} do
     manifest = %AppManifest{
       runtime: "rails",
