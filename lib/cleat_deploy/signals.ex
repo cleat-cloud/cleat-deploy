@@ -45,6 +45,8 @@ defmodule CleatDeploy.Signals do
     deploys = finished_deploys(app_ids)
     latest = latest_by_app(deploys)
     releases = preceding_releases(deploys, app_ids, first_error, now)
+    last_events = last_event_at_by_app(scope.tenant.id)
+    ingest = Observability.ingest_status(now: now)
 
     Enum.map(apps, fn app ->
       cur = Map.get(current, app.id, 0)
@@ -64,13 +66,26 @@ defmodule CleatDeploy.Signals do
         app_id: app.id,
         slug: app.slug,
         name: app.name,
+        runtime: app.runtime,
         status: status(reasons),
         reasons: reasons,
         error_count: cur,
         previous_error_count: prev,
+        last_event_at: Map.get(last_events, app.id),
+        ingest: ingest,
         preceding_release: Map.get(releases, app.id)
       }
     end)
+  end
+
+  defp last_event_at_by_app(tenant_id) do
+    from(e in LogEvent,
+      where: e.tenant_id == ^tenant_id and not is_nil(e.app_id),
+      group_by: e.app_id,
+      select: {e.app_id, max(e.occurred_at)}
+    )
+    |> Repo.all()
+    |> Map.new()
   end
 
   defp reasons(current, previous, latest, saturated?, now, window) do
@@ -291,7 +306,7 @@ defmodule CleatDeploy.Signals do
     now = Keyword.get(opts, :now, DateTime.utc_now(:second))
     rows = health_overview(scope, opts)
     open = open_alerts(scope.tenant.id)
-    desired = desired_alerts(rows)
+    desired = desired_alerts(rows) |> put_ingest_stale(rows)
     desired_keys = MapSet.new(Map.keys(desired))
 
     opened =
@@ -306,6 +321,18 @@ defmodule CleatDeploy.Signals do
     |> Enum.each(fn {_key, alert} -> resolve_alert(alert, now) end)
 
     {:ok, opened}
+  end
+
+  # A stale collector is tenant-wide: it has no app and only fires while the
+  # collector is enabled, so an explicit opt-out is not treated as a fault.
+  defp put_ingest_stale(desired, rows) do
+    ingest = rows |> List.first() |> then(&(&1 && &1.ingest))
+
+    if ingest && ingest.stale && Enum.any?(rows, &(&1.runtime != "static")) do
+      Map.put(desired, {nil, "ingest_stale"}, %{ingest: ingest})
+    else
+      desired
+    end
   end
 
   def list_alerts(%Scope{tenant: tenant}) do
@@ -399,7 +426,27 @@ defmodule CleatDeploy.Signals do
   defp alert_message("deploy_failed", row), do: "Deploy falhou em #{row.slug}"
   defp alert_message("error_rate", row), do: "Taxa de erro subiu em #{row.slug}"
   defp alert_message("saturation", row), do: "Saturação em #{row.slug}"
+  defp alert_message("ingest_stale", %{ingest: ingest}), do: ingest_message(ingest)
   defp alert_message(_rule, row), do: "Alerta em #{row.slug}"
+
+  defp ingest_message(%{enabled: false}),
+    do: "Coletor de logs desligado — os sinais podem estar desatualizados"
+
+  defp ingest_message(%{last_run_at: nil}),
+    do: "Coletor de logs nunca executou — os sinais podem estar desatualizados"
+
+  defp ingest_message(%{last_run_at: at}),
+    do: "Coletor de logs sem executar desde #{Calendar.strftime(at, "%Y-%m-%d %H:%M UTC")}"
+
+  defp alert_payload("ingest_stale", row) do
+    %{
+      "event" => "signal.alert",
+      "rule" => "ingest_stale",
+      "status" => "firing",
+      "message" => alert_message("ingest_stale", row),
+      "ingest" => json_ingest(row.ingest)
+    }
+  end
 
   defp alert_payload(rule, row) do
     %{
@@ -409,6 +456,15 @@ defmodule CleatDeploy.Signals do
       "message" => alert_message(rule, row),
       "app" => %{"id" => row.app_id, "slug" => row.slug, "name" => row.name},
       "preceding_release" => json_release(row.preceding_release)
+    }
+  end
+
+  defp json_ingest(ingest) do
+    %{
+      enabled: ingest.enabled,
+      last_run_at: ingest.last_run_at,
+      last_failures: ingest.last_failures,
+      failed_apps: ingest.failed_apps
     }
   end
 

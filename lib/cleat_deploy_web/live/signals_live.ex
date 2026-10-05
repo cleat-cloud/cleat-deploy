@@ -2,6 +2,7 @@ defmodule CleatDeployWeb.SignalsLive do
   use CleatDeployWeb, :live_view
 
   alias CleatDeploy.Apps
+  alias CleatDeploy.Observability
   alias CleatDeploy.Signals
   alias CleatDeploy.Signals.Traces
 
@@ -16,6 +17,7 @@ defmodule CleatDeployWeb.SignalsLive do
      |> assign(:incident, nil)
      |> assign(:rows, [])
      |> assign(:alerts, [])
+     |> assign(:ingest, nil)
      |> assign(:traces, [])
      |> assign(:log_jumps, [])
      |> assign(:trace_id, nil)
@@ -76,6 +78,32 @@ defmodule CleatDeployWeb.SignalsLive do
               Detecte degradação e o release que antecedeu a mudança, sem abrir SSH.
             </p>
           </div>
+        </div>
+
+        <div
+          :if={@ingest && (!@ingest.enabled || @ingest.stale)}
+          id="signals-ingest-banner"
+          class={[
+            "rounded-md border px-4 py-3 text-sm",
+            (@ingest.enabled && "border-hd-orange/40 bg-hd-orange/10 text-hd-orange") ||
+              "border-hd-red/40 bg-hd-red/10 text-hd-red"
+          ]}
+        >
+          <p :if={!@ingest.enabled} class="font-medium">
+            Coletor de logs desligado — os números abaixo não refletem a realidade.
+          </p>
+          <p :if={@ingest.enabled} class="font-medium">
+            Ingestão de logs parada{ingest_since(@ingest)} — os números abaixo podem estar desatualizados.
+          </p>
+          <p :if={@ingest.enabled && @ingest.last_failures && @ingest.last_failures > 0} class="mt-1">
+            Última coleta falhou em {ingest_failed_apps(@ingest)}.
+          </p>
+          <p :if={!@ingest.enabled} class="mt-1 font-mono text-[11px]">
+            Ligue LOG_COLLECTOR_ENABLED=true e reinicie o painel para retomar a coleta.
+          </p>
+          <p :if={@ingest.enabled} class="mt-1 font-mono text-[11px]">
+            Verifique a fila :logs do Oban e o acesso SSH do painel aos servidores.
+          </p>
         </div>
 
         <div class="grid gap-4 md:grid-cols-3">
@@ -150,7 +178,9 @@ defmodule CleatDeployWeb.SignalsLive do
                 <td class="px-4 py-2 font-mono text-[11px] text-hd-muted">
                   {release_label(row.preceding_release)}
                 </td>
-                <td class="px-4 py-2 font-mono tabular-nums">{row.error_count}</td>
+                <td class="px-4 py-2 font-mono tabular-nums">
+                  {if ingest_blind?(@ingest), do: "—", else: row.error_count}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -340,6 +370,7 @@ defmodule CleatDeployWeb.SignalsLive do
     socket
     |> assign(:rows, rows)
     |> assign(:alerts, alerts)
+    |> assign(:ingest, Observability.ingest_status())
     |> assign_selected(scope, app_param, trace_id)
   end
 
@@ -451,6 +482,17 @@ defmodule CleatDeployWeb.SignalsLive do
   defp fetch_ok(_), do: nil
 
   defp count_status(rows, status), do: Enum.count(rows, &(&1.status == status))
+
+  defp ingest_blind?(nil), do: false
+  defp ingest_blind?(%{enabled: false}), do: true
+  defp ingest_blind?(%{stale: stale}), do: stale
+
+  defp ingest_since(%{last_run_at: nil}), do: ""
+  defp ingest_since(%{last_run_at: at}), do: " desde #{Calendar.strftime(at, "%d/%m %H:%M UTC")}"
+
+  defp ingest_failed_apps(%{last_failures: failures, last_apps: apps}) do
+    "#{failures} de #{apps} aplicações"
+  end
 
   defp status_label(:healthy), do: "saudável"
   defp status_label(:degraded), do: "degradada"

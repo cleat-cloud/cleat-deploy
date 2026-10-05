@@ -1,6 +1,9 @@
 defmodule CleatDeploy.Signals.Alert do
   @moduledoc """
-  A default Corte 02 alert: unavailability, deploy failed, error rate or saturation.
+  A default Corte 02 alert: unavailability, deploy failed, error rate,
+  saturation or a stopped log collector.
+
+  `ingest_stale` is tenant-wide and has no `app_id`.
   """
 
   use Ecto.Schema
@@ -9,7 +12,7 @@ defmodule CleatDeploy.Signals.Alert do
   alias CleatDeploy.Accounts.Tenant
   alias CleatDeploy.Apps.App
 
-  @rules ~w(unavailability deploy_failed error_rate saturation)
+  @rules ~w(unavailability deploy_failed error_rate saturation ingest_stale)
   @statuses ~w(firing acked resolved)
   @channels ~w(in_app webhook)
 
@@ -45,10 +48,19 @@ defmodule CleatDeploy.Signals.Alert do
       :channel,
       :fired_at
     ])
-    |> validate_required([:tenant_id, :app_id, :rule, :status, :message, :fired_at])
+    |> validate_required([:tenant_id, :rule, :status, :message, :fired_at])
     |> validate_inclusion(:rule, @rules)
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:channel, @channels)
+    |> require_app_unless_tenant_wide()
     |> unique_constraint([:tenant_id, :app_id, :rule], name: :signal_alerts_open_index)
+  end
+
+  defp require_app_unless_tenant_wide(changeset) do
+    if get_field(changeset, :rule) == "ingest_stale" do
+      changeset
+    else
+      validate_required(changeset, [:app_id])
+    end
   end
 end

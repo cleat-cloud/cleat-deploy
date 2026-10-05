@@ -3,9 +3,10 @@ defmodule CleatDeploy.SignalsTest do
 
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deployments.Deployment
-  alias CleatDeploy.Observability.LogEvent
+  alias CleatDeploy.Observability.{CollectorRun, LogEvent}
   alias CleatDeploy.Repo
   alias CleatDeploy.Signals
+  alias CleatDeploy.Signals.Alert
   alias CleatDeploy.TenancyFixtures
 
   setup do
@@ -172,6 +173,23 @@ defmodule CleatDeploy.SignalsTest do
       assert row.status == :degraded
       assert :saturation in row.reasons
     end
+
+    test "carries the app's last event and the instance ingest status", ctx do
+      now = DateTime.utc_now(:second)
+
+      insert_event(ctx, ctx.app, %{
+        severity: "info",
+        occurred_at: DateTime.add(now, -30, :second)
+      })
+
+      rows = Signals.health_overview(ctx.scope, now: now)
+      busy = Enum.find(rows, &(&1.slug == ctx.app.slug))
+      quiet = Enum.find(rows, &(&1.slug == ctx.healthy.slug))
+
+      assert busy.last_event_at == DateTime.add(now, -30, :second)
+      assert %{enabled: false, stale: false} = busy.ingest
+      assert quiet.last_event_at == nil
+    end
   end
 
   describe "metrics/3" do
@@ -284,6 +302,42 @@ defmodule CleatDeploy.SignalsTest do
       assert {:ok, acked} = Signals.ack_alert(ctx.scope, alert.id)
       assert acked.status == "acked"
       assert acked.acked_at
+    end
+
+    test "opens and resolves a tenant-wide ingest_stale alert", ctx do
+      Req.Test.stub(__MODULE__, fn conn -> Req.Test.json(conn, %{ok: true}) end)
+      stub_collector(true)
+      now = DateTime.utc_now(:second)
+
+      assert {:ok, [alert]} = Signals.evaluate_alerts(ctx.scope, now: now)
+      assert alert.rule == "ingest_stale"
+      assert alert.app_id == nil
+      assert alert.message =~ "nunca executou"
+
+      Repo.insert!(%CollectorRun{
+        ran_at: now,
+        apps: 2,
+        failures: 0,
+        failed_slugs: %{}
+      })
+
+      assert {:ok, []} = Signals.evaluate_alerts(ctx.scope, now: now)
+      assert Repo.get!(Alert, alert.id).status == "resolved"
+    end
+
+    test "does not open ingest_stale for a tenant with only static apps" do
+      other = TenancyFixtures.scope_fixture()
+      other_server = TenancyFixtures.server_fixture(other)
+      TenancyFixtures.app_fixture(other, other_server, %{runtime: "static"})
+
+      stub_collector(true)
+
+      assert {:ok, []} = Signals.evaluate_alerts(other, now: DateTime.utc_now(:second))
+    end
+
+    defp stub_collector(enabled) do
+      Application.put_env(:cleat_deploy, :log_collector_enabled, enabled)
+      on_exit(fn -> Application.put_env(:cleat_deploy, :log_collector_enabled, false) end)
     end
   end
 

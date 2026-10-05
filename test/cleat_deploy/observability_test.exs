@@ -7,7 +7,7 @@ defmodule CleatDeploy.ObservabilityTest do
   alias CleatDeploy.Apps.RuntimeLogsMock
   alias CleatDeploy.Deployments.Deployment
   alias CleatDeploy.Observability
-  alias CleatDeploy.Observability.LogEvent
+  alias CleatDeploy.Observability.{CollectorRun, LogEvent}
   alias CleatDeploy.Repo
   alias CleatDeploy.Servers.Server
   alias CleatDeploy.TenancyFixtures
@@ -302,6 +302,83 @@ defmodule CleatDeploy.ObservabilityTest do
 
       assert Enum.any?(deletes, &String.contains?(&1, "\"id\" <")),
              "expected id < cutoff delete, got: #{inspect(deletes)}"
+    end
+  end
+
+  describe "collector health" do
+    test "reports stale while enabled without a heartbeat" do
+      stub_collector(true)
+
+      status = Observability.ingest_status(now: DateTime.utc_now(:second))
+
+      assert status.enabled
+      assert status.stale
+      assert status.last_run_at == nil
+    end
+
+    test "reports stale after the heartbeat ages past the threshold" do
+      stub_collector(true)
+      now = DateTime.utc_now(:second)
+
+      Repo.insert!(%CollectorRun{
+        ran_at: DateTime.add(now, -3_600, :second),
+        apps: 57,
+        failures: 2,
+        failed_slugs: %{"slugs" => ["api", "web"]}
+      })
+
+      status = Observability.ingest_status(now: now)
+
+      assert status.stale
+      assert status.last_apps == 57
+      assert status.last_failures == 2
+      assert status.failed_apps == %{"slugs" => ["api", "web"]}
+    end
+
+    test "reports fresh after a recent heartbeat" do
+      stub_collector(true)
+      now = DateTime.utc_now(:second)
+
+      Repo.insert!(%CollectorRun{
+        ran_at: DateTime.add(now, -60, :second),
+        apps: 3,
+        failures: 0,
+        failed_slugs: %{}
+      })
+
+      status = Observability.ingest_status(now: now)
+
+      refute status.stale
+      assert status.last_failures == 0
+    end
+
+    test "is never stale while the collector is disabled" do
+      status = Observability.ingest_status()
+
+      refute status.enabled
+      refute status.stale
+    end
+
+    test "record_collect/1 writes a heartbeat and prunes old runs" do
+      old = DateTime.add(DateTime.utc_now(:second), -10 * 86_400, :second)
+      Repo.insert!(%CollectorRun{ran_at: old, apps: 1, failures: 0, failed_slugs: %{}})
+
+      assert {:ok, run} =
+               Observability.record_collect(%{
+                 apps: 4,
+                 failures: 1,
+                 failed_slugs: %{"slugs" => ["api"]}
+               })
+
+      assert run.apps == 4
+      assert run.failures == 1
+      assert [kept] = Repo.all(CollectorRun)
+      assert kept.id == run.id
+    end
+
+    defp stub_collector(enabled) do
+      Application.put_env(:cleat_deploy, :log_collector_enabled, enabled)
+      on_exit(fn -> Application.put_env(:cleat_deploy, :log_collector_enabled, false) end)
     end
   end
 

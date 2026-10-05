@@ -34,6 +34,30 @@ defmodule CleatDeployWeb.SignalsLiveTest do
     refute has_element?(view, "#signals-detail")
   end
 
+  test "warns while the log collector is off", %{conn: conn, scope: scope} do
+    server = TenancyFixtures.server_fixture(scope)
+    TenancyFixtures.app_fixture(scope, server)
+
+    {:ok, view, _html} = live(conn, ~p"/signals")
+
+    assert has_element?(view, "#signals-ingest-banner", "Coletor de logs desligado")
+  end
+
+  test "warns when an enabled log collector stalls", %{conn: conn, scope: scope} do
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    Application.put_env(:cleat_deploy, :log_collector_enabled, true)
+    on_exit(fn -> Application.put_env(:cleat_deploy, :log_collector_enabled, false) end)
+
+    {:ok, view, _html} = live(conn, ~p"/signals")
+
+    assert has_element?(view, "#signals-ingest-banner", "Ingestão de logs parada")
+
+    row = view |> element("#signals-app-#{app.slug}") |> render()
+    assert row =~ "—"
+  end
+
   test "flags a degraded app and opens the incident detail", %{conn: conn, scope: scope} do
     server = TenancyFixtures.server_fixture(scope)
     app = TenancyFixtures.app_fixture(scope, server)

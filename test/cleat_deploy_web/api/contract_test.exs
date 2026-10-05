@@ -44,6 +44,15 @@ defmodule CleatDeployWeb.Api.ContractTest do
       reasons: [],
       error_count: 0,
       previous_error_count: 0,
+      last_event_at: nil,
+      ingest: %{
+        enabled: false,
+        last_run_at: nil,
+        last_apps: nil,
+        last_failures: nil,
+        failed_apps: nil,
+        stale: false
+      },
       preceding_release: nil
     }
 
