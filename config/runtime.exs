@@ -48,6 +48,12 @@ if config_env() != :test do
          :log_max_rows_per_tenant,
          String.to_integer(System.get_env("LOG_MAX_ROWS_PER_TENANT", "50000"))
 
+  # A sweep runs every 5 minutes; 30 minutes without a heartbeat means the
+  # collector is stuck and Signals must say so instead of reporting "0 errors".
+  config :cleat_deploy,
+         :log_collector_stale_seconds,
+         String.to_integer(System.get_env("LOG_COLLECTOR_STALE_SECONDS", "1800"))
+
   config :cleat_deploy, :signals_webhook_url, System.get_env("SIGNALS_WEBHOOK_URL")
 
   lightsail_client =

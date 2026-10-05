@@ -132,7 +132,20 @@ defmodule CleatDeployWeb.Api.Serializer do
       reasons: Enum.map(row.reasons, &Atom.to_string/1),
       error_count: row.error_count,
       previous_error_count: row.previous_error_count,
+      last_event_at: row.last_event_at,
+      ingest: json_ingest(row.ingest),
       preceding_release: json_release(row.preceding_release)
+    }
+  end
+
+  defp json_ingest(ingest) do
+    %{
+      enabled: ingest.enabled,
+      last_run_at: ingest.last_run_at,
+      last_apps: ingest.last_apps,
+      last_failures: ingest.last_failures,
+      failed_apps: ingest.failed_apps,
+      stale: ingest.stale
     }
   end
 

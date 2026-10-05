@@ -90,6 +90,8 @@
     "reasons",
     "error_count",
     "previous_error_count",
+    "last_event_at",
+    "ingest",
     "preceding_release"
   ],
   "signal_metrics": [

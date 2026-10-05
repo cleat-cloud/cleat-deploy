@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Export the panel DB from Turso, place it as a local SQLite file on the
-# panel host, point DATABASE_PATH at it, and start Litestream.
-#
-# Requires a working Turso export (reads must be unblocked). Collector stays
-# off. Rollback: comment DATABASE_PATH, uncomment TURSO_* , restart.
+# panel host, point DATABASE_PATH at it, and start Litestream. The cutover also
+# re-enables the log collector, which is usually parked while reads are billed.
+# Rollback: comment DATABASE_PATH, uncomment TURSO_* , restart.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

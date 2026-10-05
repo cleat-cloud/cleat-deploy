@@ -17,7 +17,7 @@ defmodule CleatDeploy.Observability do
   alias CleatDeploy.Accounts.Scope
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deployments.Deployment
-  alias CleatDeploy.Observability.{Fingerprint, Journal, LogEvent, Query, Redact}
+  alias CleatDeploy.Observability.{CollectorRun, Fingerprint, Journal, LogEvent, Query, Redact}
   alias CleatDeploy.Repo
   alias CleatDeploy.Repo.BusyRetry
   alias CleatDeploy.Servers.Server
@@ -26,6 +26,8 @@ defmodule CleatDeploy.Observability do
   @ingest_overlap_seconds 300
   @retention_days 7
   @max_rows_per_tenant 50_000
+  @collector_stale_seconds 1_800
+  @collector_runs_retention_days 7
 
   @type filters :: %{
           optional(:app_id) => integer() | nil,
@@ -296,10 +298,68 @@ defmodule CleatDeploy.Observability do
     end
   end
 
+  # -- collector health ------------------------------------------------------
+
+  @doc """
+  Records the heartbeat of a periodic sweep so a stopped collector is visible
+  even when no app produced new journal lines.
+  """
+  @spec record_collect(map()) :: {:ok, CollectorRun.t()} | {:error, Ecto.Changeset.t()}
+  def record_collect(attrs) do
+    attrs = Map.merge(%{ran_at: DateTime.utc_now(:second)}, attrs)
+
+    case %CollectorRun{} |> CollectorRun.changeset(attrs) |> Repo.insert() do
+      {:ok, run} ->
+        prune_collector_runs()
+        {:ok, run}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Freshness of the log collector for this instance.
+
+  `:stale` is only meaningful while the collector is enabled: with the
+  collector off (`:enabled` false) the stored signals must not be read as a
+  clean bill of health.
+  """
+  @spec ingest_status(keyword()) :: map()
+  def ingest_status(opts \\ []) do
+    now = Keyword.get(opts, :now, DateTime.utc_now(:second))
+    run = Repo.one(from r in CollectorRun, order_by: [desc: r.ran_at, desc: r.id], limit: 1)
+
+    %{
+      enabled: collector_enabled?(),
+      last_run_at: run && run.ran_at,
+      last_apps: run && run.apps,
+      last_failures: run && run.failures,
+      failed_apps: (run && run.failed_slugs) || %{"slugs" => []},
+      stale: collector_enabled?() and stale_run?(run, now)
+    }
+  end
+
+  defp stale_run?(nil, _now), do: true
+
+  defp stale_run?(%CollectorRun{ran_at: ran_at}, now),
+    do: DateTime.diff(now, ran_at, :second) > stale_seconds()
+
+  defp prune_collector_runs do
+    cutoff =
+      DateTime.add(DateTime.utc_now(:second), -@collector_runs_retention_days * 86_400, :second)
+
+    Repo.delete_all(from r in CollectorRun, where: r.ran_at < ^cutoff)
+  end
+
   # -- config ----------------------------------------------------------------
 
   @doc "Whether the background collector is enabled for this instance."
   def collector_enabled?, do: Application.get_env(:cleat_deploy, :log_collector_enabled, false)
+
+  @doc "Seconds without a sweep heartbeat after which ingest is considered stale."
+  def stale_seconds,
+    do: Application.get_env(:cleat_deploy, :log_collector_stale_seconds, @collector_stale_seconds)
 
   defp retention_days,
     do: Application.get_env(:cleat_deploy, :log_retention_days, @retention_days)

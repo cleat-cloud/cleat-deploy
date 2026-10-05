@@ -33,7 +33,7 @@ defmodule CleatDeployWeb.Api.Contract do
     ),
     "log_group" => ~w(fingerprint severity count sample last_seen_at),
     "signal_health" => ~w(
-      app_id slug name status reasons error_count previous_error_count preceding_release
+      app_id slug name status reasons error_count previous_error_count last_event_at ingest preceding_release
     ),
     "signal_metrics" => ~w(app_id slug range red host series deploy_markers),
     "signal_pages" => ~w(app_id slug range requested visited pageviews uniques),

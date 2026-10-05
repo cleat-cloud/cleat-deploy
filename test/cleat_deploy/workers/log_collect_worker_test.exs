@@ -9,7 +9,7 @@ defmodule CleatDeploy.Workers.LogCollectWorkerTest do
   import Mox
 
   alias CleatDeploy.Apps.RuntimeLogsMock
-  alias CleatDeploy.Observability.LogEvent
+  alias CleatDeploy.Observability.{CollectorRun, LogEvent}
   alias CleatDeploy.Repo
   alias CleatDeploy.TenancyFixtures
   alias CleatDeploy.Workers.LogCollectWorker
@@ -77,6 +77,21 @@ defmodule CleatDeploy.Workers.LogCollectWorkerTest do
     assert event.app_id == ctx.app.id
     assert event.message == "just one"
     assert other.id != ctx.app.id
+    assert Repo.all(CollectorRun) == []
+  end
+
+  test "records a sweep heartbeat with the failed app count", ctx do
+    stub_collector(true)
+    TenancyFixtures.app_fixture(ctx.scope, ctx.server)
+
+    expect(RuntimeLogsMock, :run, 2, fn _subject, _argv -> {:error, "ssh down"} end)
+
+    assert :ok = perform_job(LogCollectWorker, %{})
+
+    assert [run] = Repo.all(CollectorRun)
+    assert run.apps == 2
+    assert run.failures == 2
+    assert length(run.failed_slugs["slugs"]) == 2
   end
 
   test "skips prune on a per-app collect", ctx do
