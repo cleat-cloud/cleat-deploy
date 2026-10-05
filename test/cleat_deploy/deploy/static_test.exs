@@ -79,10 +79,55 @@ defmodule CleatDeploy.Deploy.StaticTest do
 
     assert script =~ "npm ci || npm install"
     assert script =~ "npm run build"
-    assert script =~ "/var/www/landing/releases/build"
+    assert script =~ ~s|RELEASE_DIR="/var/www/landing/releases/$RELEASE_ID"|
     assert script =~ ~s|PUBLISH_DIR="$candidate"|
     assert script =~ "file_server"
     assert script =~ ~s|trap 'rm -rf "$BUILD_DIR"; rm -f /tmp/src.tar.gz' EXIT|
+  end
+
+  test "publishes into a fresh release and swaps current atomically", %{
+    app: app,
+    config: config
+  } do
+    manifest = AppManifest.resolve(nil, app)
+    script = Static.remote_build_script(nil, app, config, "abc123", "/tmp/src.tar.gz", manifest)
+
+    # The active release is never reused or emptied in place: a second deploy
+    # used to delete the files Caddy was serving before the copy finished.
+    refute script =~ "releases/build"
+    refute script =~ ~S|rm -rf "${RELEASE_DIR:?}"/*|
+    assert script =~ ~s|RELEASE_ID="$(date -u +%Y%m%d%H%M%S)-abc123"|
+    assert script =~ ~s|sudo cp -a "$PUBLISH_DIR"/. "$RELEASE_DIR"/|
+    assert script =~ "Static release came out empty"
+    assert script =~ "sudo ln -sfn \"$RELEASE_DIR\" /var/www/landing/current.next"
+    assert script =~ "sudo mv -Tf /var/www/landing/current.next /var/www/landing/current"
+
+    # Validation runs before the swap; the swap is a rename on the same FS.
+    assert index_of(script, "Static release came out empty") < index_of(script, "current.next")
+    assert index_of(script, "sudo cp -a") < index_of(script, "sudo mv -Tf")
+  end
+
+  test "drop publishes into a fresh release and swaps current atomically", %{
+    app: app,
+    config: config
+  } do
+    manifest = AppManifest.resolve(nil, app)
+    script = Static.remote_drop_script(app, config, "sha", "/tmp/drop.tar.gz", manifest)
+
+    refute script =~ "releases/build"
+    refute script =~ ~S|rm -rf "${RELEASE_DIR:?}"/*|
+    assert script =~ ~s|RELEASE_ID="$(date -u +%Y%m%d%H%M%S)-sha"|
+    assert script =~ ~s|sudo cp -a "$BUILD_DIR"/. "$RELEASE_DIR"/|
+    assert script =~ "sudo mv -Tf /var/www/landing/current.next /var/www/landing/current"
+    assert script =~ "tail -n +5"
+  end
+
+  test "sanitizes the deployment sha in the release directory name", %{app: app, config: config} do
+    manifest = AppManifest.resolve(nil, app)
+    script = Static.remote_build_script(nil, app, config, "a b/c", "/tmp/src.tar.gz", manifest)
+
+    assert script =~ ~s|RELEASE_ID="$(date -u +%Y%m%d%H%M%S)-a-b-c"|
+    refute script =~ ~s|RELEASE_ID="$(date -u +%Y%m%d%H%M%S)-a b/c"|
   end
 
   test "drop script removes its build dir and tarball", %{app: app, config: config} do
@@ -124,5 +169,10 @@ defmodule CleatDeploy.Deploy.StaticTest do
 
     assert script =~ ~s|PUBLISH_DIR="dist"|
     refute script =~ "for candidate in"
+  end
+
+  defp index_of(script, needle) do
+    {index, _length} = :binary.match(script, needle)
+    index
   end
 end
