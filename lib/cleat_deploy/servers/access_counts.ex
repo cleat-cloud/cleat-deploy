@@ -152,7 +152,7 @@ defmodule CleatDeploy.Servers.AccessCounts do
         |> app_hosts()
         |> Enum.reduce(0, fn host, acc -> acc + Map.get(counts, host, 0) end)
 
-      %{id: app.id, name: app.name, slug: app.slug, requests: requests}
+      %{id: app.id, name: app.name, slug: app.slug, host: app.host, requests: requests}
     end)
     |> Enum.filter(&(&1.requests > 0))
     |> Enum.sort_by(&{&1.requests, &1.slug}, :desc)

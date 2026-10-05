@@ -173,6 +173,16 @@ defmodule CleatDeployWeb.Api.Serializer do
     }
   end
 
+  def analytics_requested(row) do
+    %{
+      app_id: row.id,
+      slug: row.slug,
+      name: row.name,
+      host: blank_to_nil(row.host),
+      requests: row.requests
+    }
+  end
+
   def signal_alert(%Alert{} = alert) do
     %{
       id: alert.id,

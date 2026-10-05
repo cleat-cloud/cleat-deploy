@@ -48,11 +48,23 @@ defmodule CleatDeploy.Servers.Insights do
 
   # The server chosen on the dashboard wins while it still belongs to the
   # tenant; otherwise fall back to the running/oldest one.
-  defp active_server(%Scope{} = scope) do
+  def active_server(%Scope{} = scope) do
     case Settings.get_setting(scope).active_server_id do
       nil -> primary_server(scope)
       server_id -> get_tenant_server(scope, server_id) || primary_server(scope)
     end
+  end
+
+  @doc """
+  Most requested apps (24h) on the active server, from Caddy's access log.
+
+  Rows mirror the dashboard: `id`, `name`, `slug`, `host`, `requests`. A server
+  without a local access log returns an empty list — no invented volume.
+  """
+  def requested_ranking(%Scope{} = scope) do
+    server = active_server(scope)
+
+    %{server: server, requested: AccessCounts.for_server(scope, server)}
   end
 
   defp get_tenant_server(%Scope{tenant: tenant}, server_id) do

@@ -13,6 +13,7 @@ defmodule CleatDeployWeb.Api.Contract do
       auto_deploy idle_shutdown_enabled indexable units addons runtime runtime_apt_packages server inserted_at
     ),
     "app_query" => ~w(app_id slug engine columns rows truncated),
+    "analytics_requested" => ~w(app_id slug name host requests),
     "server" => ~w(
       id name host_ip ssh_user region provider deploy_mode instance_status
       bundle_id bundle_name cpu_count ram_mb disk_gb monthly_price_usd
