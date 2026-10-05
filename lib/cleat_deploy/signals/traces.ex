@@ -25,7 +25,8 @@ defmodule CleatDeploy.Signals.Traces do
 
   @doc "Set sampling in `0.0..1.0`. Rate 0 disables ingest."
   def set_sampling(%Scope{} = scope, %App{} = app, rate) do
-    with :ok <- owned?(scope, app) do
+    with :ok <- owned?(scope, app),
+         :ok <- writable?(scope) do
       case app |> App.sampling_changeset(%{trace_sample_rate: rate}) |> Repo.update() do
         {:ok, updated} -> {:ok, sampling(updated)}
         {:error, changeset} -> {:error, changeset}
@@ -147,6 +148,10 @@ defmodule CleatDeploy.Signals.Traces do
 
   defp owned?(%Scope{tenant: %{id: id}}, %App{tenant_id: id}), do: :ok
   defp owned?(%Scope{}, %App{}), do: {:error, :not_found}
+
+  defp writable?(%Scope{} = scope) do
+    if Scope.can_write?(scope), do: :ok, else: {:error, :unauthorized}
+  end
 
   defp sampled?(_trace_id, rate) when rate <= 0, do: false
   defp sampled?(_trace_id, rate) when rate >= 1, do: true

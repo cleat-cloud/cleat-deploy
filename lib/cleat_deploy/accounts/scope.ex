@@ -5,6 +5,8 @@ defmodule CleatDeploy.Accounts.Scope do
 
   alias CleatDeploy.Accounts.{Tenant, User}
 
+  @write_roles ~w(owner admin)
+
   defstruct user: nil, tenant: nil, role: nil
 
   @doc """
@@ -19,4 +21,15 @@ defmodule CleatDeploy.Accounts.Scope do
   end
 
   def for_user(nil), do: nil
+
+  @doc """
+  Roles allowed to mutate apps, servers, deployments, env vars and signals.
+
+  Single source of truth: the API plug and the LiveViews both read this, so a
+  member is read-only in every interface.
+  """
+  def write_roles, do: @write_roles
+
+  def can_write?(%__MODULE__{role: role}), do: role in @write_roles
+  def can_write?(_), do: false
 end

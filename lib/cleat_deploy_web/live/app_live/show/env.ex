@@ -9,6 +9,7 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
   alias CleatDeploy.Apps.EnvApply
   alias CleatDeploy.Deploy.Addons
   alias CleatDeployWeb.AppLive.Show.Runtime
+  alias CleatDeployWeb.Authorize
 
   def handle_event("toggle_secret", _params, socket) do
     {:noreply, assign(socket, :show_secret?, not socket.assigns.show_secret?)}
@@ -78,7 +79,7 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
       value = Ecto.Changeset.get_field(changeset, :value)
       branch = Ecto.Changeset.get_field(changeset, :branch)
 
-      case Apps.put_env_var(socket.assigns.app, key, value, branch) do
+      case Apps.put_env_var(socket.assigns.current_scope, socket.assigns.app, key, value, branch) do
         {:ok, _env_var} ->
           {:noreply,
            socket
@@ -86,6 +87,9 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
            |> assign(:editing_env_var?, false)
            |> refresh_env_vars()
            |> flash_after_apply(key, branch, :saved)}
+
+        {:error, :unauthorized} ->
+          {:noreply, put_flash(socket, :error, Authorize.read_only_message())}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Could not save #{key}")}
@@ -96,7 +100,7 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
   end
 
   def handle_event("delete_env_var", %{"key" => key, "branch" => branch}, socket) do
-    case Apps.delete_env_var(socket.assigns.app, key, branch) do
+    case Apps.delete_env_var(socket.assigns.current_scope, socket.assigns.app, key, branch) do
       :ok ->
         {:noreply,
          socket
@@ -107,6 +111,9 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
 
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "#{key} is not configured for that branch")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, Authorize.read_only_message())}
     end
   end
 

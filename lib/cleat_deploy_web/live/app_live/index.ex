@@ -4,6 +4,7 @@ defmodule CleatDeployWeb.AppLive.Index do
   alias CleatDeploy.{Apps, Github, Servers}
   alias CleatDeploy.Apps.{App, Provisioning, RuntimeControl, RuntimeMemory}
   alias CleatDeployWeb.AppLive.Index.{Directory, Form, Listing, Modals}
+  alias CleatDeployWeb.Authorize
 
   @impl true
   def mount(_params, _session, socket) do
@@ -143,45 +144,49 @@ defmodule CleatDeployWeb.AppLive.Index do
   end
 
   def handle_event("hibernate_app", %{"id" => id}, socket) do
-    case Listing.find_app(socket.assigns.apps_list, id) do
-      nil ->
-        {:noreply, assign(socket, :pending_hibernate, nil)}
+    Authorize.write(socket, fn socket ->
+      case Listing.find_app(socket.assigns.apps_list, id) do
+        nil ->
+          {:noreply, assign(socket, :pending_hibernate, nil)}
 
-      app ->
-        case RuntimeControl.hibernate(app) do
-          :ok ->
-            {:noreply,
-             socket
-             |> assign(:pending_hibernate, nil)
-             |> put_flash(:info, "#{app.name} hibernated — no CPU or RAM until it wakes")
-             |> Listing.refresh_runtime()}
+        app ->
+          case RuntimeControl.hibernate(app) do
+            :ok ->
+              {:noreply,
+               socket
+               |> assign(:pending_hibernate, nil)
+               |> put_flash(:info, "#{app.name} hibernated — no CPU or RAM until it wakes")
+               |> Listing.refresh_runtime()}
 
-          {:error, reason} ->
-            {:noreply,
-             socket
-             |> assign(:pending_hibernate, nil)
-             |> put_flash(:error, "Could not hibernate: #{reason}")}
-        end
-    end
+            {:error, reason} ->
+              {:noreply,
+               socket
+               |> assign(:pending_hibernate, nil)
+               |> put_flash(:error, "Could not hibernate: #{reason}")}
+          end
+      end
+    end)
   end
 
   def handle_event("wake_app", %{"id" => id}, socket) do
-    case Listing.find_app(socket.assigns.apps_list, id) do
-      nil ->
-        {:noreply, socket}
+    Authorize.write(socket, fn socket ->
+      case Listing.find_app(socket.assigns.apps_list, id) do
+        nil ->
+          {:noreply, socket}
 
-      app ->
-        case RuntimeControl.wake(app) do
-          :ok ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "#{app.name} is starting")
-             |> Listing.refresh_runtime()}
+        app ->
+          case RuntimeControl.wake(app) do
+            :ok ->
+              {:noreply,
+               socket
+               |> put_flash(:info, "#{app.name} is starting")
+               |> Listing.refresh_runtime()}
 
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Could not wake: #{reason}")}
-        end
-    end
+            {:error, reason} ->
+              {:noreply, put_flash(socket, :error, "Could not wake: #{reason}")}
+          end
+      end
+    end)
   end
 
   def handle_event("delete_app_prompt", %{"id" => id}, socket) do
@@ -278,6 +283,9 @@ defmodule CleatDeployWeb.AppLive.Index do
          |> assign(:app_count, socket.assigns.app_count + 1)
          |> put_flash(:info, Form.app_registered_message(webhook_status))
          |> push_navigate(to: ~p"/apps/#{app.id}/deployments")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, Authorize.read_only_message())}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}

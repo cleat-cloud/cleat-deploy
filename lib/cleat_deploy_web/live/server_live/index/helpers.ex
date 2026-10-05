@@ -20,6 +20,9 @@ defmodule CleatDeployWeb.ServerLive.Index.Helpers do
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset, as: :server))}
 
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, CleatDeployWeb.Authorize.read_only_message())}
+
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, Servers.format_cloud_error(reason))}
     end
@@ -39,6 +42,9 @@ defmodule CleatDeployWeb.ServerLive.Index.Helpers do
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset, as: :server))}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, CleatDeployWeb.Authorize.read_only_message())}
     end
   end
 

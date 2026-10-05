@@ -13,6 +13,34 @@ defmodule CleatDeploy.AppsTest do
     %{scope: scope, server: server}
   end
 
+  describe "write authorization" do
+    test "members cannot mutate apps or their env vars", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server)
+      member = %{scope | role: "member"}
+
+      assert {:error, :unauthorized} = Apps.update_app(member, app, %{branch: "other"})
+      assert {:error, :unauthorized} = Apps.update_app_settings(member, app, %{indexable: true})
+      assert {:error, :unauthorized} = Apps.delete_app(member, app)
+      assert Apps.get_app!(scope, app.id)
+
+      assert {:error, :unauthorized} =
+               Apps.create_app(member, %{
+                 name: "denied",
+                 slug: "denied",
+                 github_repo: "a/denied",
+                 host: "denied.example.com",
+                 server_id: server.id
+               })
+
+      assert {:error, :unauthorized} = Apps.put_env_var(member, app, "KEY", "value")
+      refute Map.has_key?(Apps.env_map(app), "KEY")
+
+      {:ok, _} = Apps.put_env_var(app, "KEY", "value")
+      assert {:error, :unauthorized} = Apps.delete_env_var(member, app, "KEY")
+      assert Apps.env_map(app)["KEY"] == "value"
+    end
+  end
+
   describe "webhook_secret" do
     test "is stored encrypted and loads as plaintext", %{scope: scope, server: server} do
       app = TenancyFixtures.app_fixture(scope, server)

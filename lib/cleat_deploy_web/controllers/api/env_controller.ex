@@ -33,7 +33,10 @@ defmodule CleatDeployWeb.Api.EnvController do
     with {:ok, app} <- resolve_app(scope, app_id),
          {:ok, entries} <- entries(params),
          :ok <- validate_all(app, entries, branch) do
-      Enum.each(entries, fn {key, value} -> Apps.put_env_var(app, key, value, branch) end)
+      Enum.each(entries, fn {key, value} ->
+        Apps.put_env_var(scope, app, key, value, branch)
+      end)
+
       app = Apps.get_app!(scope, app.id)
       respond_after_apply(conn, app, branch, :updated)
     else
@@ -48,7 +51,7 @@ defmodule CleatDeployWeb.Api.EnvController do
     with {:ok, app} <- resolve_app(scope, app_id) do
       branch = branch_param(params)
 
-      case Apps.delete_env_var(app, key, branch) do
+      case Apps.delete_env_var(scope, app, key, branch) do
         :ok -> respond_after_apply(conn, Apps.get_app!(scope, app.id), branch, :deleted)
         {:error, :not_found} -> not_found(conn)
       end

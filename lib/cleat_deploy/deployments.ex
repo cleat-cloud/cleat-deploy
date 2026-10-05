@@ -36,9 +36,9 @@ defmodule CleatDeploy.Deployments do
     |> broadcast_change()
   end
 
-  def enqueue(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
+  def enqueue(%Scope{tenant: tenant} = scope, %App{tenant_id: tenant_id} = app, attrs)
       when tenant_id == tenant.id do
-    enqueue(app, attrs)
+    with :ok <- authorize_write(scope), do: enqueue(app, attrs)
   end
 
   def enqueue(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
@@ -54,9 +54,9 @@ defmodule CleatDeploy.Deployments do
   Like `enqueue/3` but also returns the created deployment, so API callers can
   report its id and status.
   """
-  def enqueue_deployment(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
+  def enqueue_deployment(%Scope{tenant: tenant} = scope, %App{tenant_id: tenant_id} = app, attrs)
       when tenant_id == tenant.id do
-    enqueue_deployment(app, attrs)
+    with :ok <- authorize_write(scope), do: enqueue_deployment(app, attrs)
   end
 
   def enqueue_deployment(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
@@ -77,9 +77,9 @@ defmodule CleatDeploy.Deployments do
   @doc """
   Enqueues a git-less "drop" deploy from an uploaded artifact.
   """
-  def enqueue_drop(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
+  def enqueue_drop(%Scope{tenant: tenant} = scope, %App{tenant_id: tenant_id} = app, attrs)
       when tenant_id == tenant.id do
-    enqueue_drop(app, attrs)
+    with :ok <- authorize_write(scope), do: enqueue_drop(app, attrs)
   end
 
   def enqueue_drop(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
@@ -428,9 +428,9 @@ defmodule CleatDeploy.Deployments do
   never starts. A build already running on the server is interrupted via the
   deploy runner.
   """
-  def cancel(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app)
+  def cancel(%Scope{tenant: tenant} = scope, %App{tenant_id: tenant_id} = app)
       when tenant_id == tenant.id do
-    cancel(app)
+    with :ok <- authorize_write(scope), do: cancel(app)
   end
 
   def cancel(%Scope{}, %App{}), do: {:error, :unauthorized}
@@ -454,6 +454,10 @@ defmodule CleatDeploy.Deployments do
   defp interrupt_running(app, deployment) do
     runner = Application.get_env(:cleat_deploy, :deploy_runner, CleatDeploy.Deploy.FakeRunner)
     runner.interrupt(app, deployment)
+  end
+
+  defp authorize_write(%Scope{} = scope) do
+    if Scope.can_write?(scope), do: :ok, else: {:error, :unauthorized}
   end
 
   @doc """

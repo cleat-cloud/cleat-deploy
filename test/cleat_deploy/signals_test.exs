@@ -192,6 +192,17 @@ defmodule CleatDeploy.SignalsTest do
     end
   end
 
+  describe "write authorization" do
+    test "members cannot ack alerts or change sampling", ctx do
+      member = %{ctx.scope | role: "member"}
+
+      assert {:error, :unauthorized} = Signals.ack_alert(member, 123)
+
+      assert {:error, :unauthorized} =
+               CleatDeploy.Signals.Traces.set_sampling(member, ctx.app, 1.0)
+    end
+  end
+
   describe "metrics/3" do
     test "returns RED counts, a series and deploy markers for an app", ctx do
       now = DateTime.utc_now(:second)

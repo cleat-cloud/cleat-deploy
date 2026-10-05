@@ -13,7 +13,7 @@ defmodule CleatDeployWeb.Plugs.ApiRole do
   def init(opts), do: opts
 
   def call(conn, opts) do
-    roles = Keyword.get(opts, :roles, [])
+    roles = Keyword.get(opts, :roles, Scope.write_roles())
 
     case conn.assigns[:current_scope] do
       %Scope{role: role} ->

@@ -38,6 +38,9 @@ defmodule CleatDeployWeb.SettingsLive do
          |> assign(:idle_form, to_form(Settings.change_setting(setting), as: :setting))
          |> put_flash(:info, "Settings saved")}
 
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, CleatDeployWeb.Authorize.read_only_message())}
+
       {:error, changeset} ->
         form =
           changeset

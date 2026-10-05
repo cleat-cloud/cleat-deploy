@@ -153,6 +153,9 @@ defmodule CleatDeployWeb.Api.SignalsController do
         {:error, %Ecto.Changeset{}} ->
           unprocessable(conn, "trace_sample_rate must be between 0 and 1")
 
+        {:error, :unauthorized} ->
+          forbidden(conn)
+
         {:error, :not_found} ->
           not_found(conn)
       end
@@ -205,6 +208,8 @@ defmodule CleatDeployWeb.Api.SignalsController do
   defp parse_rate(_), do: :invalid_rate
 
   defp not_found(conn), do: conn |> put_status(:not_found) |> json(%{error: "not_found"})
+
+  defp forbidden(conn), do: conn |> put_status(:forbidden) |> json(%{error: "forbidden"})
 
   defp unprocessable(conn, message) do
     conn
