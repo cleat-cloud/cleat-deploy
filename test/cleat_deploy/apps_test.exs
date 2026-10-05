@@ -740,6 +740,23 @@ defmodule CleatDeploy.AppsTest do
       assert App.unit_names(app) == ["atelie", "atelie-worker"]
     end
 
+    test "a recorded empty unit list wins over the go -worker fallback", %{
+      scope: scope,
+      server: server
+    } do
+      app =
+        TenancyFixtures.app_fixture(scope, server, %{
+          slug: "radar-pncp",
+          runtime: "golang",
+          systemd_unit: "radar-pncp"
+        })
+
+      {:ok, app} = Apps.record_deploy_manifest(app, %{units: []})
+
+      assert App.extra_units(app) == []
+      assert App.unit_names(app) == ["radar-pncp"]
+    end
+
     test "records whether the deploy armed wake-on-request", %{scope: scope, server: server} do
       app = TenancyFixtures.app_fixture(scope, server, %{slug: "chatwoot"})
 

@@ -70,7 +70,9 @@ defmodule CleatDeploy.Apps.EnvApply do
     wait = wait_for_unit(quoted, http_port)
 
     """
-    if systemctl is-active --quiet #{quoted}; then
+    if ! systemctl cat --quiet #{quoted} > /dev/null 2>&1; then
+      : # unit not provisioned (stale manifest entry); nothing to restart
+    elif systemctl is-active --quiet #{quoted}; then
       sudo systemctl restart #{quoted}
     elif systemctl is-failed --quiet #{quoted}; then
       sudo systemctl reset-failed #{quoted} || true
