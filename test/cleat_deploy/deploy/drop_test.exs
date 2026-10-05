@@ -66,7 +66,7 @@ defmodule CleatDeploy.Deploy.DropTest do
     script = Static.remote_drop_script(app, config, "abc", "/tmp/drop.tar.gz", manifest)
 
     assert script =~ "tar -xzf /tmp/drop.tar.gz"
-    assert script =~ "/var/www/#{app.slug}/releases/build"
+    assert script =~ ~s|RELEASE_DIR="/var/www/#{app.slug}/releases/$RELEASE_ID"|
     assert script =~ "file_server"
     refute script =~ "npm run build"
     refute script =~ "git clone"

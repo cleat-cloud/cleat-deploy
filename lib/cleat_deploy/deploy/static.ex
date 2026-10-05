@@ -52,13 +52,7 @@ defmodule CleatDeploy.Deploy.Static do
 
     #{publish_dir_script(manifest)}
 
-    RELEASE_DIR="#{config.release_path}/releases/build"
-    sudo mkdir -p "$RELEASE_DIR"
-    sudo rm -rf "${RELEASE_DIR:?}"/*
-    sudo cp -a "$PUBLISH_DIR"/. "$RELEASE_DIR/"
-    sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
-    #{ServerProvision.prune_releases_script(config.release_path)}
-    sudo chmod -R a+rX #{config.release_path}
+    #{publish_release_script(config, sha, "$PUBLISH_DIR")}
 
     #{ServerProvision.provision_script(app, config, manifest)}
     #{ServerProvision.reload_caddy_script()}
@@ -81,18 +75,42 @@ defmodule CleatDeploy.Deploy.Static do
     trap 'rm -rf "$BUILD_DIR"; rm -f #{remote_tar}' EXIT
     tar -xzf #{remote_tar} -C "$BUILD_DIR"
 
-    RELEASE_DIR="#{config.release_path}/releases/build"
-    sudo mkdir -p "$RELEASE_DIR"
-    sudo rm -rf "${RELEASE_DIR:?}"/*
-    sudo cp -a "$BUILD_DIR"/. "$RELEASE_DIR"/
-    sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
-    #{ServerProvision.prune_releases_script(config.release_path)}
-    sudo chmod -R a+rX #{config.release_path}
+    #{publish_release_script(config, sha, "$BUILD_DIR")}
     rm -rf "$BUILD_DIR"
 
     #{ServerProvision.provision_script(app, config, manifest)}
     #{ServerProvision.reload_caddy_script()}
     """
+  end
+
+  # Each publish lands in its own release directory and `current` is swapped
+  # with a temp symlink + rename on the same filesystem, so a failed copy can
+  # never leave a half-written release being served. The empty check runs
+  # before the swap: when the publish produces nothing, the previous release
+  # keeps serving and the deploy fails loudly.
+  defp publish_release_script(config, sha, source) do
+    """
+    RELEASE_ID="$(date -u +%Y%m%d%H%M%S)-#{release_suffix(sha)}"
+    RELEASE_DIR="#{config.release_path}/releases/$RELEASE_ID"
+    sudo mkdir -p "$RELEASE_DIR"
+    sudo cp -a "#{source}"/. "$RELEASE_DIR"/
+    if [ -z "$(sudo ls -A "$RELEASE_DIR")" ]; then
+      echo "Static release came out empty: $RELEASE_DIR" >&2
+      exit 1
+    fi
+    sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current.next
+    sudo mv -Tf #{config.release_path}/current.next #{config.release_path}/current
+    #{ServerProvision.prune_releases_keep_script(config.release_path)}
+    sudo chmod -R a+rX #{config.release_path}
+    """
+    |> String.trim()
+  end
+
+  defp release_suffix(sha) do
+    sha
+    |> to_string()
+    |> String.replace(~r/[^A-Za-z0-9._-]/, "-")
+    |> String.slice(0, 12)
   end
 
   defp node_install do

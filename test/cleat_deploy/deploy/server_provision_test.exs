@@ -533,6 +533,16 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "WARN: phoenix_tts ignored SIGTERM and was SIGKILLed on stop"
   end
 
+  test "prune_releases_keep_script never prunes the active release" do
+    script = ServerProvision.prune_releases_keep_script("/var/www/landing")
+
+    assert script =~ "CURRENT_TARGET=\"$(readlink -f '/var/www/landing/current'"
+    assert script =~ ~s|grep -vxF "$CURRENT_TARGET/"|
+    assert script =~ "tail -n +5"
+    assert script =~ "xargs -r sudo rm -rf"
+    assert script =~ "|| true"
+  end
+
   test "extra_start_commands writes one command file per non-web process", %{config: config} do
     manifest = %AppManifest{
       runtime: "rails",

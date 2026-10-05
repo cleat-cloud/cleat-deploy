@@ -730,6 +730,26 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   end
 
   @doc """
+  Keeps the active release plus the previous `keep - 1` ones for rollback.
+
+  Runs after `current` points at the freshly activated release. The active
+  target is filtered by path, never by age, so a rollback by hand cannot be
+  pruned by mistake. Best-effort: failing to prune never fails the deploy.
+  """
+  def prune_releases_keep_script(release_path, keep \\ 5) do
+    releases = Path.join(release_path, "releases")
+    current = Path.join(release_path, "current")
+
+    """
+    (
+      CURRENT_TARGET="$(readlink -f #{shell_escape(current)} 2>/dev/null || true)"
+      ls -1dt #{shell_escape(releases)}/*/ 2>/dev/null | grep -vxF "$CURRENT_TARGET/" | tail -n +#{keep} | xargs -r sudo rm -rf
+    ) || true
+    """
+    |> String.trim()
+  end
+
+  @doc """
   Empties a release directory before publishing into it.
 
   `rm -rf "$DIR"/*` does not match dotfiles, so a stale `.next`, `.output` or
