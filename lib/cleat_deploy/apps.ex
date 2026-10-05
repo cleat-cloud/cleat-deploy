@@ -302,20 +302,22 @@ defmodule CleatDeploy.Apps do
     |> Map.new()
   end
 
-  def create_app(%Scope{tenant: tenant}, attrs) do
-    attrs =
-      attrs
-      |> stringify_keys()
-      |> Map.put("tenant_id", tenant.id)
-      |> inherit_webhook_secret(tenant)
-      |> assign_free_port()
+  def create_app(%Scope{tenant: tenant} = scope, attrs) do
+    with :ok <- authorize_write(scope) do
+      attrs =
+        attrs
+        |> stringify_keys()
+        |> Map.put("tenant_id", tenant.id)
+        |> inherit_webhook_secret(tenant)
+        |> assign_free_port()
 
-    with {:ok, app} <-
-           %App{}
-           |> App.changeset(attrs)
-           |> Repo.insert() do
-      {status, app} = sync_github_webhook(app)
-      {:ok, app, status}
+      with {:ok, app} <-
+             %App{}
+             |> App.changeset(attrs)
+             |> Repo.insert() do
+        {status, app} = sync_github_webhook(app)
+        {:ok, app, status}
+      end
     end
   end
 
@@ -405,11 +407,13 @@ defmodule CleatDeploy.Apps do
   @doc """
   Updates an app. Only `:branch` is applied — other keys are ignored.
   """
-  def update_app(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
+  def update_app(%Scope{tenant: tenant} = scope, %App{tenant_id: tenant_id} = app, attrs)
       when tenant_id == tenant.id do
-    app
-    |> App.branch_changeset(Map.take(stringify_keys(attrs), ["branch"]))
-    |> Repo.update()
+    with :ok <- authorize_write(scope) do
+      app
+      |> App.branch_changeset(Map.take(stringify_keys(attrs), ["branch"]))
+      |> Repo.update()
+    end
   end
 
   def update_app(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
@@ -420,48 +424,56 @@ defmodule CleatDeploy.Apps do
 
   Other keys are ignored.
   """
-  def update_app_settings(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, attrs)
+  def update_app_settings(%Scope{tenant: tenant} = scope, %App{tenant_id: tenant_id} = app, attrs)
       when tenant_id == tenant.id do
-    attrs = stringify_keys(attrs)
-    previous_host = app.host
-    previous_repo = app.github_repo
-    previous_runtime = app.runtime
-    previous_unit = app.systemd_unit
+    with :ok <- authorize_write(scope) do
+      attrs = stringify_keys(attrs)
+      previous_host = app.host
+      previous_repo = app.github_repo
+      previous_runtime = app.runtime
+      previous_unit = app.systemd_unit
 
-    app
-    |> App.deploy_settings_changeset(
-      Map.take(attrs, [
-        "branch",
-        "auto_deploy",
-        "idle_shutdown_enabled",
-        "indexable",
-        "host",
-        "port",
-        "github_repo",
-        "runtime",
-        "runtime_apt_packages"
-      ])
-    )
-    |> Repo.update()
-    |> case do
-      {:ok, updated} ->
-        prune_previous_host(updated, previous_host, attrs)
-        sync_repo_change(updated, previous_repo)
-        prune_previous_unit(updated, previous_runtime, previous_unit)
-        {:ok, updated}
+      app
+      |> App.deploy_settings_changeset(
+        Map.take(attrs, [
+          "branch",
+          "auto_deploy",
+          "idle_shutdown_enabled",
+          "indexable",
+          "host",
+          "port",
+          "github_repo",
+          "runtime",
+          "runtime_apt_packages"
+        ])
+      )
+      |> Repo.update()
+      |> case do
+        {:ok, updated} ->
+          prune_previous_host(updated, previous_host, attrs)
+          sync_repo_change(updated, previous_repo)
+          prune_previous_unit(updated, previous_runtime, previous_unit)
+          {:ok, updated}
 
-      error ->
-        error
+        error ->
+          error
+      end
     end
   end
 
   def update_app_settings(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
 
-  def set_analytics_inject(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app, enabled)
+  def set_analytics_inject(
+        %Scope{tenant: tenant} = scope,
+        %App{tenant_id: tenant_id} = app,
+        enabled
+      )
       when tenant_id == tenant.id and is_boolean(enabled) do
-    app
-    |> App.analytics_inject_changeset(%{analytics_inject: enabled})
-    |> Repo.update()
+    with :ok <- authorize_write(scope) do
+      app
+      |> App.analytics_inject_changeset(%{analytics_inject: enabled})
+      |> Repo.update()
+    end
   end
 
   def set_analytics_inject(%Scope{}, %App{}, _), do: {:error, :unauthorized}
@@ -534,17 +546,19 @@ defmodule CleatDeploy.Apps do
   @doc """
   Deletes an app and its deployments/env vars. Best-effort removes the GitHub webhook.
   """
-  def delete_app(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app)
+  def delete_app(%Scope{tenant: tenant} = scope, %App{tenant_id: tenant_id} = app)
       when tenant_id == tenant.id do
-    # Best-effort remote cleanup (systemd unit, release dir, Caddy site) so the
-    # CLI/API path does not leave orphans behind.
-    _ = CleatDeploy.Deploy.Teardown.run(Repo.preload(app, :server))
+    with :ok <- authorize_write(scope) do
+      # Best-effort remote cleanup (systemd unit, release dir, Caddy site) so the
+      # CLI/API path does not leave orphans behind.
+      _ = CleatDeploy.Deploy.Teardown.run(Repo.preload(app, :server))
 
-    if github_webhook_sync?() do
-      _ = github_client().delete_webhook(app)
+      if github_webhook_sync?() do
+        _ = github_client().delete_webhook(app)
+      end
+
+      Repo.delete(app)
     end
-
-    Repo.delete(app)
   end
 
   def delete_app(%Scope{}, %App{}), do: {:error, :unauthorized}
@@ -624,7 +638,9 @@ defmodule CleatDeploy.Apps do
   @doc """
   Creates or updates a variable, scoped to a branch (`"*"` by default).
   """
-  def put_env_var(%App{} = app, key, value, branch \\ AppEnvVar.all_branches())
+  def put_env_var(app, key, value, branch \\ AppEnvVar.all_branches())
+
+  def put_env_var(%App{} = app, key, value, branch)
       when is_binary(key) and is_binary(value) do
     branch = AppEnvVar.normalize(branch)
 
@@ -636,14 +652,23 @@ defmodule CleatDeploy.Apps do
     )
   end
 
+  def put_env_var(%Scope{} = scope, %App{} = app, key, value) do
+    with :ok <- authorize_write(scope), do: put_env_var(app, key, value)
+  end
+
+  def put_env_var(%Scope{} = scope, %App{} = app, key, value, branch) do
+    with :ok <- authorize_write(scope), do: put_env_var(app, key, value, branch)
+  end
+
   @doc """
   Deletes an environment variable from an app.
 
   Returns `:ok` or `{:error, :not_found}` when the key does not exist for that
   branch scope.
   """
-  def delete_env_var(%App{} = app, key, branch \\ AppEnvVar.all_branches())
-      when is_binary(key) do
+  def delete_env_var(app, key, branch \\ AppEnvVar.all_branches())
+
+  def delete_env_var(%App{} = app, key, branch) when is_binary(key) do
     branch = AppEnvVar.normalize(branch)
 
     {count, _} =
@@ -653,6 +678,18 @@ defmodule CleatDeploy.Apps do
       )
 
     if count > 0, do: :ok, else: {:error, :not_found}
+  end
+
+  def delete_env_var(%Scope{} = scope, %App{} = app, key) do
+    with :ok <- authorize_write(scope), do: delete_env_var(app, key)
+  end
+
+  def delete_env_var(%Scope{} = scope, %App{} = app, key, branch) do
+    with :ok <- authorize_write(scope), do: delete_env_var(app, key, branch)
+  end
+
+  defp authorize_write(%Scope{} = scope) do
+    if Scope.can_write?(scope), do: :ok, else: {:error, :unauthorized}
   end
 
   @doc """

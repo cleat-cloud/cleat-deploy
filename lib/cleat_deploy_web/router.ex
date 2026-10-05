@@ -23,7 +23,7 @@ defmodule CleatDeployWeb.Router do
   end
 
   pipeline :api_admin do
-    plug CleatDeployWeb.Plugs.ApiRole, roles: ["owner", "admin"]
+    plug CleatDeployWeb.Plugs.ApiRole
   end
 
   pipeline :github_webhook do

@@ -24,16 +24,19 @@ defmodule CleatDeploy.Settings do
 
   def change_setting(%Setting{} = setting, attrs \\ %{}), do: Setting.changeset(setting, attrs)
 
-  def update_setting(%Scope{tenant: tenant}, attrs) do
-    case Setting.changeset(%Setting{tenant_id: tenant.id}, attrs) do
-      %Ecto.Changeset{valid?: false} = changeset ->
-        {:error, changeset}
+  def update_setting(%Scope{tenant: tenant} = scope, attrs) do
+    with :ok <- authorize_write(scope) do
+      case Setting.changeset(%Setting{tenant_id: tenant.id}, attrs) do
+        %Ecto.Changeset{valid?: false} = changeset ->
+          {:error, changeset}
 
-      changeset ->
-        Repo.insert(changeset,
-          on_conflict: {:replace, [:idle_shutdown_enabled, :idle_shutdown_minutes, :updated_at]},
-          conflict_target: :tenant_id
-        )
+        changeset ->
+          Repo.insert(changeset,
+            on_conflict:
+              {:replace, [:idle_shutdown_enabled, :idle_shutdown_minutes, :updated_at]},
+            conflict_target: :tenant_id
+          )
+      end
     end
   end
 
@@ -44,16 +47,22 @@ defmodule CleatDeploy.Settings do
   left untouched.
   """
   def put_active_server(%Scope{} = scope, server_id) when is_integer(server_id) do
-    changeset = Setting.changeset(get_setting(scope), %{active_server_id: server_id})
+    with :ok <- authorize_write(scope) do
+      changeset = Setting.changeset(get_setting(scope), %{active_server_id: server_id})
 
-    if changeset.valid? do
-      Repo.insert(changeset,
-        on_conflict: {:replace, [:active_server_id, :updated_at]},
-        conflict_target: :tenant_id
-      )
-    else
-      {:error, changeset}
+      if changeset.valid? do
+        Repo.insert(changeset,
+          on_conflict: {:replace, [:active_server_id, :updated_at]},
+          conflict_target: :tenant_id
+        )
+      else
+        {:error, changeset}
+      end
     end
+  end
+
+  defp authorize_write(%Scope{} = scope) do
+    if Scope.can_write?(scope), do: :ok, else: {:error, :unauthorized}
   end
 
   @doc """

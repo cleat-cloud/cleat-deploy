@@ -6,6 +6,7 @@ defmodule CleatDeployWeb.AppLiveTest do
 
   alias CleatDeploy.{Apps, Deployments, Repo}
   alias CleatDeploy.Apps.App
+  alias CleatDeploy.Deployments.Deployment
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.RuntimeLogsFixtures
   alias CleatDeploy.TenancyFixtures
@@ -1705,6 +1706,65 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#addon-litestream", "litestream")
     refute has_element?(view, "#rotate-litestream")
   end
+
+  describe "member accounts are read-only" do
+    test "cannot save or delete env vars", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server, %{branch: "main"})
+      {:ok, _} = Apps.put_env_var(app, "PORT", "4003")
+      conn = member_conn(scope)
+
+      {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}?tab=environment")
+
+      view |> element("#manage-env-vars-button") |> render_click()
+
+      html =
+        view
+        |> form("#env-var-form", env: %{key: "DENIED", value: "x", branch: ""})
+        |> render_submit()
+
+      assert html =~ "somente de leitura"
+      refute Map.has_key?(Apps.env_map(app), "DENIED")
+
+      view
+      |> element("#env-var-PORT[data-branch='*'] button[phx-click='delete_env_var']")
+      |> render_click()
+
+      assert Apps.env_map(app)["PORT"] == "4003"
+    end
+
+    test "cannot deploy or cancel", %{scope: scope, server: server} do
+      app = TenancyFixtures.app_fixture(scope, server)
+      conn = member_conn(scope)
+
+      {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+
+      html = render_click(view, "deploy")
+      assert html =~ "somente de leitura"
+      assert Repo.aggregate(Deployment, :count) == 0
+      assert all_enqueued(worker: CleatDeploy.Workers.DeployWorker) == []
+
+      {:ok, deployment, _job} =
+        Deployments.enqueue_deployment(scope, app, %{git_sha: "manual", triggered_by: "manual"})
+
+      render_click(view, "cancel_deploy")
+
+      assert Repo.get!(Deployment, deployment.id).status == :queued
+    end
+  end
+
+  defp member_conn(scope) do
+    {:ok, user} = CleatDeploy.Accounts.register_user(%{email: unique_member_email()})
+
+    Repo.insert!(%CleatDeploy.Accounts.TenantMembership{
+      user_id: user.id,
+      tenant_id: scope.tenant.id,
+      role: "member"
+    })
+
+    log_in_user(build_conn(), user)
+  end
+
+  defp unique_member_email, do: "member#{System.unique_integer([:positive])}@example.com"
 
   defp app_name_order(html) do
     html

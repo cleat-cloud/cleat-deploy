@@ -5,6 +5,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
   alias CleatDeploy.Apps.{App, RuntimeControl, RuntimeMemory}
   alias CleatDeploy.Deploy.RuntimePackages
   alias CleatDeployWeb.AppLive.{Layout, NewInstance}
+  alias CleatDeployWeb.Authorize
 
   # Fallback while a deploy is active. Live updates come from PubSub.
   @poll_ms 15_000
@@ -62,6 +63,9 @@ defmodule CleatDeployWeb.AppLive.Deployments do
          |> schedule_poll()
          |> put_flash(:info, "Deploy queued")}
 
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, Authorize.read_only_message())}
+
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Could not queue deploy")}
     end
@@ -87,6 +91,9 @@ defmodule CleatDeployWeb.AppLive.Deployments do
 
       {:error, :no_active_deployment} ->
         {:noreply, put_flash(socket, :error, "No deploy queued or running")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, Authorize.read_only_message())}
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Could not cancel the deploy")}
@@ -152,34 +159,38 @@ defmodule CleatDeployWeb.AppLive.Deployments do
   end
 
   def handle_event("hibernate_app", _params, socket) do
-    socket = assign(socket, :confirming_hibernate?, false)
+    Authorize.write(socket, fn socket ->
+      socket = assign(socket, :confirming_hibernate?, false)
 
-    case RuntimeControl.hibernate(socket.assigns.app) do
-      :ok ->
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           "#{socket.assigns.app.name} hibernated — no CPU or RAM until it wakes"
-         )
-         |> refresh_runtime()}
+      case RuntimeControl.hibernate(socket.assigns.app) do
+        :ok ->
+          {:noreply,
+           socket
+           |> put_flash(
+             :info,
+             "#{socket.assigns.app.name} hibernated — no CPU or RAM until it wakes"
+           )
+           |> refresh_runtime()}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not hibernate: #{reason}")}
-    end
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not hibernate: #{reason}")}
+      end
+    end)
   end
 
   def handle_event("wake_app", _params, socket) do
-    case RuntimeControl.wake(socket.assigns.app) do
-      :ok ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "#{socket.assigns.app.name} is starting")
-         |> refresh_runtime()}
+    Authorize.write(socket, fn socket ->
+      case RuntimeControl.wake(socket.assigns.app) do
+        :ok ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "#{socket.assigns.app.name} is starting")
+           |> refresh_runtime()}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not wake: #{reason}")}
-    end
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not wake: #{reason}")}
+      end
+    end)
   end
 
   def handle_event("select_app", %{"app_id" => app_id}, socket) do

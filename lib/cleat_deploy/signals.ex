@@ -344,19 +344,21 @@ defmodule CleatDeploy.Signals do
     )
   end
 
-  def ack_alert(%Scope{tenant: tenant}, id) when is_integer(id) do
-    case Repo.get_by(Alert, id: id, tenant_id: tenant.id) do
-      %Alert{status: "firing"} = alert ->
-        alert
-        |> Ecto.Changeset.change(%{status: "acked", acked_at: DateTime.utc_now(:second)})
-        |> Repo.update()
-        |> preload_alert_app()
+  def ack_alert(%Scope{tenant: tenant} = scope, id) when is_integer(id) do
+    with :ok <- authorize_write(scope) do
+      case Repo.get_by(Alert, id: id, tenant_id: tenant.id) do
+        %Alert{status: "firing"} = alert ->
+          alert
+          |> Ecto.Changeset.change(%{status: "acked", acked_at: DateTime.utc_now(:second)})
+          |> Repo.update()
+          |> preload_alert_app()
 
-      nil ->
-        {:error, :not_found}
+        nil ->
+          {:error, :not_found}
 
-      _alert ->
-        {:error, :invalid_status}
+        _alert ->
+          {:error, :invalid_status}
+      end
     end
   end
 
@@ -364,6 +366,10 @@ defmodule CleatDeploy.Signals do
 
   defp preload_alert_app({:ok, alert}), do: {:ok, Repo.preload(alert, :app)}
   defp preload_alert_app(other), do: other
+
+  defp authorize_write(%Scope{} = scope) do
+    if Scope.can_write?(scope), do: :ok, else: {:error, :unauthorized}
+  end
 
   def incident(scope, app, opts \\ [])
 

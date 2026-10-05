@@ -73,6 +73,9 @@ defmodule CleatDeployWeb.AppLive.NewInstance do
          |> put_flash(:info, "Instance #{instance.slug} created for branch #{instance.branch}")
          |> push_navigate(to: ~p"/apps/#{instance.id}/deployments")}
 
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, CleatDeployWeb.Authorize.read_only_message())}
+
       {:error, changeset} ->
         {:noreply,
          socket

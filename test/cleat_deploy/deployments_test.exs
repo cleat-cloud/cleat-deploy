@@ -23,6 +23,21 @@ defmodule CleatDeploy.DeploymentsTest do
     %{scope: scope, app: app}
   end
 
+  describe "write authorization" do
+    test "members cannot enqueue or cancel deploys", %{scope: scope, app: app} do
+      member = %{scope | role: "member"}
+
+      assert {:error, :unauthorized} = Deployments.enqueue(member, app, %{git_sha: "abc"})
+
+      assert {:error, :unauthorized} =
+               Deployments.enqueue_deployment(member, app, %{git_sha: "abc"})
+
+      assert {:error, :unauthorized} = Deployments.cancel(member, app)
+
+      assert CleatDeploy.Repo.aggregate(CleatDeploy.Deployments.Deployment, :count) == 0
+    end
+  end
+
   describe "create_deployment/2" do
     test "starts in queued status", %{app: app} do
       assert {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "abc123"})

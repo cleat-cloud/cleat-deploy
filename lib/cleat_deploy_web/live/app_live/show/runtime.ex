@@ -7,6 +7,7 @@ defmodule CleatDeployWeb.AppLive.Show.Runtime do
   alias CleatDeploy.{Apps}
   alias CleatDeploy.Apps.RuntimeControl
   alias CleatDeploy.Deploy.Addons
+  alias CleatDeployWeb.Authorize
 
   def handle_event("select_app", %{"app_id" => app_id}, socket) do
     {:noreply, push_navigate(socket, to: ~p"/apps/#{app_id}/deployments")}
@@ -37,6 +38,9 @@ defmodule CleatDeployWeb.AppLive.Show.Runtime do
          |> assign(:apps, Apps.list_app_choices(socket.assigns.current_scope))
          |> assign(:branch_form, to_form(Apps.change_branch(app), as: :app))
          |> put_flash(:info, "Auto-deploy now listens to #{app.branch}")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, Authorize.read_only_message())}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :branch_form, to_form(changeset, as: :app))}
@@ -106,17 +110,19 @@ defmodule CleatDeployWeb.AppLive.Show.Runtime do
   end
 
   def handle_event("rotate_addon", %{"addon" => addon}, socket) do
-    if Addons.rotatable?(addon) do
-      {_addons, _credentials} = Addons.rotate(socket.assigns.app, [addon])
+    Authorize.write(socket, fn socket ->
+      if Addons.rotatable?(addon) do
+        {_addons, _credentials} = Addons.rotate(socket.assigns.app, [addon])
 
-      {:noreply,
-       socket
-       |> assign(:rotating_addon, nil)
-       |> put_flash(:info, "New credentials stored — deploy this app to apply them")
-       |> request_addon_status()}
-    else
-      {:noreply, assign(socket, :rotating_addon, nil)}
-    end
+        {:noreply,
+         socket
+         |> assign(:rotating_addon, nil)
+         |> put_flash(:info, "New credentials stored — deploy this app to apply them")
+         |> request_addon_status()}
+      else
+        {:noreply, assign(socket, :rotating_addon, nil)}
+      end
+    end)
   end
 
   def handle_event("refresh_addon_status", _params, socket) do
@@ -132,34 +138,38 @@ defmodule CleatDeployWeb.AppLive.Show.Runtime do
   end
 
   def handle_event("hibernate_app", _params, socket) do
-    socket = assign(socket, :confirming_hibernate?, false)
+    Authorize.write(socket, fn socket ->
+      socket = assign(socket, :confirming_hibernate?, false)
 
-    case RuntimeControl.hibernate(socket.assigns.app) do
-      :ok ->
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           "#{socket.assigns.app.name} hibernated — no CPU or RAM until it wakes"
-         )
-         |> refresh_runtime()}
+      case RuntimeControl.hibernate(socket.assigns.app) do
+        :ok ->
+          {:noreply,
+           socket
+           |> put_flash(
+             :info,
+             "#{socket.assigns.app.name} hibernated — no CPU or RAM until it wakes"
+           )
+           |> refresh_runtime()}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not hibernate: #{reason}")}
-    end
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not hibernate: #{reason}")}
+      end
+    end)
   end
 
   def handle_event("wake_app", _params, socket) do
-    case RuntimeControl.wake(socket.assigns.app) do
-      :ok ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "#{socket.assigns.app.name} is starting")
-         |> refresh_runtime()}
+    Authorize.write(socket, fn socket ->
+      case RuntimeControl.wake(socket.assigns.app) do
+        :ok ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "#{socket.assigns.app.name} is starting")
+           |> refresh_runtime()}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not wake: #{reason}")}
-    end
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not wake: #{reason}")}
+      end
+    end)
   end
 
   def handle_event("validate_delete", %{"delete" => params}, socket) do

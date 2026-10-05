@@ -15,6 +15,22 @@ defmodule CleatDeploy.ServersTest do
     %{scope: TenancyFixtures.scope_fixture()}
   end
 
+  describe "write authorization" do
+    test "members cannot mutate servers", %{scope: scope} do
+      member = %{scope | role: "member"}
+
+      assert {:error, :unauthorized} =
+               Servers.create_server(member, %{
+                 name: "denied",
+                 host_ip: "203.0.113.10",
+                 ssh_user: "ubuntu",
+                 region: "us-east-1"
+               })
+
+      assert Servers.list_servers(scope) == []
+    end
+  end
+
   describe "create_server/2" do
     test "persists a valid server", %{scope: scope} do
       attrs = %{

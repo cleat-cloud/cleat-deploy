@@ -90,17 +90,25 @@ defmodule CleatDeployWeb.ServerLive.Index do
 
   def handle_event("sync_cloud", _params, socket) do
     scope = socket.assigns.current_scope
-    {result, servers} = Servers.sync_inventory(scope)
 
-    {:noreply,
-     socket
-     |> assign(:syncing?, false)
-     |> assign(:discovered, result.discovered)
-     |> assign(:app_counts, Apps.count_apps_by_server_id(scope))
-     |> assign(:server_count, length(servers))
-     |> stream(:servers, servers, reset: true)
-     |> put_flash(:info, Helpers.inventory_flash(result))
-     |> Helpers.maybe_flash_errors(result.errors)}
+    case Servers.sync_inventory(scope) do
+      {:error, :unauthorized} ->
+        {:noreply,
+         socket
+         |> assign(:syncing?, false)
+         |> put_flash(:error, CleatDeployWeb.Authorize.read_only_message())}
+
+      {result, servers} ->
+        {:noreply,
+         socket
+         |> assign(:syncing?, false)
+         |> assign(:discovered, result.discovered)
+         |> assign(:app_counts, Apps.count_apps_by_server_id(scope))
+         |> assign(:server_count, length(servers))
+         |> stream(:servers, servers, reset: true)
+         |> put_flash(:info, Helpers.inventory_flash(result))
+         |> Helpers.maybe_flash_errors(result.errors)}
+    end
   end
 
   def handle_event("confirm_remove", %{"id" => id}, socket) do
@@ -180,6 +188,9 @@ defmodule CleatDeployWeb.ServerLive.Index do
 
         {:error, %Ecto.Changeset{}} ->
           {:noreply, put_flash(socket, :error, "Could not register #{params["name"]}")}
+
+        {:error, :unauthorized} ->
+          {:noreply, put_flash(socket, :error, CleatDeployWeb.Authorize.read_only_message())}
       end
     end
   end

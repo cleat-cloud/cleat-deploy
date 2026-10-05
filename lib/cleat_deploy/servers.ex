@@ -30,12 +30,14 @@ defmodule CleatDeploy.Servers do
     )
   end
 
-  def create_server(%Scope{tenant: tenant}, attrs) do
-    attrs = Map.put(stringify_keys(attrs), "tenant_id", tenant.id)
+  def create_server(%Scope{tenant: tenant} = scope, attrs) do
+    with :ok <- authorize_write(scope) do
+      attrs = Map.put(stringify_keys(attrs), "tenant_id", tenant.id)
 
-    %Server{}
-    |> Server.changeset(attrs)
-    |> Repo.insert()
+      %Server{}
+      |> Server.changeset(attrs)
+      |> Repo.insert()
+    end
   end
 
   def change_provision(attrs \\ %{}) do
@@ -43,42 +45,44 @@ defmodule CleatDeploy.Servers do
   end
 
   def provision_server(%Scope{} = scope, attrs) do
-    changeset = change_provision(attrs)
+    with :ok <- authorize_write(scope) do
+      changeset = change_provision(attrs)
 
-    if changeset.valid? do
-      data = Ecto.Changeset.apply_changes(changeset)
+      if changeset.valid? do
+        data = Ecto.Changeset.apply_changes(changeset)
 
-      with {:ok, keys} <- ssh_material(scope),
-           {:ok, spec} <-
-             Hetzner.create_instance(%{
-               name: data.name,
-               location: data.region,
-               server_type: data.bundle_id,
-               ssh_public_keys: [keys.public],
-               user_data: Provision.user_data(keys.public)
-             }) do
-        create_server(scope, %{
-          name: data.name,
-          host_ip: spec.public_ip,
-          ssh_user: "ubuntu",
-          region: spec.region || data.region,
-          provider: "hetzner",
-          aws_instance_name: spec.name || data.name,
-          ssh_private_key: keys.private,
-          bundle_id: spec.bundle_id,
-          bundle_name: spec.bundle_name,
-          cpu_count: spec.cpu_count,
-          ram_mb: spec.ram_mb,
-          disk_gb: spec.disk_gb,
-          instance_status: spec.status || "running",
-          blueprint_name: spec.blueprint_name,
-          monthly_price_usd: spec.monthly_price_usd,
-          specs_synced_at: DateTime.utc_now(:second),
-          deploy_mode: data.deploy_mode
-        })
+        with {:ok, keys} <- ssh_material(scope),
+             {:ok, spec} <-
+               Hetzner.create_instance(%{
+                 name: data.name,
+                 location: data.region,
+                 server_type: data.bundle_id,
+                 ssh_public_keys: [keys.public],
+                 user_data: Provision.user_data(keys.public)
+               }) do
+          create_server(scope, %{
+            name: data.name,
+            host_ip: spec.public_ip,
+            ssh_user: "ubuntu",
+            region: spec.region || data.region,
+            provider: "hetzner",
+            aws_instance_name: spec.name || data.name,
+            ssh_private_key: keys.private,
+            bundle_id: spec.bundle_id,
+            bundle_name: spec.bundle_name,
+            cpu_count: spec.cpu_count,
+            ram_mb: spec.ram_mb,
+            disk_gb: spec.disk_gb,
+            instance_status: spec.status || "running",
+            blueprint_name: spec.blueprint_name,
+            monthly_price_usd: spec.monthly_price_usd,
+            specs_synced_at: DateTime.utc_now(:second),
+            deploy_mode: data.deploy_mode
+          })
+        end
+      else
+        {:error, Map.put(changeset, :action, :insert)}
       end
-    else
-      {:error, Map.put(changeset, :action, :insert)}
     end
   end
 
@@ -107,9 +111,9 @@ defmodule CleatDeploy.Servers do
     is_binary(server.ssh_private_key_encrypted) and server.ssh_private_key_encrypted != ""
   end
 
-  def sync_specs(%Scope{tenant: tenant}, %Server{tenant_id: tenant_id} = server)
+  def sync_specs(%Scope{tenant: tenant} = scope, %Server{tenant_id: tenant_id} = server)
       when tenant_id == tenant.id do
-    sync_specs(server)
+    with :ok <- authorize_write(scope), do: sync_specs(server)
   end
 
   def sync_specs(%Scope{}, %Server{}), do: {:error, :unauthorized}
@@ -129,9 +133,13 @@ defmodule CleatDeploy.Servers do
     Cloud.list_resize_options(server)
   end
 
-  def resize_bundle(%Scope{tenant: tenant}, %Server{tenant_id: tenant_id} = server, bundle_id)
+  def resize_bundle(
+        %Scope{tenant: tenant} = scope,
+        %Server{tenant_id: tenant_id} = server,
+        bundle_id
+      )
       when tenant_id == tenant.id do
-    resize_bundle(server, bundle_id)
+    with :ok <- authorize_write(scope), do: resize_bundle(server, bundle_id)
   end
 
   def resize_bundle(%Scope{}, %Server{}, _bundle_id), do: {:error, :unauthorized}
@@ -143,17 +151,19 @@ defmodule CleatDeploy.Servers do
   @doc """
   Powers a server's cloud instance on or off and refreshes its specs.
   """
-  def power(%Scope{tenant: tenant}, %Server{tenant_id: tenant_id} = server, action)
+  def power(%Scope{tenant: tenant} = scope, %Server{tenant_id: tenant_id} = server, action)
       when tenant_id == tenant.id and action in [:start, :stop] do
-    Cloud.power(server, action)
+    with :ok <- authorize_write(scope), do: Cloud.power(server, action)
   end
 
   def power(%Scope{}, %Server{}, _action), do: {:error, :unauthorized}
 
   def sync_inventory(%Scope{tenant: tenant} = scope) do
-    servers = list_servers(scope)
-    result = Cloud.sync_inventory(servers)
-    {result, list_servers(%Scope{tenant: tenant})}
+    with :ok <- authorize_write(scope) do
+      servers = list_servers(scope)
+      result = Cloud.sync_inventory(servers)
+      {result, list_servers(%Scope{tenant: tenant})}
+    end
   end
 
   def sync_all_inventories do
@@ -161,16 +171,22 @@ defmodule CleatDeploy.Servers do
     |> Cloud.sync_inventory()
   end
 
-  def delete_server(%Scope{tenant: tenant}, %Server{tenant_id: tenant_id} = server)
+  def delete_server(%Scope{tenant: tenant} = scope, %Server{tenant_id: tenant_id} = server)
       when tenant_id == tenant.id do
-    if Repo.exists?(from a in App, where: a.server_id == ^server.id) do
-      {:error, :has_apps}
-    else
-      Repo.delete(server)
+    with :ok <- authorize_write(scope) do
+      if Repo.exists?(from a in App, where: a.server_id == ^server.id) do
+        {:error, :has_apps}
+      else
+        Repo.delete(server)
+      end
     end
   end
 
   def delete_server(%Scope{}, %Server{}), do: {:error, :unauthorized}
+
+  defp authorize_write(%Scope{} = scope) do
+    if Scope.can_write?(scope), do: :ok, else: {:error, :unauthorized}
+  end
 
   defp ssh_material(%Scope{} = scope) do
     case first_server_with_key(scope) do
