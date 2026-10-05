@@ -582,6 +582,98 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     out
   end
 
+  describe "phoenix dedicated user (#218)" do
+    test "the unit runs as its own unprivileged account and is hardened", %{
+      app: app,
+      config: config
+    } do
+      manifest = AppManifest.resolve(nil, app)
+      script = ServerProvision.provision_script(app, config, manifest)
+      unit = unit_block(script, "phoenix_tts")
+
+      refute unit =~ "User=root"
+      assert unit =~ "User=cleat-phoenix-tts"
+      assert unit =~ "Group=cleat-phoenix-tts"
+      assert unit =~ "Environment=HOME=/var/lib/phoenix_tts"
+      assert unit =~ "Environment=RELEASE_TMP=/var/lib/phoenix_tts/tmp"
+      assert unit =~ "NoNewPrivileges=true"
+      assert unit =~ "PrivateTmp=true"
+      assert unit =~ "ProtectSystem=full"
+      assert unit =~ "ProtectHome=true"
+      assert unit =~ "ReadWritePaths=/var/lib/phoenix_tts"
+
+      # The root-only env file is read by systemd before dropping privileges.
+      assert unit =~ "EnvironmentFile=/etc/phoenix_tts/env"
+    end
+
+    test "creates the account idempotently and hands the data dir over", %{
+      app: app,
+      config: config
+    } do
+      manifest = AppManifest.resolve(nil, app)
+      script = ServerProvision.provision_script(app, config, manifest)
+
+      assert script =~ "if ! getent group cleat-phoenix-tts"
+      assert script =~ "sudo groupadd --system cleat-phoenix-tts"
+      assert script =~ "if ! id -u cleat-phoenix-tts"
+      assert script =~ "sudo useradd --system --gid cleat-phoenix-tts --no-create-home"
+      assert script =~ "--shell /usr/sbin/nologin cleat-phoenix-tts"
+      assert script =~ "sudo chown -R cleat-phoenix-tts:cleat-phoenix-tts '/var/lib/phoenix_tts'"
+      assert script =~ "sudo chmod 750 '/var/lib/phoenix_tts'"
+    end
+
+    test "ownership is fixed after migrations, which run as root", %{app: app, config: config} do
+      manifest = %AppManifest{runtime: "phoenix"}
+      script = ServerProvision.phoenix_ownership_script(app, config, manifest)
+
+      assert script =~ "sudo chown -R cleat-phoenix-tts:cleat-phoenix-tts '/var/lib/phoenix_tts'"
+      assert script =~ "'/var/lib/phoenix_tts/tmp'"
+
+      assert ServerProvision.phoenix_ownership_script(app, config, %AppManifest{runtime: "node"}) ==
+               ""
+    end
+
+    test "ownership is fixed after migrations, before the restart", %{
+      app: app,
+      config: config,
+      server: server
+    } do
+      manifest = AppManifest.resolve(nil, app)
+      runtime = %{packages: [], post_install: []}
+
+      script =
+        CleatDeploy.Deploy.Ssh.Phoenix.phoenix_remote_build_script(
+          server,
+          app,
+          config,
+          "abc1234",
+          "/tmp/src.tar.gz",
+          runtime,
+          manifest
+        )
+
+      assert occurrence(script, "Fixing data ownership for cleat-phoenix-tts") >
+               occurrence(script, "Running migrations")
+
+      assert occurrence(script, "Fixing data ownership for cleat-phoenix-tts") <
+               occurrence(script, "Restarting phoenix_tts")
+    end
+
+    test "service user names stay within the login limit and never collide" do
+      assert ServerProvision.phoenix_service_user("short") == "cleat-short"
+      assert ServerProvision.phoenix_service_user("weird.slug!") == "cleat-weird-slug-"
+
+      long = String.duplicate("a", 60)
+      name = ServerProvision.phoenix_service_user(long)
+      assert String.length(name) <= 31
+      assert name =~ ~r/^cleat-a{18}-[0-9a-f]{6}$/
+
+      other = ServerProvision.phoenix_service_user(String.duplicate("a", 59) <> "b")
+      refute other == name
+      assert String.length(other) <= 31
+    end
+  end
+
   defp unit_block(script, unit) do
     pattern =
       Regex.compile!(

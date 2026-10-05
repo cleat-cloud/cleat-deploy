@@ -33,6 +33,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     gleam_provision_script(app, config, manifest)
   end
 
+  def provision_script(%App{} = app, config, %AppManifest{runtime: "phoenix"} = manifest) do
+    phoenix_provision_script(app, config, manifest)
+  end
+
   def provision_script(%App{} = app, config, %AppManifest{} = manifest) do
     data_dir = data_dir_for(manifest, config)
     env_dir = Path.dirname(config.env_file)
@@ -81,6 +85,124 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     #{wake_script}
     #{caddy_script}
     """
+  end
+
+  # Phoenix/OTP releases do not need root on a shared host (#218): each app runs
+  # as its own unprivileged system account with write access limited to its data
+  # dir. Existing installs migrate on their next deploy — the account is created
+  # and the data dir (written as root until now) is handed to it before the unit
+  # restarts. Systemd reads the root-only env file before dropping privileges.
+  defp phoenix_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
+    data_dir = data_dir_for(manifest, config)
+    env_dir = Path.dirname(config.env_file)
+    memory_max = manifest.memory_max_mb || 400
+    user = phoenix_service_user(app.slug)
+
+    unit = """
+    [Unit]
+    Description=#{escape_unit_description(app.name)}
+    After=network.target
+    StartLimitIntervalSec=60
+    StartLimitBurst=5
+
+    [Service]
+    Type=exec
+    User=#{user}
+    Group=#{user}
+    WorkingDirectory=#{config.release_path}/current
+    EnvironmentFile=#{config.env_file}
+    Environment=CLEAT_DATA_DIR=#{data_dir}
+    Environment=HOME=#{data_dir}
+    Environment=RELEASE_TMP=#{data_dir}/tmp
+    ExecStart=#{config.release_path}/current/bin/#{config.release_name} start
+    Restart=always
+    RestartSec=5
+    KillMode=control-group
+    TimeoutStopSec=15
+    MemoryMax=#{memory_max}M
+    LimitNOFILE=65535
+    # Unprivileged service: it can only write its own data dir (#218).
+    NoNewPrivileges=true
+    PrivateTmp=true
+    ProtectSystem=full
+    ProtectHome=true
+    ReadWritePaths=#{data_dir}
+
+    [Install]
+    WantedBy=multi-user.target
+    """
+
+    caddy_script = caddy_provision_script(app, config, manifest)
+    wake_script = wake_provision_script(app, config, manifest)
+
+    """
+    log "Provisioning host #{app.host} on port #{app.port}"
+    sudo mkdir -p #{shell_escape(env_dir)} #{shell_escape(data_dir)} #{shell_escape(Path.join(data_dir, "tmp"))}
+
+    #{phoenix_service_account_script(user, data_dir)}
+
+    sudo tee /etc/systemd/system/#{config.systemd_unit}.service > /dev/null <<'PAAS_SYSTEMD_UNIT'
+    #{String.trim_trailing(unit)}
+    PAAS_SYSTEMD_UNIT
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable #{config.systemd_unit}
+
+    #{wake_script}
+    #{caddy_script}
+    """
+  end
+
+  defp phoenix_service_account_script(user, data_dir) do
+    """
+    if ! getent group #{user} >/dev/null 2>&1; then
+      sudo groupadd --system #{user}
+    fi
+    if ! id -u #{user} >/dev/null 2>&1; then
+      sudo useradd --system --gid #{user} --no-create-home --home-dir #{shell_escape(data_dir)} --shell /usr/sbin/nologin #{user}
+    fi
+    sudo chown -R #{user}:#{user} #{shell_escape(data_dir)}
+    sudo chmod 750 #{shell_escape(data_dir)}
+    """
+    |> String.trim()
+  end
+
+  @doc """
+  Hands the app's data dir back to its dedicated account.
+
+  Migrations and release commands run as root before the restart, so they can
+  create root-owned files (SQLite WAL, uploaded assets) inside the data dir.
+  """
+  def phoenix_ownership_script(%App{} = app, config, %AppManifest{runtime: "phoenix"} = manifest) do
+    data_dir = data_dir_for(manifest, config)
+    user = phoenix_service_user(app.slug)
+
+    """
+    log "Fixing data ownership for #{user}"
+    sudo mkdir -p #{shell_escape(data_dir)} #{shell_escape(Path.join(data_dir, "tmp"))}
+    sudo chown -R #{user}:#{user} #{shell_escape(data_dir)}
+    """
+    |> String.trim()
+  end
+
+  def phoenix_ownership_script(_app, _config, _manifest), do: ""
+
+  @doc """
+  Unprivileged system account for a Phoenix app.
+
+  `cleat-<slug>` when it fits the 32-char login limit; longer slugs keep a short
+  digest so two apps sharing a prefix never share an account.
+  """
+  def phoenix_service_user(slug) when is_binary(slug) do
+    clean = String.replace(slug, ~r/[^A-Za-z0-9_-]/, "-")
+    base = "cleat-" <> clean
+
+    if String.length(base) <= 31 do
+      base
+    else
+      digest = :crypto.hash(:sha256, slug) |> Base.encode16(case: :lower) |> String.slice(0, 6)
+      "cleat-" <> String.slice(clean, 0, 18) <> "-" <> digest
+    end
   end
 
   defp golang_provision_script(%App{} = app, config, %AppManifest{} = manifest) do

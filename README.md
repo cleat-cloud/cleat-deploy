@@ -74,6 +74,21 @@ mix phx.server
 2. Register an app (Trip Planner defaults: `trip_planner_ia`, `/opt/trip_planner_ia`)
 3. Click **Deploy now** — clones repo, builds on the VM, migrates, restarts systemd
 
+### Phoenix / Elixir apps
+
+The default runtime: the panel builds an OTP release (`mix release`) and keeps
+it alive with the app's base systemd unit behind Caddy. Each app runs as its own
+unprivileged system account (`cleat-<slug>`) with write access limited to its
+data dir (`/var/lib/<release_path basename>`, exported as `CLEAT_DATA_DIR`), and
+`RELEASE_TMP` points inside it. The unit enables `NoNewPrivileges`,
+`PrivateTmp`, `ProtectSystem=full` and `ProtectHome`; the root-only env file is
+read by systemd before privileges are dropped.
+
+Existing apps move to the dedicated account on their next deploy: the panel
+creates the account, hands the data dir over before the restart and again after
+the migrations (which run as root). Point any app that writes outside
+`CLEAT_DATA_DIR` at it before deploying.
+
 ### Static sites
 
 Set `runtime: "static"` (or put `"runtime": "static"` in `.cleat_deploy/deploy.json`).
