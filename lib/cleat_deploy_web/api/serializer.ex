@@ -69,6 +69,7 @@ defmodule CleatDeployWeb.Api.Serializer do
       addons: Addons.listed(app),
       runtime: app.runtime,
       runtime_apt_packages: app.runtime_apt_packages,
+      analytics_inject: app.analytics_inject,
       server: server_ref(app),
       inserted_at: app.inserted_at
     }
@@ -180,6 +181,31 @@ defmodule CleatDeployWeb.Api.Serializer do
       name: row.name,
       host: blank_to_nil(row.host),
       requests: row.requests
+    }
+  end
+
+  def analytics_visited(row) do
+    %{
+      app_id: row.id,
+      slug: row.slug,
+      name: row.name,
+      host: blank_to_nil(row.host),
+      pageviews: row.pageviews
+    }
+  end
+
+  def analytics_summary(app, summary, range) do
+    %{
+      app_id: app.id,
+      slug: app.slug,
+      range: range,
+      pageviews: summary.pageviews,
+      uniques: summary.uniques,
+      series: summary.series,
+      paths: summary.paths,
+      referrers: summary.referrers,
+      utm: summary.utm,
+      stale: summary.stale
     }
   end
 

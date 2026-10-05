@@ -68,6 +68,8 @@ defmodule CleatDeployWeb.Router do
     post "/signals/otlp/v1/traces", SignalsController, :ingest_traces
 
     get "/analytics/requested", AnalyticsController, :requested
+    get "/analytics/visited", AnalyticsController, :visited
+    get "/apps/:app_id/analytics", AnalyticsController, :app_summary
 
     get "/apps/:app_id/env", EnvController, :index
     get "/apps/:app_id/logs", AppController, :logs

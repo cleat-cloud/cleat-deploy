@@ -148,7 +148,8 @@ defmodule CleatDeploy.Apps.App do
         :port,
         :github_repo,
         :runtime,
-        :runtime_apt_packages
+        :runtime_apt_packages,
+        :analytics_inject
       ],
       empty_values: []
     )

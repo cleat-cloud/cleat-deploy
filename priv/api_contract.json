@@ -17,6 +17,7 @@
     "addons",
     "runtime",
     "runtime_apt_packages",
+    "analytics_inject",
     "server",
     "inserted_at"
   ],
@@ -34,6 +35,25 @@
     "name",
     "host",
     "requests"
+  ],
+  "analytics_visited": [
+    "app_id",
+    "slug",
+    "name",
+    "host",
+    "pageviews"
+  ],
+  "analytics_summary": [
+    "app_id",
+    "slug",
+    "range",
+    "pageviews",
+    "uniques",
+    "series",
+    "paths",
+    "referrers",
+    "utm",
+    "stale"
   ],
   "deployment": [
     "id",

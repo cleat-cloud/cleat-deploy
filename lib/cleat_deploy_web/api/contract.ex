@@ -10,10 +10,15 @@ defmodule CleatDeployWeb.Api.Contract do
   @resources %{
     "app" => ~w(
       id name slug github_repo branch host port systemd_unit release_path data_dir
-      auto_deploy idle_shutdown_enabled indexable units addons runtime runtime_apt_packages server inserted_at
+      auto_deploy idle_shutdown_enabled indexable units addons runtime runtime_apt_packages
+      analytics_inject server inserted_at
     ),
     "app_query" => ~w(app_id slug engine columns rows truncated),
     "analytics_requested" => ~w(app_id slug name host requests),
+    "analytics_visited" => ~w(app_id slug name host pageviews),
+    "analytics_summary" => ~w(
+      app_id slug range pageviews uniques series paths referrers utm stale
+    ),
     "server" => ~w(
       id name host_ip ssh_user region provider deploy_mode instance_status
       bundle_id bundle_name cpu_count ram_mb disk_gb monthly_price_usd

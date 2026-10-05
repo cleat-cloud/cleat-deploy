@@ -67,6 +67,20 @@ defmodule CleatDeploy.Servers.Insights do
     %{server: server, requested: AccessCounts.for_server(scope, server)}
   end
 
+  @doc """
+  Most visited apps (pageviews, 24h) on the active server, from the sidecar.
+
+  `stale: true` means the sidecar did not answer and the last snapshot (or an
+  empty list) is being served. Apps without pageviews are left out, and an
+  inject-off host never shows up until its toggle is on.
+  """
+  def visited_apps(%Scope{} = scope) do
+    server = active_server(scope)
+    {visited, stale} = load_visited(scope, server)
+
+    %{server: server, stale: stale, visited: visited}
+  end
+
   defp get_tenant_server(%Scope{tenant: tenant}, server_id) do
     Repo.get_by(Server, id: server_id, tenant_id: tenant.id)
   end
@@ -134,9 +148,11 @@ defmodule CleatDeploy.Servers.Insights do
   defp last_value([]), do: nil
   defp last_value(series), do: List.last(series).v
 
-  defp visited_ranking(_scope, nil), do: {[], false}
+  defp visited_ranking(scope, server), do: load_visited(scope, server)
 
-  defp visited_ranking(scope, %Server{} = server) do
+  defp load_visited(_scope, nil), do: {[], false}
+
+  defp load_visited(scope, %Server{} = server) do
     {rows, stale} =
       case Summary.visited(server) do
         {:ok, rows, stale: true} -> {List.wrap(rows), true}
@@ -180,7 +196,7 @@ defmodule CleatDeploy.Servers.Insights do
         Map.update(
           acc,
           app.id,
-          %{id: app.id, name: app.name, slug: app.slug, pageviews: n},
+          %{id: app.id, name: app.name, slug: app.slug, host: app.host, pageviews: n},
           fn existing -> %{existing | pageviews: existing.pageviews + n} end
         )
     end
