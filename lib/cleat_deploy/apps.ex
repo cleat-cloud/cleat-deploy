@@ -444,7 +444,8 @@ defmodule CleatDeploy.Apps do
           "port",
           "github_repo",
           "runtime",
-          "runtime_apt_packages"
+          "runtime_apt_packages",
+          "analytics_inject"
         ])
       )
       |> Repo.update()

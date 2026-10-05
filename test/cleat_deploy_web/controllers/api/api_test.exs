@@ -189,6 +189,20 @@ defmodule CleatDeployWeb.Api.ApiTest do
     assert data["indexable"] == true
   end
 
+  test "PATCH /api/v1/apps/:id toggles analytics inject", %{token: token, app: app} do
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/apps/#{app.id}")
+    assert json_response(conn, 200)["data"]["analytics_inject"] == app.analytics_inject
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_patch(~p"/api/v1/apps/#{app.id}", %{analytics_inject: not app.analytics_inject})
+
+    data = json_response(conn, 200)["data"]
+    assert data["analytics_inject"] == not app.analytics_inject
+    assert CleatDeploy.Apps.get_app!(app.id).analytics_inject == not app.analytics_inject
+  end
+
   test "POST /api/v1/apps/:app/cancel cancels the active deploy", %{token: token, app: app} do
     {:ok, deployment, _job} = Deployments.enqueue_deployment(app, %{git_sha: "manual"})
 

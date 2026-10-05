@@ -12,10 +12,20 @@ defmodule CleatDeploy.Analytics.SummaryStub do
   }
 
   def visited(_server) do
-    {:ok, Application.get_env(:cleat_deploy, :analytics_visited_stub, [])}
+    rows = Application.get_env(:cleat_deploy, :analytics_visited_stub, [])
+
+    if Application.get_env(:cleat_deploy, :analytics_visited_stale, false) do
+      {:ok, rows, stale: true}
+    else
+      {:ok, rows}
+    end
   end
 
   def app(_server, _host, _range) do
-    {:ok, Application.get_env(:cleat_deploy, :analytics_app_stub, @empty_app)}
+    if Application.get_env(:cleat_deploy, :analytics_app_fail, false) do
+      {:error, :sidecar_down}
+    else
+      {:ok, Application.get_env(:cleat_deploy, :analytics_app_stub, @empty_app)}
+    end
   end
 end

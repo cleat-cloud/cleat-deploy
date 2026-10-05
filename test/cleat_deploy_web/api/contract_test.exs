@@ -123,7 +123,29 @@ defmodule CleatDeployWeb.Api.ContractTest do
       requests: 5
     }
 
+    visited = %{
+      id: app.id,
+      name: app.name,
+      slug: app.slug,
+      host: app.host,
+      pageviews: 3
+    }
+
+    summary = %{
+      pageviews: 1,
+      uniques: 1,
+      series: [],
+      paths: [],
+      referrers: [],
+      utm: [],
+      stale: false
+    }
+
     assert keys(Serializer.analytics_requested(requested)) == contract_keys("analytics_requested")
+    assert keys(Serializer.analytics_visited(visited)) == contract_keys("analytics_visited")
+
+    assert keys(Serializer.analytics_summary(app, summary, "24h")) ==
+             contract_keys("analytics_summary")
 
     assert keys(Serializer.signal_health(health)) == contract_keys("signal_health")
     assert keys(Serializer.signal_metrics(metrics)) == contract_keys("signal_metrics")
