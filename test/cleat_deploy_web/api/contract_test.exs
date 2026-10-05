@@ -115,6 +115,16 @@ defmodule CleatDeployWeb.Api.ContractTest do
       uniques: 0
     }
 
+    requested = %{
+      id: app.id,
+      name: app.name,
+      slug: app.slug,
+      host: app.host,
+      requests: 5
+    }
+
+    assert keys(Serializer.analytics_requested(requested)) == contract_keys("analytics_requested")
+
     assert keys(Serializer.signal_health(health)) == contract_keys("signal_health")
     assert keys(Serializer.signal_metrics(metrics)) == contract_keys("signal_metrics")
     assert keys(Serializer.signal_pages(pages)) == contract_keys("signal_pages")

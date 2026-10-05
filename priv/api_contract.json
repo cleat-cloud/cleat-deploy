@@ -28,6 +28,13 @@
     "rows",
     "truncated"
   ],
+  "analytics_requested": [
+    "app_id",
+    "slug",
+    "name",
+    "host",
+    "requests"
+  ],
   "deployment": [
     "id",
     "app_id",

@@ -12,6 +12,43 @@ defmodule CleatDeploy.Servers.InsightsTest do
     %{scope: scope, server: server}
   end
 
+  test "requested_ranking reads the active server's access log", %{
+    scope: scope,
+    server: server
+  } do
+    TenancyFixtures.app_fixture(scope, server, %{
+      name: "NFe Fácil",
+      slug: "nfe-facil",
+      host: "nfe.gestaobem.com"
+    })
+
+    path = Path.join(System.tmp_dir!(), "cleat-access-#{System.unique_integer([:positive])}.log")
+
+    File.write!(
+      path,
+      Jason.encode!(%{ts: System.os_time(:second), request: %{host: "nfe.gestaobem.com"}}) <> "\n"
+    )
+
+    previous = Application.get_env(:cleat_deploy, :caddy_access_log_path)
+    Application.put_env(:cleat_deploy, :caddy_access_log_path, path)
+
+    on_exit(fn ->
+      File.rm(path)
+
+      if previous do
+        Application.put_env(:cleat_deploy, :caddy_access_log_path, previous)
+      else
+        Application.delete_env(:cleat_deploy, :caddy_access_log_path)
+      end
+    end)
+
+    assert %{server: active, requested: [row]} = Insights.requested_ranking(scope)
+    assert active.id == server.id
+    assert row.slug == "nfe-facil"
+    assert row.requests == 1
+    assert row.host == "nfe.gestaobem.com"
+  end
+
   test "counts apps by runtime for the tenant", %{scope: scope, server: server} do
     TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix", slug: "a1", name: "A1"})
     TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix", slug: "a2", name: "A2"})
