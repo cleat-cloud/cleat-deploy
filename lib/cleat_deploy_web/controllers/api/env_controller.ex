@@ -160,6 +160,15 @@ defmodule CleatDeployWeb.Api.EnvController do
     end
   end
 
+  defp apply_failed(conn, :timeout) do
+    conn
+    |> put_status(:gateway_timeout)
+    |> json(%{
+      error: "env_apply_timeout",
+      details: "the server did not confirm the env apply in time; the vars are stored"
+    })
+  end
+
   defp apply_failed(conn, reason) do
     conn
     |> put_status(:bad_gateway)

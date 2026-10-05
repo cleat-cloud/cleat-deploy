@@ -175,6 +175,10 @@ defmodule CleatDeployWeb.AppLive.Show.Env do
     end
   end
 
+  defp apply_error_message(key, label, action, :timeout) do
+    "#{key} #{action} for #{label} but the server did not confirm the apply in time"
+  end
+
   defp apply_error_message(key, label, action, reason) do
     "#{key} #{action} for #{label} but the running app did not pick it up: #{reason}"
   end

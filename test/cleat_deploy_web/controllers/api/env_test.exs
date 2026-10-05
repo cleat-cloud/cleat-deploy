@@ -283,6 +283,27 @@ defmodule CleatDeployWeb.Api.EnvTest do
     assert Apps.env_map(app)["GOWA_DEVICE_ID"] == "ednasp1"
   end
 
+  test "PUT returns 504 when the server apply does not confirm in time", %{
+    token: token,
+    app: app
+  } do
+    Application.put_env(:cleat_deploy, :env_apply_timeout_ms, 50)
+    on_exit(fn -> Application.delete_env(:cleat_deploy, :env_apply_timeout_ms) end)
+
+    expect(RuntimeControlMock, :run, fn _subject, _argv ->
+      Process.sleep(500)
+      {:ok, ""}
+    end)
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> json_put(~p"/api/v1/apps/#{app.id}/env", %{key: "GOWA_DEVICE_ID", value: "ednasp1"})
+
+    assert json_response(conn, 504)["error"] == "env_apply_timeout"
+    assert Apps.env_map(app)["GOWA_DEVICE_ID"] == "ednasp1"
+  end
+
   test "DELETE applies the remaining env file to the running app", %{token: token, app: app} do
     stub(RuntimeControlMock, :run, fn _subject, _argv -> {:ok, ""} end)
 
