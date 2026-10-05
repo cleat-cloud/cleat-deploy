@@ -112,6 +112,32 @@ defmodule CleatDeploy.Apps.EnvApplyTest do
     expect(RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
       assert script =~ "sudo systemctl restart 'gowa'"
       assert script =~ "sudo systemctl restart 'gowa-worker'"
+      assert script =~ "systemctl cat --quiet 'gowa-worker'"
+      {:ok, ""}
+    end)
+
+    assert EnvApply.apply(app) == :ok
+  end
+
+  test "skips a ghost unit that was never provisioned" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        slug: "radar-pncp",
+        host: "radar.apps.gestaobem.com",
+        runtime: "golang",
+        systemd_unit: "radar-pncp",
+        release_path: "/opt/radar-pncp"
+      })
+
+    {:ok, _} = Apps.put_env_var(app, "PNCP_KEY", "x")
+    {:ok, app} = Apps.record_deploy_manifest(app, %{units: []})
+
+    expect(RuntimeControlMock, :run, fn _subject, ["bash", "-c", script] ->
+      assert script =~ "systemctl cat --quiet 'radar-pncp'"
+      refute script =~ "radar-pncp-worker"
       {:ok, ""}
     end)
 

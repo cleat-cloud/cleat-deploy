@@ -265,7 +265,7 @@ defmodule CleatDeploy.Apps.App do
   """
   def extra_units(%__MODULE__{deploy_manifest: manifest} = app) when is_map(manifest) do
     case Map.get(manifest, "units") do
-      [_ | _] = units -> Enum.filter(units, &is_binary/1)
+      units when is_list(units) -> Enum.filter(units, &is_binary/1)
       _ -> legacy_extra_units(app)
     end
   end
