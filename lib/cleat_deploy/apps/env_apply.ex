@@ -7,13 +7,21 @@ defmodule CleatDeploy.Apps.EnvApply do
   is not hibernate. Hibernated units (inactive with a wake stamp) stay down.
   Static apps have no unit. Vars scoped to a branch other than the running
   deploy are stored only; they apply on the next deploy of that branch.
+
+  The remote command runs under a deadline (`:env_apply_timeout_ms`, default
+  25s) so a stuck server cannot hold the HTTP request open past the proxy.
   """
+
+  require Logger
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Apps.AppEnvVar
   alias CleatDeploy.Deploy.Ssh
   alias CleatDeploy.Deploy.Wake
+
+  @apply_timeout_ms 25_000
+  @wait_seconds 20
 
   def apply(app, changed_branch \\ nil)
 
@@ -36,9 +44,27 @@ defmodule CleatDeploy.Apps.EnvApply do
   end
 
   defp run(app) do
-    case client().run(app, ["bash", "-c", script(app)]) do
-      {:ok, _output} -> :ok
-      {:error, reason} -> {:error, format_error(reason)}
+    case yield_run(app, ["bash", "-c", script(app)]) do
+      :ok ->
+        :ok
+
+      {:error, :timeout} = error ->
+        Logger.warning("env apply timed out for #{app.slug} after #{apply_timeout_ms()}ms")
+        error
+
+      {:error, reason} = error ->
+        Logger.warning("env apply failed for #{app.slug}: #{reason}")
+        error
+    end
+  end
+
+  defp yield_run(app, argv) do
+    task = Task.async(fn -> client().run(app, argv) end)
+
+    case Task.yield(task, apply_timeout_ms()) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, _output}} -> :ok
+      {:ok, {:error, reason}} -> {:error, format_error(reason)}
+      nil -> {:error, :timeout}
     end
   end
 
@@ -108,7 +134,7 @@ defmodule CleatDeploy.Apps.EnvApply do
 
     """
       ready=0
-      for i in $(seq 1 30); do
+      for i in $(seq 1 #{@wait_seconds}); do
         if sudo systemctl is-active --quiet #{quoted}; then
           n=$(systemctl show #{quoted} -p NRestarts --value 2>/dev/null || echo 0)
           if [[ "${n:-0}" -ne 0 ]]; then
@@ -126,6 +152,10 @@ defmodule CleatDeploy.Apps.EnvApply do
         exit 1
       fi
     """
+  end
+
+  defp apply_timeout_ms do
+    Application.get_env(:cleat_deploy, :env_apply_timeout_ms, @apply_timeout_ms)
   end
 
   defp client do

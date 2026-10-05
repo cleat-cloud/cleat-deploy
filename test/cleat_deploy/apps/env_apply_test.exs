@@ -94,6 +94,21 @@ defmodule CleatDeploy.Apps.EnvApplyTest do
     assert EnvApply.apply(app) == {:error, "ssh: connect to host timed out"}
   end
 
+  test "bounds the apply when the remote command never returns" do
+    app = node_app()
+    {:ok, _} = Apps.put_env_var(app, "GOWA_DEVICE_ID", "ednasp1")
+
+    Application.put_env(:cleat_deploy, :env_apply_timeout_ms, 50)
+    on_exit(fn -> Application.delete_env(:cleat_deploy, :env_apply_timeout_ms) end)
+
+    expect(RuntimeControlMock, :run, fn _subject, _argv ->
+      Process.sleep(500)
+      {:ok, ""}
+    end)
+
+    assert EnvApply.apply(app) == {:error, :timeout}
+  end
+
   test "restarts extra units of a golang app when they are active" do
     scope = TenancyFixtures.scope_fixture()
     server = TenancyFixtures.server_fixture(scope)
