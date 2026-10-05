@@ -99,6 +99,7 @@ defmodule CleatDeploy.Deploy.Ssh.Phoenix do
     #{CleatDeploy.Deploy.Ssh.Env.env_sync_script(app, config)}
     #{migrate_script(app, config, manifest)}
     #{ServerProvision.release_command_script(app, config, manifest)}
+    #{ServerProvision.phoenix_ownership_script(app, config, manifest)}
 
     log "Restarting #{config.systemd_unit}"
     sudo systemctl restart #{config.systemd_unit}
