@@ -47,7 +47,9 @@ defmodule CleatDeploy.Deploy.NodeTest do
     # An orphaned node from a previous unit kept the port and put the unit in an
     # infinite restart loop; kill the whole cgroup and rate-limit retries.
     assert script =~ "KillMode=control-group"
-    assert script =~ "TimeoutStopSec=15"
+    # 15s cut graceful shutdown handlers short and systemd escalated to SIGKILL
+    # (#212); the app gets 30s and a SIGKILLed stop is logged as a warning.
+    assert script =~ "TimeoutStopSec=30"
     assert script =~ "StartLimitIntervalSec=60"
     assert script =~ "StartLimitBurst=5"
   end
