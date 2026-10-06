@@ -1,6 +1,8 @@
 defmodule CleatDeployWeb.GithubWebhookControllerTest do
   use CleatDeployWeb.ConnCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias CleatDeploy.{Deployments, TenancyFixtures}
 
   setup do
@@ -41,17 +43,22 @@ defmodule CleatDeployWeb.GithubWebhookControllerTest do
     assert_enqueued(worker: CleatDeploy.Workers.DeployWorker)
   end
 
-  test "returns 404 for unknown repo", %{} do
+  test "returns 404 naming the repo so a stale config is diagnosable" do
     payload =
       ~s({"ref":"refs/heads/main","after":"abc123","repository":{"full_name":"unknown/repo"}})
 
-    conn =
-      build_conn()
-      |> put_req_header("content-type", "application/json")
-      |> put_req_header("x-hub-signature-256", sign(payload, "secret"))
-      |> post(~p"/webhooks/github", payload)
+    log =
+      capture_log(fn ->
+        conn =
+          build_conn()
+          |> put_req_header("content-type", "application/json")
+          |> put_req_header("x-hub-signature-256", sign(payload, "secret"))
+          |> post(~p"/webhooks/github", payload)
 
-    assert response(conn, 404) == "unknown repo"
+        assert response(conn, 404) == "unknown repo: unknown/repo"
+      end)
+
+    assert log =~ "github webhook unknown repo=unknown/repo"
   end
 
   test "returns 400 when repository is missing (no 500)" do

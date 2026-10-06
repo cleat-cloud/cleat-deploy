@@ -149,7 +149,9 @@ defmodule CleatDeploy.Github do
   end
 
   defp list_hooks(repo, token) do
-    api_get("/repos/#{repo_path(repo)}/hooks", token)
+    # `redirect: false` so a renamed/transferred repo surfaces as a 301 instead of
+    # being followed silently — see `moved_repo_name/2`.
+    api_get("/repos/#{repo_path(repo)}/hooks", token, [], redirect: false)
   end
 
   defp create_hook(repo, payload, token) do
@@ -161,9 +163,9 @@ defmodule CleatDeploy.Github do
   end
 
   defp delete_hook(repo, hook_id, token) do
-    case Req.delete("#{@github_api}/repos/#{repo_path(repo)}/hooks/#{hook_id}",
-           headers: api_headers(token)
-         ) do
+    request = [headers: api_headers(token)] ++ req_options()
+
+    case Req.delete("#{@github_api}/repos/#{repo_path(repo)}/hooks/#{hook_id}", request) do
       {:ok, %{status: status}} when status in 200..299 ->
         :ok
 
@@ -198,11 +200,13 @@ defmodule CleatDeploy.Github do
     end
   end
 
-  defp api_get(path, token, params \\ []) do
-    case Req.get("#{@github_api}#{path}",
-           headers: api_headers(token),
-           params: params
-         ) do
+  defp api_get(path, token, params \\ [], options \\ []) do
+    request = [headers: api_headers(token), params: params] ++ options ++ req_options()
+
+    case Req.get("#{@github_api}#{path}", request) do
+      {:ok, %{status: status} = response} when status in [301, 302, 303, 307, 308] ->
+        {:error, {:repo_moved, moved_repo_name(response, token)}}
+
       {:ok, %{status: status, body: body}} when status in 200..299 ->
         {:ok, body}
 
@@ -214,6 +218,28 @@ defmodule CleatDeploy.Github do
     end
   end
 
+  # GitHub answers `301` for a repository that was transferred or renamed. The
+  # panel must not follow that silently: the app's stored `github_repo` would keep
+  # looking synced while GitHub rejects every push for the stale name. The
+  # redirect only carries the numeric id, so the canonical name is read from it.
+  defp moved_repo_name(response, token) do
+    with location when is_binary(location) <- response_header(response, "location"),
+         [_, repo_id] <- Regex.run(~r{/repositories/(\d+)}, location),
+         {:ok, %{"full_name" => full_name}} <- api_get("/repositories/#{repo_id}", token) do
+      full_name
+    else
+      _ -> nil
+    end
+  end
+
+  defp response_header(response, name) do
+    response.headers |> Map.get(name, []) |> List.first()
+  end
+
+  defp req_options do
+    Application.get_env(:cleat_deploy, :github_req_options, [])
+  end
+
   defp api_post(path, token, body) do
     api_json(:post, path, token, body)
   end
@@ -223,12 +249,11 @@ defmodule CleatDeploy.Github do
   end
 
   defp api_json(method, path, token, body) do
-    case Req.request(
-           method: method,
-           url: "#{@github_api}#{path}",
-           headers: api_headers(token),
-           json: body
-         ) do
+    request =
+      [method: method, url: "#{@github_api}#{path}", headers: api_headers(token), json: body] ++
+        req_options()
+
+    case Req.request(request) do
       {:ok, %{status: status}} when status in 200..299 ->
         :ok
 

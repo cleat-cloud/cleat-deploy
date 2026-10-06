@@ -51,9 +51,9 @@ defmodule CleatDeployWeb.GithubWebhookController do
     send_resp(conn, :bad_request, "enqueue failed")
   end
 
-  defp respond(conn, :not_found) do
-    Logger.warning("github webhook unknown repo")
-    send_resp(conn, :not_found, "unknown repo")
+  defp respond(conn, {:not_found, repo}) do
+    Logger.warning("github webhook unknown repo=#{repo}")
+    send_resp(conn, :not_found, "unknown repo: #{repo}")
   end
 
   defp respond(conn, :missing_repo) do
@@ -106,7 +106,7 @@ defmodule CleatDeployWeb.GithubWebhookController do
 
     cond do
       apps == [] ->
-        :not_found
+        {:not_found, repo}
 
       signature in [nil, ""] ->
         :error
