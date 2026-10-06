@@ -591,6 +591,14 @@ defmodule CleatDeploy.Apps do
         Logger.warning("GitHub webhook not synced for #{app.slug}: GITHUB_TOKEN is not set")
         {:no_token, app}
 
+      {:error, {:repo_moved, canonical}} ->
+        Logger.warning(
+          "GitHub repo moved for #{app.slug}: #{app.github_repo} is now #{canonical || "unknown"} " <>
+            "(update the app's repo, pushes to the stale name are rejected)"
+        )
+
+        {{:renamed, canonical}, app}
+
       {:error, reason} ->
         message = if is_binary(reason), do: reason, else: inspect(reason)
         Logger.warning("GitHub webhook not synced for #{app.slug}: #{message}")
@@ -610,7 +618,8 @@ defmodule CleatDeploy.Apps do
   Provisions GitHub push webhooks for every registered app.
 
   Returns a list of `{slug, status}` tuples where status is `:synced`, `:no_token`,
-  or `{:error, message}`.
+  `{:renamed, canonical_repo}` when GitHub redirects the stored repo name, or
+  `{:error, message}`.
   """
   def sync_all_github_webhooks do
     Repo.all(App)

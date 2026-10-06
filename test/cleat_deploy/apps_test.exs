@@ -867,6 +867,35 @@ defmodule CleatDeploy.AppsTest do
 
       assert log =~ "api rate limit"
     end
+
+    test "reports a moved repo instead of a synced webhook", %{scope: scope, server: server} do
+      {:ok, app, _} =
+        Apps.create_app(scope, %{
+          name: "Moved",
+          slug: "moved-hook",
+          github_repo: "puppe1990/hora-solar",
+          host: "moved-hook.example.com",
+          server_id: server.id
+        })
+
+      previous_sync = Application.get_env(:cleat_deploy, :github_webhook_sync)
+      previous_github = Application.get_env(:cleat_deploy, :github)
+      Application.put_env(:cleat_deploy, :github_webhook_sync, true)
+      Application.put_env(:cleat_deploy, :github, CleatDeploy.AppsTest.GithubMovedStub)
+
+      on_exit(fn ->
+        restore_app_env(:github_webhook_sync, previous_sync)
+        restore_app_env(:github, previous_github)
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {{:renamed, "gestao-bem/hora-solar"}, ^app} = Apps.sync_github_webhook(app)
+        end)
+
+      assert log =~ "puppe1990/hora-solar"
+      assert log =~ "gestao-bem/hora-solar"
+    end
   end
 
   defp restore_app_env(key, nil), do: Application.delete_env(:cleat_deploy, key)
@@ -909,4 +938,8 @@ end
 
 defmodule CleatDeploy.AppsTest.GithubErrorStub do
   def ensure_webhook(_app), do: {:error, "api rate limit"}
+end
+
+defmodule CleatDeploy.AppsTest.GithubMovedStub do
+  def ensure_webhook(_app), do: {:error, {:repo_moved, "gestao-bem/hora-solar"}}
 end
