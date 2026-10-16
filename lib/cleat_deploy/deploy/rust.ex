@@ -108,7 +108,6 @@ defmodule CleatDeploy.Deploy.Rust do
     done
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
     #{ServerProvision.prune_releases_script(config.release_path)}
-    sudo chmod -R a+rX #{config.release_path}
 
     log "Start command: $START_CMD"
     printf '%s' "$START_CMD" | sudo tee "$RELEASE_DIR/start.cmd" > /dev/null
@@ -121,6 +120,7 @@ defmodule CleatDeploy.Deploy.Rust do
     #{CleatDeploy.Deploy.Ssh.env_sync_script(app, config)}
     #{migrate_step(manifest, config)}
     #{ServerProvision.release_command_script(app, config, manifest)}
+    #{ServerProvision.service_ownership_script(app, config, manifest)}
 
     #{ServerProvision.restart_units_script(config, manifest)}
 

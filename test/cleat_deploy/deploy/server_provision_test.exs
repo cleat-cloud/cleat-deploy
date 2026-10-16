@@ -629,8 +629,8 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
       assert script =~ "sudo chown -R cleat-phoenix-tts:cleat-phoenix-tts '/var/lib/phoenix_tts'"
       assert script =~ "'/var/lib/phoenix_tts/tmp'"
 
-      assert ServerProvision.phoenix_ownership_script(app, config, %AppManifest{runtime: "node"}) ==
-               ""
+      refute ServerProvision.phoenix_ownership_script(app, config, %AppManifest{runtime: "static"}) =~
+               "chown"
     end
 
     test "ownership is fixed after migrations, before the restart", %{
@@ -661,6 +661,7 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
 
     test "service user names stay within the login limit and never collide" do
       assert ServerProvision.phoenix_service_user("short") == "cleat-short"
+      assert ServerProvision.service_user("short") == "cleat-short"
       assert ServerProvision.phoenix_service_user("weird.slug!") == "cleat-weird-slug-"
 
       long = String.duplicate("a", 60)
@@ -671,6 +672,78 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
       other = ServerProvision.phoenix_service_user(String.duplicate("a", 59) <> "b")
       refute other == name
       assert String.length(other) <= 31
+    end
+  end
+
+  describe "dedicated user for node/rails/rust/gleam (#231)" do
+    test "web and extra units drop root and only write the app paths", %{
+      scope: scope,
+      server: server
+    } do
+      for runtime <- ["node", "rails", "rust", "gleam"] do
+        {:ok, app, _} =
+          CleatDeploy.Apps.create_app(scope, %{
+            name: "#{runtime} app",
+            slug: "#{runtime}-dedupe",
+            github_repo: "owner/#{runtime}-dedupe",
+            host: "#{runtime}-dedupe.example.com",
+            runtime: runtime,
+            server_id: server.id
+          })
+
+        config = App.deploy_config(app)
+        user = ServerProvision.service_user(app.slug)
+
+        manifest = %AppManifest{
+          runtime: runtime,
+          processes: %{"web" => "start-web", "worker" => "start-worker"}
+        }
+
+        script = ServerProvision.provision_script(app, config, manifest)
+        web = unit_block(script, config.systemd_unit)
+        worker = unit_block(script, "#{config.systemd_unit}-worker")
+
+        refute web =~ "User=root"
+        refute worker =~ "User=root"
+        assert web =~ "User=#{user}"
+        assert web =~ "Group=#{user}"
+        assert worker =~ "User=#{user}"
+        assert worker =~ "Group=#{user}"
+        assert web =~ "NoNewPrivileges=true"
+        assert web =~ "PrivateTmp=true"
+        assert web =~ "ProtectSystem=full"
+        assert web =~ "ProtectHome=true"
+        assert web =~ "ReadWritePaths=#{config.release_path}/data #{config.release_path}"
+        assert web =~ "Environment=HOME=#{config.release_path}/data"
+        assert script =~ "sudo groupadd --system #{user}"
+        assert script =~ "sudo useradd --system --gid #{user} --no-create-home"
+      end
+    end
+
+    test "ownership hands data and release dirs to the app account", %{
+      scope: scope,
+      server: server
+    } do
+      {:ok, app, _} =
+        CleatDeploy.Apps.create_app(scope, %{
+          name: "Leitor",
+          slug: "leitor-own",
+          github_repo: "owner/leitor-own",
+          host: "leitor-own.example.com",
+          runtime: "node",
+          server_id: server.id
+        })
+
+      config = App.deploy_config(app)
+      user = ServerProvision.service_user(app.slug)
+
+      script =
+        ServerProvision.service_ownership_script(app, config, %AppManifest{runtime: "node"})
+
+      assert script =~ "sudo chown -R #{user}:#{user} '#{config.release_path}/data'"
+      assert script =~ "sudo chown -R #{user}:#{user} '#{config.release_path}'"
+      assert script =~ "sudo chmod 750 '#{config.release_path}'"
+      assert script =~ "sudo chmod 750 '#{config.release_path}/data'"
     end
   end
 

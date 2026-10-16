@@ -66,6 +66,11 @@ defmodule CleatDeploy.Deploy.RustTest do
     assert script =~ "./bin/server start"
     assert script =~ "./bin/server db migrate"
     refute script =~ "mix release"
+
+    assert occurrence(script, "Fixing data ownership for cleat-hello-loco") <
+             occurrence(script, "Restarting rust-hello-loco")
+
+    refute script =~ "chmod -R a+rX"
   end
 
   test "build script compiles a Loco frontend when frontend/package.json exists", %{

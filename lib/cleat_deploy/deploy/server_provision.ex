@@ -96,7 +96,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     data_dir = data_dir_for(manifest, config)
     env_dir = Path.dirname(config.env_file)
     memory_max = manifest.memory_max_mb || 400
-    user = phoenix_service_user(app.slug)
+    user = service_user(app.slug)
 
     unit = """
     [Unit]
@@ -139,7 +139,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     log "Provisioning host #{app.host} on port #{app.port}"
     sudo mkdir -p #{shell_escape(env_dir)} #{shell_escape(data_dir)} #{shell_escape(Path.join(data_dir, "tmp"))}
 
-    #{phoenix_service_account_script(user, data_dir)}
+    #{service_account_script(user, data_dir)}
 
     sudo tee /etc/systemd/system/#{config.systemd_unit}.service > /dev/null <<'PAAS_SYSTEMD_UNIT'
     #{String.trim_trailing(unit)}
@@ -153,7 +153,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     """
   end
 
-  defp phoenix_service_account_script(user, data_dir) do
+  defp service_account_script(user, data_dir) do
     """
     if ! getent group #{user} >/dev/null 2>&1; then
       sudo groupadd --system #{user}
@@ -175,7 +175,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   """
   def phoenix_ownership_script(%App{} = app, config, %AppManifest{runtime: "phoenix"} = manifest) do
     data_dir = data_dir_for(manifest, config)
-    user = phoenix_service_user(app.slug)
+    user = service_user(app.slug)
 
     """
     log "Fixing data ownership for #{user}"
@@ -185,15 +185,38 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     |> String.trim()
   end
 
-  def phoenix_ownership_script(_app, _config, _manifest), do: ""
+  def phoenix_ownership_script(app, config, manifest),
+    do: service_ownership_script(app, config, manifest)
 
   @doc """
-  Unprivileged system account for a Phoenix app.
+  Hands data (and, for Node/Rails/Rust/Gleam, the release tree) to the app
+  account after root-owned migrate/release commands.
+  """
+  def service_ownership_script(%App{} = app, config, %AppManifest{runtime: runtime} = manifest)
+      when runtime in ["node", "rails", "rust", "gleam"] do
+    data_dir = data_dir_for(manifest, config)
+    user = service_user(app.slug)
+
+    """
+    log "Fixing data ownership for #{user}"
+    sudo mkdir -p #{shell_escape(data_dir)} #{shell_escape(Path.join(data_dir, "tmp"))}
+    sudo chown -R #{user}:#{user} #{shell_escape(data_dir)}
+    sudo chmod 750 #{shell_escape(data_dir)}
+    sudo chown -R #{user}:#{user} #{shell_escape(config.release_path)}
+    sudo chmod 750 #{shell_escape(config.release_path)}
+    """
+    |> String.trim()
+  end
+
+  def service_ownership_script(_app, _config, _manifest), do: ""
+
+  @doc """
+  Unprivileged system account for an app.
 
   `cleat-<slug>` when it fits the 32-char login limit; longer slugs keep a short
   digest so two apps sharing a prefix never share an account.
   """
-  def phoenix_service_user(slug) when is_binary(slug) do
+  def service_user(slug) when is_binary(slug) do
     clean = String.replace(slug, ~r/[^A-Za-z0-9_-]/, "-")
     base = "cleat-" <> clean
 
@@ -204,6 +227,8 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       "cleat-" <> String.slice(clean, 0, 18) <> "-" <> digest
     end
   end
+
+  def phoenix_service_user(slug), do: service_user(slug)
 
   defp golang_provision_script(%App{} = app, config, %AppManifest{} = manifest) do
     data_dir = data_dir_for(manifest, config)
@@ -342,10 +367,21 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     memory_max = manifest.memory_max_mb || 400
     extra_env = Enum.join(env_lines, "\n    ")
     units = app_units(manifest, config.systemd_unit)
+    user = service_user(app.slug)
 
     unit_files =
       Enum.map_join(units, "\n\n", fn {process, unit_name} ->
-        unit = service_unit_file(app, config, unit_name, process, data_dir, memory_max, extra_env)
+        unit =
+          service_unit_file(
+            app,
+            config,
+            unit_name,
+            process,
+            data_dir,
+            memory_max,
+            extra_env,
+            user
+          )
 
         """
         sudo tee /etc/systemd/system/#{unit_name}.service > /dev/null <<'PAAS_SYSTEMD_UNIT'
@@ -364,9 +400,11 @@ defmodule CleatDeploy.Deploy.ServerProvision do
 
     """
     log "Provisioning #{label} host #{app.host} on port #{app.port}"
-    sudo mkdir -p #{shell_escape(env_dir)} #{shell_escape(data_dir)}
+    sudo mkdir -p #{shell_escape(env_dir)} #{shell_escape(data_dir)} #{shell_escape(Path.join(data_dir, "tmp"))}
     sudo touch #{shell_escape(config.env_file)}
     sudo chmod 600 #{shell_escape(config.env_file)}
+
+    #{service_account_script(user, data_dir)}
 
     #{unit_files}
 
@@ -385,7 +423,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       Enum.map(AppManifest.extra_units(manifest), &{&1, "#{systemd_unit}-#{&1}"})
   end
 
-  defp service_unit_file(app, config, _unit_name, process, data_dir, memory_max, extra_env) do
+  defp service_unit_file(app, config, _unit_name, process, data_dir, memory_max, extra_env, user) do
     port_lines =
       if process == "web" do
         "Environment=HOST=127.0.0.1\nEnvironment=PORT=#{app.port}"
@@ -411,11 +449,12 @@ defmodule CleatDeploy.Deploy.ServerProvision do
 
     [Service]
     Type=exec
-    User=root
-    Group=root
+    User=#{user}
+    Group=#{user}
     WorkingDirectory=#{config.release_path}/current
     EnvironmentFile=#{config.env_file}
     Environment=CLEAT_DATA_DIR=#{data_dir}
+    Environment=HOME=#{data_dir}
     #{port_lines}
     #{extra_env}
     ExecStart=/bin/bash #{config.release_path}/current/start.sh#{exec_arg}
@@ -431,6 +470,12 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     TimeoutStopSec=30
     MemoryMax=#{memory_max}M
     LimitNOFILE=65535
+    # Unprivileged service: write is limited to persist + release (#231).
+    NoNewPrivileges=true
+    PrivateTmp=true
+    ProtectSystem=full
+    ProtectHome=true
+    ReadWritePaths=#{data_dir} #{config.release_path}
 
     [Install]
     WantedBy=multi-user.target

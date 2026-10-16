@@ -64,11 +64,16 @@ defmodule CleatDeploy.Deploy.GleamTest do
     assert script =~ "/opt/minha-app/data"
     assert script =~ "sudo systemctl restart gleam-minha-app"
     refute script =~ "mix release"
+
+    assert occurrence(script, "Fixing data ownership for cleat-minha-app") <
+             occurrence(script, "Restarting gleam-minha-app")
+
+    refute script =~ "chmod -R a+rX"
   end
 
-  # A shipment carries no ERTS and the unit runs as root, so erl has to leave
-  # the build user's mise install.
-  test "build script links the Erlang binaries for the root unit", %{
+  # A shipment carries no ERTS, so erl has to leave the build user's mise
+  # install and live on PATH for the unprivileged unit.
+  test "build script links the Erlang binaries onto PATH for the app unit", %{
     app: app,
     config: config
   } do

@@ -63,6 +63,11 @@ defmodule CleatDeploy.Deploy.RailsTest do
     assert script =~ "bundle exec puma -C config/puma.rb"
     assert script =~ "/opt/loja/releases/build"
     assert script =~ "sudo systemctl restart rails-loja"
+
+    assert occurrence(script, "Fixing data ownership for cleat-loja") <
+             occurrence(script, "Restarting rails-loja")
+
+    refute script =~ "chmod -R a+rX"
   end
 
   test "manifest ruby_version and start_command win over detection" do

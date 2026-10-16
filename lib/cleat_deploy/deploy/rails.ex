@@ -84,7 +84,6 @@ defmodule CleatDeploy.Deploy.Rails do
     sudo cp -a . "$RELEASE_DIR"/
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
     #{ServerProvision.prune_releases_script(config.release_path)}
-    sudo chmod -R a+rX #{config.release_path}
 
     log "Start command: $START_CMD"
     printf '%s' "$START_CMD" | sudo tee "$RELEASE_DIR/start.cmd" > /dev/null
@@ -96,6 +95,7 @@ defmodule CleatDeploy.Deploy.Rails do
     #{ServerProvision.provision_script(app, config, manifest)}
     #{CleatDeploy.Deploy.Addons.provision_script(app, config, manifest)}
     #{ServerProvision.release_command_script(app, config, manifest)}
+    #{ServerProvision.service_ownership_script(app, config, manifest)}
 
     #{ServerProvision.restart_units_script(config, manifest)}
 
@@ -133,11 +133,11 @@ defmodule CleatDeploy.Deploy.Rails do
     mise install "ruby@${RUBY_VERSION}"
     mise use -g "ruby@${RUBY_VERSION}"
 
-    # The app runs as root (the units and the release command) while mise
-    # installs the toolchain under the build user's home, so expose the
-    # interpreter where any user finds it. `bundle` is a ruby script, so ruby
-    # has to be on the PATH as well — the gems themselves live in the release
-    # (`.bundle/config` pins BUNDLE_PATH to vendor/bundle).
+    # The unit runs as the app account while mise installs the toolchain under
+    # the build user's home, so expose the interpreter where any user finds it.
+    # `bundle` is a ruby script, so ruby has to be on the PATH as well — the
+    # gems themselves live in the release (`.bundle/config` pins BUNDLE_PATH to
+    # vendor/bundle).
     RUBY_BIN="$(dirname "$(mise which ruby 2>/dev/null || true)")"
     if [[ -n "$RUBY_BIN" && -d "$RUBY_BIN" ]]; then
       for bin in ruby gem irb rake bundle bundler; do

@@ -113,6 +113,11 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "/opt/cleat-web/releases/build"
     assert script =~ "start.sh"
     assert script =~ "sudo systemctl restart node-cleat-web"
+
+    assert occurrence(script, "Fixing data ownership for cleat-cleat-web") <
+             occurrence(script, "Restarting node-cleat-web")
+
+    refute script =~ "chmod -R a+rX"
     # build dir and source tarball must not leak (they filled the disk in prod)
     assert script =~ ~s|trap 'rm -rf "$BUILD_DIR"; rm -f /tmp/src.tar.gz' EXIT|
     # orphan (non-build) release dirs are pruned
