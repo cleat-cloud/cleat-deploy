@@ -272,8 +272,12 @@ defmodule CleatDeploy.Deploy.NodeTest do
     script = Node.remote_build_script(nil, app, config, "abc", "/tmp/src.tar.gz", manifest)
 
     assert script =~ "Running release command (1/1)"
-    assert script =~ "export NODE_ENV=production"
-    assert script =~ "timeout 300 bash /tmp/cleat_release_cmd.sh"
+    refute script =~ "export NODE_ENV=production"
+    refute script =~ "source "
+    assert script =~ "python3 -"
+    assert script =~ "NODE_ENV=production"
+    assert script =~ "timeout"
+    assert script =~ "/tmp/cleat_release_cmd.sh"
 
     assert occurrence(script, "Running release command") <
              occurrence(script, "Restarting node-web")
