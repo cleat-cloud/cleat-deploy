@@ -184,6 +184,115 @@ defmodule CleatDeployWeb.GithubWebhookControllerTest do
     assert deployment.git_sha == "abc123def456"
   end
 
+  test "does not enqueue another tenant's app of the same repo" do
+    repo = "puppe1990/shared-#{System.unique_integer([:positive])}"
+
+    scope_a = TenancyFixtures.scope_fixture()
+    server_a = TenancyFixtures.server_fixture(scope_a)
+
+    app_a =
+      TenancyFixtures.app_fixture(scope_a, server_a, %{
+        name: "Tenant A",
+        slug: "tenant-a-#{System.unique_integer([:positive])}",
+        github_repo: repo,
+        branch: "main",
+        host: "a-#{System.unique_integer([:positive])}.example.com"
+      })
+
+    scope_b = TenancyFixtures.scope_fixture()
+    server_b = TenancyFixtures.server_fixture(scope_b)
+
+    app_b =
+      TenancyFixtures.app_fixture(scope_b, server_b, %{
+        name: "Tenant B",
+        slug: "tenant-b-#{System.unique_integer([:positive])}",
+        github_repo: repo,
+        branch: "main",
+        host: "b-#{System.unique_integer([:positive])}.example.com"
+      })
+
+    refute app_a.webhook_secret == app_b.webhook_secret
+
+    payload =
+      Jason.encode!(%{
+        "ref" => "refs/heads/main",
+        "after" => "abc123def456",
+        "repository" => %{"full_name" => repo}
+      })
+
+    conn =
+      build_conn()
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("x-hub-signature-256", sign(payload, app_a.webhook_secret))
+      |> post(~p"/webhooks/github", payload)
+
+    assert response(conn, 202) == "queued"
+
+    app_ids =
+      all_enqueued(worker: CleatDeploy.Workers.DeployWorker)
+      |> Enum.map(&Deployments.get_deployment!(&1.args["deployment_id"]))
+      |> Enum.map(& &1.app_id)
+
+    assert app_ids == [app_a.id]
+    refute app_b.id in app_ids
+  end
+
+  test "still deploys every instance whose secret matches the signature" do
+    repo = "puppe1990/shared-#{System.unique_integer([:positive])}"
+    secret = "shared-hook-#{System.unique_integer([:positive])}"
+
+    scope_a = TenancyFixtures.scope_fixture()
+    server_a = TenancyFixtures.server_fixture(scope_a)
+
+    app_a =
+      TenancyFixtures.app_fixture(scope_a, server_a, %{
+        name: "Tenant A",
+        slug: "tenant-a-#{System.unique_integer([:positive])}",
+        github_repo: repo,
+        branch: "main",
+        webhook_secret: secret,
+        host: "a-#{System.unique_integer([:positive])}.example.com"
+      })
+
+    scope_b = TenancyFixtures.scope_fixture()
+    server_b = TenancyFixtures.server_fixture(scope_b)
+
+    app_b =
+      TenancyFixtures.app_fixture(scope_b, server_b, %{
+        name: "Tenant B",
+        slug: "tenant-b-#{System.unique_integer([:positive])}",
+        github_repo: repo,
+        branch: "main",
+        webhook_secret: secret,
+        host: "b-#{System.unique_integer([:positive])}.example.com"
+      })
+
+    assert app_a.webhook_secret == app_b.webhook_secret
+
+    payload =
+      Jason.encode!(%{
+        "ref" => "refs/heads/main",
+        "after" => "abc123def456",
+        "repository" => %{"full_name" => repo}
+      })
+
+    conn =
+      build_conn()
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("x-hub-signature-256", sign(payload, secret))
+      |> post(~p"/webhooks/github", payload)
+
+    assert response(conn, 202) == "queued"
+
+    app_ids =
+      all_enqueued(worker: CleatDeploy.Workers.DeployWorker)
+      |> Enum.map(&Deployments.get_deployment!(&1.args["deployment_id"]))
+      |> Enum.map(& &1.app_id)
+      |> Enum.sort()
+
+    assert app_ids == Enum.sort([app_a.id, app_b.id])
+  end
+
   defp sign(body, secret) do
     "sha256=" <> (:crypto.mac(:hmac, :sha256, secret, body) |> Base.encode16(case: :lower))
   end
