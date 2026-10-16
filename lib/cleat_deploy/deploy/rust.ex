@@ -108,7 +108,6 @@ defmodule CleatDeploy.Deploy.Rust do
     done
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
     #{ServerProvision.prune_releases_script(config.release_path)}
-    sudo chmod -R a+rX #{config.release_path}
 
     log "Start command: $START_CMD"
     printf '%s' "$START_CMD" | sudo tee "$RELEASE_DIR/start.cmd" > /dev/null
@@ -121,6 +120,7 @@ defmodule CleatDeploy.Deploy.Rust do
     #{CleatDeploy.Deploy.Ssh.env_sync_script(app, config)}
     #{migrate_step(manifest, config)}
     #{ServerProvision.release_command_script(app, config, manifest)}
+    #{ServerProvision.service_ownership_script(app, config, manifest)}
 
     #{ServerProvision.restart_units_script(config, manifest)}
 
@@ -243,7 +243,7 @@ defmodule CleatDeploy.Deploy.Rust do
       """
       if [[ -f #{config.release_path}/current/config/production.yaml ]] || grep -Eq 'loco-rs' Cargo.toml 2>/dev/null; then
         log "Running loco db migrate"
-        sudo bash -c 'set -a; source #{config.env_file}; set +a; cd #{config.release_path}/current; export LOCO_ENV=production; ./bin/server db migrate'
+        #{CleatDeploy.Deploy.Ssh.Env.exec_with_env(config.env_file, ["./bin/server", "db", "migrate"], chdir: "#{config.release_path}/current", extra_env: %{"LOCO_ENV" => "production"})}
       else
         log "No Loco production config; skipping db migrate"
       fi

@@ -13,9 +13,9 @@ defmodule CleatDeploy.Deploy.Gleam do
   proxy. rebar3 is what builds the Erlang (rebar3) dependencies Gleam
   projects commonly pull in.
 
-  A shipment does **not** embed ERTS (unlike a `mix release`), and the unit
-  runs as root, so `erl`/`erlc`/`escript`/`epmd` are symlinked into
-  `/usr/local/bin` at build time. Build and run use the same OTP release
+  A shipment does **not** embed ERTS (unlike a `mix release`), so
+  `erl`/`erlc`/`escript`/`epmd` are symlinked into `/usr/local/bin` at
+  build time for the unprivileged unit. Build and run use the same OTP release
   (`#{@erlang_version}`): BEAM bytecode does not load on an older Erlang.
 
   The build is `gleam deps download` + `gleam export erlang-shipment`, which
@@ -103,7 +103,6 @@ defmodule CleatDeploy.Deploy.Gleam do
     sudo chmod +x "$RELEASE_DIR/entrypoint.sh"
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
     #{ServerProvision.prune_releases_script(config.release_path)}
-    sudo chmod -R a+rX #{config.release_path}
 
     START_CMD='./entrypoint.sh run'
     log "Start command: $START_CMD"
@@ -116,6 +115,7 @@ defmodule CleatDeploy.Deploy.Gleam do
     #{CleatDeploy.Deploy.Addons.provision_script(app, config, manifest)}
     #{CleatDeploy.Deploy.Ssh.env_sync_script(app, config)}
     #{ServerProvision.release_command_script(app, config, manifest)}
+    #{ServerProvision.service_ownership_script(app, config, manifest)}
 
     #{ServerProvision.restart_units_script(config, manifest)}
 
@@ -154,7 +154,7 @@ defmodule CleatDeploy.Deploy.Gleam do
     log "Gleam $(gleam --version)"
 
     # The shipment runs the OTP already installed here and does not carry its
-    # own ERTS, and the unit runs as root: expose erl outside the build user.
+    # own ERTS: expose erl outside the build user for the app account.
     ERL_BIN_DIR="$(mise which erl 2>/dev/null | xargs -r dirname || true)"
     if [[ ! -x "${ERL_BIN_DIR:-}/erl" ]]; then
       ERL_BIN_DIR="$HOME/.local/share/mise/installs/erlang/#{erlang}/bin"

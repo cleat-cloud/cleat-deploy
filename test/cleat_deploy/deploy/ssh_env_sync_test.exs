@@ -44,9 +44,9 @@ defmodule CleatDeploy.Deploy.SshEnvSyncTest do
 
     assert Ssh.env_file_content(app) ==
              """
-             GEMINI_API_KEY=gemini-key
-             PHX_HOST=trip.gestaobem.com
-             SECRET_KEY_BASE=super-secret
+             GEMINI_API_KEY="gemini-key"
+             PHX_HOST="trip.gestaobem.com"
+             SECRET_KEY_BASE="super-secret"
              """
   end
 
@@ -75,15 +75,15 @@ defmodule CleatDeploy.Deploy.SshEnvSyncTest do
 
     assert Ssh.env_file_content(app, "main") ==
              """
-             PHX_HOST=trip.gestaobem.com
-             SHARED=all
+             PHX_HOST="trip.gestaobem.com"
+             SHARED="all"
              """
 
     assert Ssh.env_file_content(app, "staging") ==
              """
-             PHX_HOST=trip.gestaobem.com
-             SHARED=all
-             STAGING_ONLY=yes
+             PHX_HOST="trip.gestaobem.com"
+             SHARED="all"
+             STAGING_ONLY="yes"
              """
   end
 
@@ -93,10 +93,10 @@ defmodule CleatDeploy.Deploy.SshEnvSyncTest do
     app = Apps.get_app!(app.id)
 
     staging = Ssh.env_file_content(app, "staging")
-    assert staging =~ "BASE_URL=https://staging.example.com"
+    assert staging =~ ~s|BASE_URL="https://staging.example.com"|
     refute staging =~ "prod.example.com"
 
-    assert Ssh.env_file_content(app, "main") =~ "BASE_URL=https://prod.example.com"
+    assert Ssh.env_file_content(app, "main") =~ ~s|BASE_URL="https://prod.example.com"|
   end
 
   test "env_sync_script writes the env file of the branch being deployed", %{app: app} do
@@ -110,5 +110,46 @@ defmodule CleatDeploy.Deploy.SshEnvSyncTest do
     assert script =~ "/etc/trip_planner_ia/env"
     assert script =~ Base.encode64(Ssh.env_file_content(app, "staging"))
     refute script =~ "STAGING_ONLY=yes"
+  end
+
+  test "env_file_content quotes spaces, quotes, dollars and backticks", %{app: app} do
+    {:ok, _} = Apps.put_env_var(app, "MESSAGE", ~s|hello "world" $HOME `id` $(whoami)|)
+    app = Apps.get_app!(app.id)
+    content = Ssh.env_file_content(app)
+
+    assert content =~ ~s|MESSAGE="hello \\"world\\" $HOME `id` $(whoami)"|
+  end
+
+  test "env loader does not execute command substitution in values" do
+    marker = Path.join(System.tmp_dir!(), "cleat-env-pwn-#{System.unique_integer([:positive])}")
+    env_path = Path.join(System.tmp_dir!(), "cleat-env-#{System.unique_integer([:positive])}")
+
+    on_exit(fn ->
+      File.rm(marker)
+      File.rm(env_path)
+    end)
+
+    File.write!(
+      env_path,
+      Ssh.Env.format_env_file(%{
+        "EVIL" => "$(touch #{marker})",
+        "QUOTED" => ~s|a "b"|,
+        "SPACES" => "hello world"
+      })
+    )
+
+    {out, 0} =
+      System.cmd("python3", [
+        Ssh.Env.exec_script_path(),
+        env_path,
+        "python3",
+        "-c",
+        "import os; print(os.environ['EVIL']); print(os.environ['SPACES']); print(os.environ['QUOTED'])"
+      ])
+
+    refute File.exists?(marker)
+    assert out =~ "$(touch #{marker})"
+    assert out =~ "hello world"
+    assert out =~ ~s|a "b"|
   end
 end

@@ -99,8 +99,9 @@ defmodule CleatDeployWeb.GithubWebhookController do
     end
   end
 
-  # The push hook lives on the repository, not on the app, so any instance of
-  # that repo that validates the signature authenticates the payload.
+  # The push hook lives on the repository. Only instances whose own secret
+  # validates the signature are authorized — a hit for tenant A must not deploy
+  # tenant B's copy of the same repo.
   defp find_repo_apps(repo, raw_body, signature) do
     apps = Apps.list_apps_by_repo(repo)
 
@@ -112,12 +113,12 @@ defmodule CleatDeployWeb.GithubWebhookController do
         :error
 
       true ->
-        verified? =
-          Enum.any?(apps, fn app ->
+        verified =
+          Enum.filter(apps, fn app ->
             Github.verify_signature(raw_body, signature, app.webhook_secret) == :ok
           end)
 
-        if verified?, do: {:ok, apps}, else: :error
+        if verified == [], do: :error, else: {:ok, verified}
     end
   end
 
