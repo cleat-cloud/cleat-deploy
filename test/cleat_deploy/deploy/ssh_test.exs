@@ -65,5 +65,67 @@ defmodule CleatDeploy.Deploy.SshTest do
 
       assert output =~ "fail"
     end
+
+    test "creates stdin and wrapper as 0600/0700 inside a 0700 directory" do
+      marker = "cleat-stdin-#{System.unique_integer([:positive])}"
+
+      inspect = """
+      import glob, os, stat, sys
+      tmp, marker = sys.argv[1], sys.argv[2]
+      for d in glob.glob(os.path.join(tmp, "cleat_ssh_tmp_*")):
+          stdin = os.path.join(d, "stdin")
+          wrapper = os.path.join(d, "exec_from_file")
+          if not (os.path.isfile(stdin) and os.path.isfile(wrapper)):
+              continue
+          with open(stdin, "rb") as fh:
+              data = fh.read()
+          if marker.encode() not in data:
+              continue
+          print("dir", format(stat.S_IMODE(os.stat(d).st_mode), "o"))
+          print("stdin", format(stat.S_IMODE(os.stat(stdin).st_mode), "o"))
+          print("wrapper", format(stat.S_IMODE(os.stat(wrapper).st_mode), "o"))
+          sys.exit(0)
+      sys.exit(3)
+      """
+
+      assert {:ok, output} =
+               Session.run_with_stdin(
+                 "python3",
+                 ["-c", inspect, System.tmp_dir!(), marker],
+                 marker <> "\n"
+               )
+
+      assert output =~ "dir 700\n"
+      assert output =~ "stdin 600\n"
+      assert output =~ "wrapper 700\n"
+    end
+
+    test "removes the private tmp dir after success and after failure" do
+      marker = "cleat-stdin-#{System.unique_integer([:positive])}"
+
+      assert {:ok, _} = Session.run_with_stdin("cat", [], marker <> "\n")
+      refute leftover_stdin?(marker)
+
+      assert {:error, _} = Session.run_with_stdin("bash", ["-c", "exit 9"], marker <> "\n")
+      refute leftover_stdin?(marker)
+    end
+  end
+
+  defp leftover_stdin?(marker) do
+    ["cleat_ssh_tmp_*", "cleat_stdin_*", "cleat_exec_from_file_*"]
+    |> Enum.flat_map(&Path.wildcard(Path.join(System.tmp_dir!(), &1)))
+    |> Enum.any?(fn path ->
+      cond do
+        File.dir?(path) ->
+          stdin = Path.join(path, "stdin")
+          File.regular?(stdin) and File.read!(stdin) =~ marker
+
+        File.regular?(path) ->
+          File.read!(path) =~ marker
+
+        true ->
+          false
+      end
+    end)
   end
 end

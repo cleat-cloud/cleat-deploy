@@ -125,22 +125,46 @@ defmodule CleatDeploy.Deploy.Ssh.Session do
 
   OTP 28 cannot close a Port's stdin (`port_command(eof)` is iodata-only),
   so a tiny static wrapper does `exec "$@" < file`. No shell string is
-  built from the arguments.
+  built from the arguments. Stdin and the wrapper are created 0600/0700
+  inside a 0700 directory so umask 0022 never leaves them world-readable.
   """
   def run_with_stdin(command, args, stdin)
       when is_binary(command) and is_list(args) and is_binary(stdin) do
     exec = System.find_executable(command) || command
-    stdin_path = temp_path("cleat_stdin")
-    wrapper_path = temp_path("cleat_exec_from_file")
+    dir = temp_path("cleat_ssh_tmp")
 
     try do
-      :ok = File.write(stdin_path, stdin)
-      :ok = File.write(wrapper_path, @exec_from_file)
-      :ok = File.chmod(wrapper_path, 0o755)
+      :ok = mkdir_private(dir)
+      stdin_path = Path.join(dir, "stdin")
+      wrapper_path = Path.join(dir, "exec_from_file")
+      :ok = write_private(stdin_path, stdin, 0o600)
+      :ok = write_private(wrapper_path, @exec_from_file, 0o700)
       cmd(wrapper_path, [stdin_path, exec | args])
     after
-      File.rm(stdin_path)
-      File.rm(wrapper_path)
+      File.rm_rf(dir)
+    end
+  end
+
+  defp mkdir_private(dir) do
+    case System.cmd("mkdir", ["-m", "700", dir], stderr_to_stdout: true) do
+      {_, 0} -> :ok
+      {output, _} -> {:error, output}
+    end
+  end
+
+  defp write_private(path, content, mode) do
+    case :file.open(path, [:write, :exclusive, :raw, {:mode, mode}]) do
+      {:ok, io} ->
+        try do
+          :ok = :file.write(io, content)
+        after
+          :file.close(io)
+        end
+
+        File.chmod(path, mode)
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
