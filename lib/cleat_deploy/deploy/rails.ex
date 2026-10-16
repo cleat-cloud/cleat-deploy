@@ -186,10 +186,7 @@ defmodule CleatDeploy.Deploy.Rails do
 
     run_rails() {
       if [[ -n "$TMP_ENV" && -f "$TMP_ENV" ]]; then
-        set -a
-        # shellcheck disable=SC1090
-        source "$TMP_ENV"
-        set +a
+        #{Ssh.Env.print_exports_eval("\"$TMP_ENV\"")}
       fi
       export RAILS_ENV=production
       export SECRET_KEY_BASE="${SECRET_KEY_BASE:-cleat_buildtime_secret_key_base_32chars_min}"

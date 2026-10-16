@@ -110,9 +110,12 @@ defmodule CleatDeploy.Deploy.RailsTest do
     refute script =~ "bundle exec rails db:prepare"
     assert script =~ "Skipping db:prepare (release_command is set"
     assert script =~ "Running release command (1/1)"
-    assert script =~ "timeout 600 bash /tmp/cleat_release_cmd.sh"
-    assert script =~ "export RAILS_ENV=production"
-    assert script =~ "source /etc/loja/env"
+    assert script =~ "timeout"
+    assert script =~ "/tmp/cleat_release_cmd.sh"
+    assert script =~ "RAILS_ENV=production"
+    refute script =~ "source /etc/loja/env"
+    refute script =~ "source \"$TMP_ENV\""
+    assert script =~ "python3 -"
 
     assert occurrence(script, "Running release command") <
              occurrence(script, "Restarting rails-loja")

@@ -64,7 +64,7 @@ defmodule CleatDeploy.Deploy.RustTest do
     assert script =~ "/opt/hello-loco/releases/build"
     assert script =~ "sudo systemctl restart rust-hello-loco"
     assert script =~ "./bin/server start"
-    assert script =~ "./bin/server db migrate"
+    assert script =~ "'./bin/server' 'db' 'migrate'"
     refute script =~ "mix release"
 
     assert occurrence(script, "Fixing data ownership for cleat-hello-loco") <

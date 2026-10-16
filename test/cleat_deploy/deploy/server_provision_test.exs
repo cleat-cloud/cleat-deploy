@@ -102,6 +102,9 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "bin/migrate"
     assert script =~ "release eval"
     assert script =~ "Ecto.Migrator.with_repo"
+    refute script =~ "source #{config.env_file}"
+    refute script =~ "set -a"
+    assert script =~ "python3 -"
   end
 
   test "migrate_script skips release eval migrations when app has no ecto_repos" do
@@ -805,10 +808,14 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "Running release command (2/2)"
     assert script =~ Base.encode64("bundle exec rails db:chatwoot_prepare")
     assert script =~ Base.encode64("bundle exec rails runner 'puts 1'")
-    assert script =~ "source /etc/phoenix_tts/env"
-    assert script =~ "cd /opt/phoenix_tts/current"
-    assert script =~ "timeout 900 bash /tmp/cleat_release_cmd.sh"
-    assert script =~ "export RAILS_ENV=production"
+    refute script =~ "source /etc/phoenix_tts/env"
+    refute script =~ "set -a"
+    assert script =~ "python3 -"
+    assert script =~ "--chdir"
+    assert script =~ "/opt/phoenix_tts/current"
+    assert script =~ "timeout"
+    assert script =~ "/tmp/cleat_release_cmd.sh"
+    assert script =~ "RAILS_ENV=production"
     # The command file is root-only on purpose, so even echoing it back for the
     # log needs sudo — a plain `cat` logs "Permission denied" instead of the
     # command.
@@ -829,16 +836,16 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
         release_command: ["npm run db:migrate"]
       })
 
-    assert node_script =~ "export NODE_ENV=production"
-    assert node_script =~ "export CLEAT_DATA_DIR=/opt/phoenix_tts/data"
+    assert node_script =~ "NODE_ENV=production"
+    assert node_script =~ "CLEAT_DATA_DIR=/opt/phoenix_tts/data"
 
     phoenix_script =
       ServerProvision.release_command_script(app, config, %AppManifest{
         release_command: ["bin/migrate"]
       })
 
-    refute phoenix_script =~ "export NODE_ENV"
-    refute phoenix_script =~ "export RAILS_ENV"
-    assert phoenix_script =~ "export CLEAT_DATA_DIR=/var/lib/phoenix_tts"
+    refute phoenix_script =~ "NODE_ENV=production"
+    refute phoenix_script =~ "RAILS_ENV=production"
+    assert phoenix_script =~ "CLEAT_DATA_DIR=/var/lib/phoenix_tts"
   end
 end

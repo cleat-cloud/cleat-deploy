@@ -5,6 +5,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deploy.AnalyticsProvision
   alias CleatDeploy.Deploy.AppManifest
+  alias CleatDeploy.Deploy.Ssh.Env
   alias CleatDeploy.Deploy.Wake
   alias CleatDeploy.Servers.AccessCounts
 
@@ -821,10 +822,10 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     if [[ -f #{config.env_file} ]]; then
       if [[ -x #{config.release_path}/current/bin/migrate ]]; then
         log "Running migrations (bin/migrate)"
-        sudo bash -c 'set -a; source #{config.env_file}; set +a; #{config.release_path}/current/bin/migrate'
+        #{Env.exec_with_env(config.env_file, ["#{config.release_path}/current/bin/migrate"])}
       elif [[ -x #{release_bin} ]]; then
         log "Running migrations (release eval)"
-        sudo bash -c 'set -a; source #{config.env_file}; set +a; #{release_bin} eval "#{migration_eval(otp_app)}"'
+        #{Env.exec_with_env(config.env_file, [release_bin, "eval", migration_eval(otp_app)])}
       else
         log "Skipping migrations (no migrate command)"
       fi
@@ -838,8 +839,9 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   Runs the app's `release_command`s from `.cleat_deploy/deploy.json` against the
   release already published in `current/`, before the service is restarted.
 
-  Sourced with the app env file and `CLEAT_DATA_DIR` (same environment the unit
-  will get), streamed into the deploy log, and with a timeout per command. A
+  Loaded from the app env file (literal values, no shell `source`) and
+  `CLEAT_DATA_DIR` (same environment the unit will get), streamed into the
+  deploy log, and with a timeout per command. A
   non-zero exit aborts the deploy because the caller's script runs under
   `set -e` — the restart never happens and the previous process keeps serving.
 
@@ -852,14 +854,17 @@ defmodule CleatDeploy.Deploy.ServerProvision do
       ""
     else
       timeout = AppManifest.release_timeout_s(manifest)
-      runtime_env = runtime_env_exports(manifest)
-      data_dir = data_dir_for(manifest, config)
+
+      extra_env =
+        runtime_env_map(manifest) |> Map.put("CLEAT_DATA_DIR", data_dir_for(manifest, config))
+
+      chdir = "#{config.release_path}/current"
       total = length(commands)
 
       commands
       |> Enum.with_index(1)
       |> Enum.map_join("\n", fn {command, index} ->
-        release_command_step(command, index, total, config, runtime_env, timeout, data_dir)
+        release_command_step(command, index, total, config, extra_env, timeout, chdir)
       end)
       |> String.trim()
     end
@@ -867,20 +872,20 @@ defmodule CleatDeploy.Deploy.ServerProvision do
 
   # The command is shipped base64-encoded (no quoting games) and echoed back
   # through the file, so the log shows exactly what ran.
-  defp release_command_step(command, index, total, config, runtime_env, timeout, data_dir) do
+  defp release_command_step(command, index, total, config, extra_env, timeout, chdir) do
     """
     echo '#{Base.encode64(command)}' | base64 -d | sudo tee /tmp/cleat_release_cmd.sh > /dev/null
     sudo chmod 700 /tmp/cleat_release_cmd.sh
     log "Running release command (#{index}/#{total}): $(sudo cat /tmp/cleat_release_cmd.sh)"
-    sudo bash -c 'set -a; source #{config.env_file}; set +a; cd #{config.release_path}/current; export CLEAT_DATA_DIR=#{data_dir}; #{runtime_env}timeout #{timeout} bash /tmp/cleat_release_cmd.sh'
+    #{Env.exec_with_env(config.env_file, ["timeout", to_string(timeout), "bash", "/tmp/cleat_release_cmd.sh"], chdir: chdir, extra_env: extra_env)}
     sudo rm -f /tmp/cleat_release_cmd.sh
     """
   end
 
-  defp runtime_env_exports(%AppManifest{runtime: "rails"}), do: "export RAILS_ENV=production; "
-  defp runtime_env_exports(%AppManifest{runtime: "node"}), do: "export NODE_ENV=production; "
-  defp runtime_env_exports(%AppManifest{runtime: "rust"}), do: "export LOCO_ENV=production; "
-  defp runtime_env_exports(%AppManifest{}), do: ""
+  defp runtime_env_map(%AppManifest{runtime: "rails"}), do: %{"RAILS_ENV" => "production"}
+  defp runtime_env_map(%AppManifest{runtime: "node"}), do: %{"NODE_ENV" => "production"}
+  defp runtime_env_map(%AppManifest{runtime: "rust"}), do: %{"LOCO_ENV" => "production"}
+  defp runtime_env_map(%AppManifest{}), do: %{}
 
   @doc """
   Deletes legacy/orphan release directories under `release_path/releases`.

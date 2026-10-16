@@ -243,7 +243,7 @@ defmodule CleatDeploy.Deploy.Rust do
       """
       if [[ -f #{config.release_path}/current/config/production.yaml ]] || grep -Eq 'loco-rs' Cargo.toml 2>/dev/null; then
         log "Running loco db migrate"
-        sudo bash -c 'set -a; source #{config.env_file}; set +a; cd #{config.release_path}/current; export LOCO_ENV=production; ./bin/server db migrate'
+        #{CleatDeploy.Deploy.Ssh.Env.exec_with_env(config.env_file, ["./bin/server", "db", "migrate"], chdir: "#{config.release_path}/current", extra_env: %{"LOCO_ENV" => "production"})}
       else
         log "No Loco production config; skipping db migrate"
       fi
