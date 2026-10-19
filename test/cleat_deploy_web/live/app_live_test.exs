@@ -519,8 +519,50 @@ defmodule CleatDeployWeb.AppLiveTest do
     {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
 
     assert has_element?(view, "#app-host-hero", "atelie.gestaobem.com")
-    assert has_element?(view, ~s(#app-host-hero[target="_blank"][rel="noopener noreferrer"]))
-    assert has_element?(view, ~s(#app-host-hero[href="https://atelie.gestaobem.com"]))
+
+    assert has_element?(
+             view,
+             ~s(#app-host-hero a[href="https://atelie.gestaobem.com"][target="_blank"][rel="noopener noreferrer"])
+           )
+  end
+
+  test "splits comma-separated hosts into separate hero links", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Purple Stock",
+        slug: "purple-stock",
+        github_repo: "Purple-Stock/new_lp",
+        host: "www.purplestock.com.br, purplestock.com.br, blog.purplestock.com.br"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps/#{app.id}/deployments")
+
+    assert has_element?(
+             view,
+             ~s(#app-host-hero a[href="https://www.purplestock.com.br"]),
+             "www.purplestock.com.br"
+           )
+
+    assert has_element?(
+             view,
+             ~s(#app-host-hero a[href="https://purplestock.com.br"]),
+             "purplestock.com.br"
+           )
+
+    assert has_element?(
+             view,
+             ~s(#app-host-hero a[href="https://blog.purplestock.com.br"]),
+             "blog.purplestock.com.br"
+           )
+
+    refute has_element?(
+             view,
+             ~s(a[href="https://www.purplestock.com.br, purplestock.com.br, blog.purplestock.com.br"])
+           )
   end
 
   test "switches app detail tabs", %{conn: conn, scope: scope, server: server} do

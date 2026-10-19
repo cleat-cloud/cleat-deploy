@@ -21,46 +21,43 @@ defmodule CleatDeployWeb.AppLive.Layout.Hero do
         idle_confirm_hint: HeroModals.idle_confirm_hint(assigns),
         idle_window: HeroModals.idle_window(assigns),
         unit_label: CleatDeploy.Apps.App.unit_name(assigns.app),
-        wake_hint: CleatDeploy.Apps.RuntimeControl.wake_hint(assigns.app)
+        wake_hint: CleatDeploy.Apps.RuntimeControl.wake_hint(assigns.app),
+        hosts: CleatDeploy.Apps.App.hosts(assigns.app)
       )
 
     ~H"""
     <div id="app-hero" class="paas-card space-y-3 p-4">
-      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div class="flex items-center gap-2">
-          <span
-            id="app-runtime-badge"
-            class={[
-              "inline-flex h-7 w-12 items-center justify-center rounded border font-mono text-[10px] font-bold",
-              @runtime_badge_class
-            ]}
-          >
-            {@runtime_badge}
-          </span>
-          <div>
-            <h2 class="font-display text-base font-semibold text-hd-text">{@app.name}</h2>
-            <p class="flex items-center gap-1 font-mono text-[11px] text-hd-muted">
-              <.icon name="hero-code-bracket" class="size-3" />
-              <Header.repo_link id="app-repo-hero" repo={@app.github_repo} class="hover:text-hd-text" />
-              <span class="text-hd-border">|</span> branch: {@app.branch}
-            </p>
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div class="min-w-0 space-y-2">
+          <div class="flex items-center gap-2">
+            <span
+              id="app-runtime-badge"
+              class={[
+                "inline-flex h-7 w-12 shrink-0 items-center justify-center rounded border font-mono text-[10px] font-bold",
+                @runtime_badge_class
+              ]}
+            >
+              {@runtime_badge}
+            </span>
+            <div class="min-w-0">
+              <h2 class="font-display text-base font-semibold text-hd-text">{@app.name}</h2>
+              <p class="flex flex-wrap items-center gap-1 font-mono text-[11px] text-hd-muted">
+                <.icon name="hero-code-bracket" class="size-3" />
+                <Header.repo_link
+                  id="app-repo-hero"
+                  repo={@app.github_repo}
+                  class="hover:text-hd-text"
+                />
+                <span class="text-hd-border">|</span>
+                branch: {@app.branch}
+              </p>
+            </div>
           </div>
+
+          <Header.host_links id="app-host-hero" hosts={@hosts} class="sm:pl-14" />
         </div>
 
-        <.link
-          :if={@app.host not in [nil, ""]}
-          id="app-host-hero"
-          href={"https://#{@app.host}"}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex items-center gap-1.5 font-mono text-sm text-hd-orange transition-colors hover:text-hd-orange-dark hover:underline md:mx-auto"
-        >
-          <.icon name="hero-globe-alt" class="size-3.5" />
-          {@app.host}
-          <.icon name="hero-arrow-top-right-on-square" class="size-3" />
-        </.link>
-
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 lg:justify-end lg:shrink-0">
           <button
             :if={@can_hibernate?}
             id="hibernate-button"

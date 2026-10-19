@@ -70,6 +70,43 @@ defmodule CleatDeployWeb.AppLive.Layout.Header do
   def runtime_badge_class(_runtime), do: "border-hd-border bg-hd-aside text-hd-orange"
 
   attr :id, :string, required: true
+  attr :hosts, :list, required: true
+  attr :class, :string, default: nil
+
+  def host_links(assigns) do
+    ~H"""
+    <div
+      :if={@hosts != []}
+      id={@id}
+      class={[
+        "flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1",
+        @class
+      ]}
+    >
+      <.icon name="hero-globe-alt" class="size-3.5 shrink-0 text-hd-orange" />
+      <%= for {host, index} <- Enum.with_index(@hosts) do %>
+        <span :if={index > 0} class="select-none text-hd-border" aria-hidden="true">·</span>
+        <.link
+          id={"#{@id}-#{host_dom_id(host)}"}
+          href={"https://#{host}"}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center font-mono text-sm text-hd-orange transition-colors hover:text-hd-orange-dark hover:underline"
+        >
+          {host}
+        </.link>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp host_dom_id(host) do
+    host
+    |> String.replace(~r/[^a-z0-9]+/i, "-")
+    |> String.trim("-")
+  end
+
+  attr :id, :string, required: true
   attr :repo, :string, required: true
   attr :class, :string, required: true
 
