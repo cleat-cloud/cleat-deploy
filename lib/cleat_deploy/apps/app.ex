@@ -236,6 +236,21 @@ defmodule CleatDeploy.Apps.App do
   def custom_domain?(_), do: false
 
   @doc """
+  Hostnames this app answers on. `host` stores comma-separated aliases
+  (for example `www.example.com, example.com`).
+  """
+  def hosts(%__MODULE__{host: host}), do: hosts(host)
+
+  def hosts(host) when is_binary(host) do
+    host
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  def hosts(_), do: []
+
+  @doc """
   systemd unit this app runs under, derived from the slug when the column is
   blank.
   """
