@@ -264,7 +264,9 @@ defmodule CleatDeploy.Deployments do
   - `{:error, :invalid_status}` when the deployment is not queued
   """
   def claim_running(%Deployment{id: id}) do
-    case Repo.transaction(fn -> do_claim_running(id) end) do
+    case CleatDeploy.Repo.BusyRetry.call(fn ->
+           Repo.transaction(fn -> do_claim_running(id) end)
+         end) do
       {:ok, deployment} ->
         broadcast_change({:ok, deployment})
 
