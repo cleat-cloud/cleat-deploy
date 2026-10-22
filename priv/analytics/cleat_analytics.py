@@ -34,7 +34,9 @@ DB_MAX_BYTES = 200 * 1024 * 1024
 DB_TARGET_BYTES = 150 * 1024 * 1024
 ROLLUP_INTERVAL = 3600
 HTML_MAX = 1024 * 1024
-PROXY_TIMEOUT = 2.0
+# Origin PDFs (hora-solar Enel anexo ~2.5s, unifilar after logo 2.2–7.2s)
+# used to empty-502 here; Caddy lb_policy first does not retry that 502.
+PROXY_TIMEOUT = 15.0
 HOP_BY_HOP = frozenset(
     {
         "connection",
