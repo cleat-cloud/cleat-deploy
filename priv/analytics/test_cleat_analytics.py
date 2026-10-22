@@ -525,7 +525,12 @@ class UpstreamHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self):
-        if self.path.startswith("/api"):
+        if self.path.startswith("/pdf"):
+            # Enel anexo PDF takes ~2.5s on hora-solar; 2.0s sidecar → empty 502.
+            time.sleep(2.5)
+            body = b"%PDF-1.4 slow-anexo\n"
+            ctype = "application/pdf"
+        elif self.path.startswith("/api"):
             body = b'{"ok":true}'
             ctype = "application/json"
         elif self.path.startswith("/big"):
@@ -724,6 +729,31 @@ class ProxyTest(unittest.TestCase):
             self._post_mapped_host([("Transfer-Encoding", "chunked")]),
             411,
         )
+
+    def test_proxy_timeout_covers_slow_document_generation(self):
+        # Enel anexo PDF ~2.5s; unifilar after logo was 2.2–7.2s.
+        # Sidecar timeout of 2.0s returns empty 502; Caddy lb_policy first
+        # does not retry a sidecar 502.
+        self.assertGreaterEqual(ca.PROXY_TIMEOUT, 15.0)
+
+    def test_slow_pdf_still_proxies_200(self):
+        hdrs = {"Host": "nfe.gestaobem.com"}
+        req = urllib.request.Request(self.base + "/pdf/anexo", headers=hdrs)
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                status = resp.status
+                ctype = resp.headers.get_content_type()
+                body = resp.read()
+        except urllib.error.HTTPError as err:
+            try:
+                status = err.code
+                ctype = err.headers.get_content_type()
+                body = err.read()
+            finally:
+                err.close()
+        self.assertEqual(status, 200)
+        self.assertEqual(ctype, "application/pdf")
+        self.assertTrue(body.startswith(b"%PDF"), body[:32])
 
 
 if __name__ == "__main__":
