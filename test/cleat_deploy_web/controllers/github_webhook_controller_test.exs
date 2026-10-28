@@ -1,6 +1,7 @@
 defmodule CleatDeployWeb.GithubWebhookControllerTest do
   use CleatDeployWeb.ConnCase, async: false
 
+  import Ecto.Query
   import ExUnit.CaptureLog
 
   alias CleatDeploy.{Deployments, TenancyFixtures}
@@ -291,6 +292,33 @@ defmodule CleatDeployWeb.GithubWebhookControllerTest do
       |> Enum.sort()
 
     assert app_ids == Enum.sort([app_a.id, app_b.id])
+  end
+
+  test "duplicate push of the same sha queues one deploy", %{
+    app: app,
+    payload: payload,
+    signature: signature
+  } do
+    post_push = fn ->
+      build_conn()
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("x-hub-signature-256", signature)
+      |> post(~p"/webhooks/github", payload)
+    end
+
+    assert response(post_push.(), 202) == "queued"
+    assert response(post_push.(), 202) == "queued"
+
+    jobs = all_enqueued(worker: CleatDeploy.Workers.DeployWorker)
+    assert length(jobs) == 1
+
+    deployments =
+      CleatDeploy.Repo.all(
+        from d in CleatDeploy.Deployments.Deployment, where: d.app_id == ^app.id
+      )
+
+    assert length(deployments) == 1
+    assert hd(deployments).git_sha == "abc123def456789012345678901234567890abcd"
   end
 
   defp sign(body, secret) do

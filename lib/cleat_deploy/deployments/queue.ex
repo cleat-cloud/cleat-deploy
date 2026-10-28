@@ -10,6 +10,9 @@ defmodule CleatDeploy.Deployments.Queue do
   alias CleatDeploy.Deployments.{Deployment, Notifications, Policy}
   alias CleatDeploy.Repo
 
+  @placeholder_shas ~w(manual drop)
+  @deploy_worker "CleatDeploy.Workers.DeployWorker"
+
   @doc false
   def create_deployment(%App{} = app, attrs) do
     attrs =
@@ -32,8 +35,8 @@ defmodule CleatDeploy.Deployments.Queue do
   def enqueue(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
 
   def enqueue(%App{} = app, attrs) do
-    with {:ok, deployment} <- create_deployment(app, attrs),
-         {:ok, job} <- insert_deploy_job(app, deployment) do
+    with {:ok, deployment} <- insert_or_reuse_deployment(app, attrs),
+         {:ok, job} <- attach_job(app, deployment) do
       {:ok, job}
     end
   end
@@ -50,11 +53,94 @@ defmodule CleatDeploy.Deployments.Queue do
   def enqueue_deployment(%Scope{}, %App{}, _attrs), do: {:error, :unauthorized}
 
   def enqueue_deployment(%App{} = app, attrs) do
-    with {:ok, deployment} <- create_deployment(app, attrs),
-         {:ok, job} <- insert_deploy_job(app, deployment) do
+    with {:ok, deployment} <- insert_or_reuse_deployment(app, attrs),
+         {:ok, job} <- attach_job(app, deployment) do
       {:ok, deployment, job}
     end
   end
+
+  defp insert_or_reuse_deployment(%App{} = app, attrs) do
+    attrs = Map.new(attrs)
+    sha = attrs[:git_sha] || attrs["git_sha"]
+    triggered_by = attrs[:triggered_by] || attrs["triggered_by"] || "manual"
+
+    cond do
+      not concrete_sha?(sha) ->
+        create_deployment(app, attrs)
+
+      existing = reusable_deployment(app.id, sha, triggered_by) ->
+        {:ok, existing}
+
+      true ->
+        case create_deployment(app, attrs) do
+          {:ok, _} = ok -> ok
+          {:error, changeset} -> reuse_on_conflict(app.id, sha, changeset)
+        end
+    end
+  end
+
+  defp attach_job(app, %Deployment{status: status} = deployment)
+       when status in [:queued, :running] do
+    case job_for_deployment(deployment) do
+      %Oban.Job{} = job -> {:ok, job}
+      nil -> insert_deploy_job(app, deployment)
+    end
+  end
+
+  defp attach_job(_app, %Deployment{} = deployment) do
+    case job_for_deployment(deployment) do
+      %Oban.Job{} = job -> {:ok, job}
+      nil -> {:ok, :already_deployed}
+    end
+  end
+
+  defp reusable_deployment(app_id, sha, triggered_by) do
+    active_deployment(app_id, sha) ||
+      webhook_success_deployment(app_id, sha, triggered_by)
+  end
+
+  defp webhook_success_deployment(app_id, sha, triggered_by) do
+    if webhook?(triggered_by), do: successful_deployment(app_id, sha)
+  end
+
+  defp active_deployment(app_id, sha) do
+    Repo.one(
+      from d in Deployment,
+        where: d.app_id == ^app_id and d.git_sha == ^sha and d.status in [:queued, :running],
+        order_by: [desc: d.id],
+        limit: 1
+    )
+  end
+
+  defp successful_deployment(app_id, sha) do
+    Repo.one(
+      from d in Deployment,
+        where: d.app_id == ^app_id and d.git_sha == ^sha and d.status == :success,
+        order_by: [desc: d.id],
+        limit: 1
+    )
+  end
+
+  defp reuse_on_conflict(app_id, sha, changeset) do
+    case {changeset.errors[:git_sha], active_deployment(app_id, sha)} do
+      {error, %Deployment{} = existing} when error != nil -> {:ok, existing}
+      _ -> {:error, changeset}
+    end
+  end
+
+  defp job_for_deployment(%Deployment{id: id}) do
+    Repo.all(from j in Oban.Job, where: j.worker == ^@deploy_worker)
+    |> Enum.find(&(Map.get(&1.args, "deployment_id") == id))
+  end
+
+  defp concrete_sha?(sha) when is_binary(sha) do
+    sha != "" and sha not in @placeholder_shas
+  end
+
+  defp concrete_sha?(_), do: false
+
+  defp webhook?(triggered_by) when triggered_by in ["webhook", :webhook], do: true
+  defp webhook?(_), do: false
 
   @doc false
   def insert_deploy_job(%App{} = app, %Deployment{} = deployment) do
