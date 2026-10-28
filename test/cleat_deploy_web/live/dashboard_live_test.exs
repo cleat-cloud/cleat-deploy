@@ -45,6 +45,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#nav-dashboard")
     assert has_element?(view, "#nav-servers")
     assert has_element?(view, "#nav-apps")
+    assert has_element?(view, "#nav-deployments")
     assert html =~ "Cleat"
   end
 

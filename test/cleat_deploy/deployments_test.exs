@@ -418,6 +418,84 @@ defmodule CleatDeploy.DeploymentsTest do
     end
   end
 
+  describe "page_for_tenant/3" do
+    test "lists newest deploys across apps and preloads the app", %{
+      scope: scope,
+      app: first
+    } do
+      server = CleatDeploy.Repo.preload(first, :server).server
+
+      second =
+        TenancyFixtures.app_fixture(scope, server, %{
+          name: "Purple Stock",
+          slug: "new-lp",
+          github_repo: "Purple-Stock/new_lp",
+          host: "www.purplestock.com.br"
+        })
+
+      {:ok, older} = Deployments.create_deployment(first, %{git_sha: "aaa111"})
+      {:ok, newer} = Deployments.create_deployment(second, %{git_sha: "bbb222"})
+
+      page = Deployments.page_for_tenant(scope, 1)
+
+      assert Enum.map(page.entries, & &1.id) == [newer.id, older.id]
+      assert Enum.map(page.entries, & &1.app.name) == ["Purple Stock", "Trip Planner"]
+      assert hd(page.entries).log in [nil, ""]
+      assert page.total == 2
+    end
+
+    test "hides deploys from another tenant", %{scope: scope, app: app} do
+      {:ok, ours} = Deployments.create_deployment(app, %{git_sha: "ours"})
+      other_scope = TenancyFixtures.scope_fixture()
+      other_server = TenancyFixtures.server_fixture(other_scope)
+      other_app = TenancyFixtures.app_fixture(other_scope, other_server)
+      {:ok, _theirs} = Deployments.create_deployment(other_app, %{git_sha: "theirs"})
+
+      page = Deployments.page_for_tenant(scope, 1)
+
+      assert Enum.map(page.entries, & &1.id) == [ours.id]
+      assert Deployments.page_for_tenant(other_scope, 1).total == 1
+    end
+
+    test "filters by app name and by status", %{scope: scope, app: app} do
+      server = CleatDeploy.Repo.preload(app, :server).server
+
+      purple =
+        TenancyFixtures.app_fixture(scope, server, %{
+          name: "Purple Stock",
+          slug: "new-lp",
+          github_repo: "Purple-Stock/new_lp",
+          host: "www.purplestock.com.br"
+        })
+
+      {:ok, queued} = Deployments.create_deployment(app, %{git_sha: "trip-q"})
+      {:ok, failed} = Deployments.create_deployment(purple, %{git_sha: "lp-fail"})
+      {:ok, failed} = Deployments.mark_failed(failed, "boom")
+
+      by_name = Deployments.page_for_tenant(scope, 1, query: "purple")
+      assert Enum.map(by_name.entries, & &1.id) == [failed.id]
+
+      by_host = Deployments.page_for_tenant(scope, 1, query: "purplestock.com.br")
+      assert Enum.map(by_host.entries, & &1.id) == [failed.id]
+
+      by_status = Deployments.page_for_tenant(scope, 1, status: :failed)
+      assert Enum.map(by_status.entries, & &1.id) == [failed.id]
+      refute queued.id in Enum.map(by_status.entries, & &1.id)
+    end
+
+    test "paginates tenant history", %{scope: scope, app: app} do
+      for i <- 1..11 do
+        {:ok, _} = Deployments.create_deployment(app, %{git_sha: "sha-#{i}"})
+      end
+
+      page = Deployments.page_for_tenant(scope, 2)
+      assert page.page == 2
+      assert page.page_size == 10
+      assert page.total == 11
+      assert length(page.entries) == 1
+    end
+  end
+
   describe "deploying?/2" do
     test "is true only while a deploy is queued or running", %{scope: scope, app: app} do
       refute Deployments.deploying?(scope, app)

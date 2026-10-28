@@ -48,8 +48,11 @@ defmodule CleatDeploy.Deployments do
   defdelegate for_app(scope, app), to: History
   defdelegate page_for_app(app, page), to: History
   defdelegate page_for_app(scope, app, page), to: History
+  defdelegate page_for_tenant(scope, page), to: History
+  defdelegate page_for_tenant(scope, page, opts), to: History
   defdelegate deploying?(app), to: History
   defdelegate deploying?(scope, app), to: History
+  defdelegate deploying_for_tenant?(scope), to: History
   defdelegate daily_status_counts(scope, days), to: History
   defdelegate daily_status_counts(scope, days, server), to: History
 

@@ -128,6 +128,7 @@ defmodule CleatDeployWeb.Router do
       live "/apps/new", AppLive.Index, :new
       live "/apps/:id", AppLive.Show, :show
       live "/apps/:app_id/deployments", AppLive.Deployments, :index
+      live "/deployments", DeploymentLive.Index, :index
       live "/settings", SettingsLive, :index
       live "/signals", SignalsLive, :index
     end
