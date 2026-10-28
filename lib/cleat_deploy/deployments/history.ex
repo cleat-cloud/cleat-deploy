@@ -55,6 +55,19 @@ defmodule CleatDeploy.Deployments.History do
     list_page_for_app(app, page)
   end
 
+  def page_for_tenant(%Scope{tenant: tenant}, page, opts \\ []) when is_integer(page) do
+    list_page_for_tenant(tenant.id, page, opts)
+  end
+
+  def deploying_for_tenant?(%Scope{tenant: tenant}) do
+    Repo.exists?(
+      from d in Deployment,
+        join: a in App,
+        on: a.id == d.app_id,
+        where: a.tenant_id == ^tenant.id and d.status in [:queued, :running]
+    )
+  end
+
   def deploying?(%Scope{tenant: tenant}, %App{tenant_id: tenant_id} = app)
       when tenant_id == tenant.id do
     deploying?(app)
@@ -134,6 +147,61 @@ defmodule CleatDeploy.Deployments.History do
       order_by: [desc: d.inserted_at, desc: d.id],
       select: struct(d, ^@history_fields)
   end
+
+  defp list_page_for_tenant(tenant_id, page, opts) do
+    filtered = tenant_history_query(tenant_id, opts)
+    total = filtered |> select([deployment: d], count(d.id)) |> Repo.one()
+    total_pages = history_total_pages(total)
+    page = page |> max(1) |> min(total_pages)
+    offset = (page - 1) * @history_page_size
+
+    entries =
+      filtered
+      |> order_by([deployment: d], desc: d.inserted_at, desc: d.id)
+      |> select([deployment: d], struct(d, ^@history_fields))
+      |> limit(^@history_page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Repo.preload(:app)
+
+    %{
+      entries: entries,
+      page: page,
+      page_size: @history_page_size,
+      total: total,
+      total_pages: total_pages
+    }
+  end
+
+  defp tenant_history_query(tenant_id, opts) do
+    from(d in Deployment, as: :deployment)
+    |> join(:inner, [deployment: d], a in App, on: a.id == d.app_id, as: :app)
+    |> where([app: a], a.tenant_id == ^tenant_id)
+    |> filter_app_query(Keyword.get(opts, :query, ""))
+    |> filter_status(Keyword.get(opts, :status, :all))
+  end
+
+  defp filter_app_query(query, needle) when needle in [nil, ""], do: query
+
+  defp filter_app_query(query, needle) do
+    pat = "%" <> String.downcase(String.trim(to_string(needle))) <> "%"
+
+    where(
+      query,
+      [app: a],
+      like(fragment("lower(?)", a.name), ^pat) or
+        like(fragment("lower(?)", a.slug), ^pat) or
+        like(fragment("lower(?)", a.host), ^pat)
+    )
+  end
+
+  defp filter_status(query, :all), do: query
+
+  defp filter_status(query, status) when status in [:queued, :running, :success, :failed] do
+    where(query, [deployment: d], d.status == ^status)
+  end
+
+  defp filter_status(query, _), do: query
 
   defp history_total_pages(0), do: 1
 
