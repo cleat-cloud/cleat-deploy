@@ -21,11 +21,7 @@ defmodule CleatDeployWeb.GithubWebhookController do
   end
 
   defp respond(conn, {:queued, queued}) do
-    Enum.each(queued, fn {app, job} ->
-      Logger.info(
-        "github webhook queued deploy app=#{app.slug} job=#{job.id} repo=#{app.github_repo} ref=#{app.branch}"
-      )
-    end)
+    Enum.each(queued, &log_queued/1)
 
     send_resp(conn, :accepted, "queued")
   end
@@ -120,6 +116,18 @@ defmodule CleatDeployWeb.GithubWebhookController do
 
         if verified == [], do: :error, else: {:ok, verified}
     end
+  end
+
+  defp log_queued({app, :already_deployed}) do
+    Logger.info(
+      "github webhook already deployed app=#{app.slug} repo=#{app.github_repo} ref=#{app.branch}"
+    )
+  end
+
+  defp log_queued({app, job}) do
+    Logger.info(
+      "github webhook queued deploy app=#{app.slug} job=#{job.id} repo=#{app.github_repo} ref=#{app.branch}"
+    )
   end
 
   defp decode_payload(raw_body) when is_binary(raw_body) and raw_body != "" do

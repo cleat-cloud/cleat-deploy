@@ -37,6 +37,7 @@ defmodule CleatDeploy.Deployments.Deployment do
     ])
     |> validate_required([:git_sha, :app_id])
     |> foreign_key_constraint(:app_id)
+    |> unique_constraint(:git_sha, name: :deployments_app_sha_active_index)
   end
 
   @doc """

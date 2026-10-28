@@ -56,6 +56,121 @@ defmodule CleatDeploy.DeploymentsTest do
     end
   end
 
+  describe "sha dedupe" do
+    test "reuses the queued deploy when the same app and sha are enqueued twice", %{
+      scope: scope,
+      app: app
+    } do
+      {:ok, job1} =
+        Deployments.enqueue(scope, app, %{git_sha: "abc123def", triggered_by: "webhook"})
+
+      {:ok, job2} =
+        Deployments.enqueue(scope, app, %{git_sha: "abc123def", triggered_by: "webhook"})
+
+      assert job1.id == job2.id
+      assert [deployment] = Deployments.for_app(scope, app)
+      assert deployment.git_sha == "abc123def"
+      assert deployment.status == :queued
+    end
+
+    test "reuses a running deploy of the same sha", %{scope: scope, app: app} do
+      {:ok, job1} =
+        Deployments.enqueue(scope, app, %{git_sha: "run-sha-1", triggered_by: "webhook"})
+
+      [deployment] = Deployments.for_app(scope, app)
+      {:ok, _} = Deployments.mark_running(deployment)
+
+      {:ok, job2} =
+        Deployments.enqueue(scope, app, %{git_sha: "run-sha-1", triggered_by: "webhook"})
+
+      assert job1.id == job2.id
+      assert Enum.count(Deployments.for_app(scope, app)) == 1
+    end
+
+    test "webhook enqueue of a sha that already succeeded does not create another row", %{
+      scope: scope,
+      app: app
+    } do
+      {:ok, _} =
+        Deployments.enqueue(scope, app, %{git_sha: "done-sha-1", triggered_by: "webhook"})
+
+      [deployment] = Deployments.for_app(scope, app)
+      {:ok, running} = Deployments.mark_running(deployment)
+      {:ok, _} = Deployments.mark_success(running, "ok")
+
+      {:ok, _job} =
+        Deployments.enqueue(scope, app, %{git_sha: "done-sha-1", triggered_by: "webhook"})
+
+      assert Enum.count(Deployments.for_app(scope, app)) == 1
+    end
+
+    test "manual enqueue can redeploy a sha that already succeeded", %{scope: scope, app: app} do
+      {:ok, _} =
+        Deployments.enqueue(scope, app, %{git_sha: "redeploy-sha", triggered_by: "webhook"})
+
+      [deployment] = Deployments.for_app(scope, app)
+      {:ok, running} = Deployments.mark_running(deployment)
+      {:ok, _} = Deployments.mark_success(running, "ok")
+
+      {:ok, _} =
+        Deployments.enqueue(scope, app, %{git_sha: "redeploy-sha", triggered_by: "manual"})
+
+      assert Enum.count(Deployments.for_app(scope, app)) == 2
+    end
+
+    test "a failed sha can be enqueued again", %{scope: scope, app: app} do
+      {:ok, _} =
+        Deployments.enqueue(scope, app, %{git_sha: "fail-sha-1", triggered_by: "webhook"})
+
+      [deployment] = Deployments.for_app(scope, app)
+      {:ok, running} = Deployments.mark_running(deployment)
+      {:ok, _} = Deployments.mark_failed(running, "boom")
+
+      {:ok, _} =
+        Deployments.enqueue(scope, app, %{git_sha: "fail-sha-1", triggered_by: "webhook"})
+
+      statuses = Enum.map(Deployments.for_app(scope, app), & &1.status)
+      assert Enum.sort(statuses) == [:failed, :queued]
+    end
+
+    test "the same sha on another app is a separate deploy", %{scope: scope, app: app} do
+      {:ok, other, _} =
+        Apps.create_app(scope, %{
+          name: "Other",
+          slug: "other-dedupe",
+          github_repo: "puppe1990/other-dedupe",
+          host: "other-dedupe.gestaobem.com",
+          server_id: app.server_id
+        })
+
+      {:ok, _} =
+        Deployments.enqueue(scope, app, %{git_sha: "shared-sha", triggered_by: "webhook"})
+
+      {:ok, _} =
+        Deployments.enqueue(scope, other, %{git_sha: "shared-sha", triggered_by: "webhook"})
+
+      assert Enum.count(Deployments.for_app(scope, app)) == 1
+      assert Enum.count(Deployments.for_app(scope, other)) == 1
+    end
+
+    test "placeholder git_sha manual is not deduped", %{scope: scope, app: app} do
+      {:ok, _} = Deployments.enqueue(scope, app, %{git_sha: "manual", triggered_by: "api"})
+      {:ok, _} = Deployments.enqueue(scope, app, %{git_sha: "manual", triggered_by: "api"})
+      assert Enum.count(Deployments.for_app(scope, app)) == 2
+    end
+
+    test "enqueue_deployment/3 returns the existing queued deployment", %{scope: scope, app: app} do
+      {:ok, first, job1} =
+        Deployments.enqueue_deployment(scope, app, %{git_sha: "api-sha", triggered_by: "api"})
+
+      {:ok, second, job2} =
+        Deployments.enqueue_deployment(scope, app, %{git_sha: "api-sha", triggered_by: "api"})
+
+      assert first.id == second.id
+      assert job1.id == job2.id
+    end
+  end
+
   describe "status transitions" do
     setup %{app: app} do
       {:ok, deployment} = Deployments.create_deployment(app, %{git_sha: "abc123"})
