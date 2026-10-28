@@ -239,6 +239,10 @@ mix test
 mix precommit
 ```
 
+CI runs `mix test --exclude integration`. The real SSH deploy path (provision a
+disposable server, deploy, update, fail a deploy and check HTTP) runs in the
+`Deploy E2E` workflow — see [docs/deploy-e2e.md](docs/deploy-e2e.md).
+
 ## License
 
 MIT
