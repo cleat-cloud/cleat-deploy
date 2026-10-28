@@ -46,7 +46,21 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#nav-servers")
     assert has_element?(view, "#nav-apps")
     assert has_element?(view, "#nav-deployments")
+    assert has_element?(view, "#sidebar-toggle")
     assert html =~ "Cleat"
+  end
+
+  test "renders a hide-and-show arrow on the desktop sidebar", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, ~s(#sidebar-toggle[type="button"]))
+    assert has_element?(view, ~s(#sidebar-toggle[aria-controls="app-sidebar"]))
+    assert has_element?(view, ~s(#sidebar-toggle[aria-expanded="true"]))
+    assert has_element?(view, ~s(#sidebar-toggle[aria-label="Hide sidebar"]))
+    assert has_element?(view, ~s(#sidebar-toggle[phx-hook="SidebarToggle"]))
+    assert has_element?(view, ~s(#sidebar-toggle [data-sidebar-icon="collapse"]))
+    assert has_element?(view, ~s(#sidebar-toggle [data-sidebar-icon="expand"]))
+    refute has_element?(view, "#app-shell.paas-shell--sidebar-collapsed")
   end
 
   test "renders dashboard when only user_id is present in session", %{user: user} do

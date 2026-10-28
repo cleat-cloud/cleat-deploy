@@ -17,6 +17,7 @@ defmodule CleatDeployWeb.FeaturesLiveTest do
 
       # Public page: no panel sidebar, and a way in.
       refute has_element?(view, "#app-sidebar")
+      refute has_element?(view, "#sidebar-toggle")
       refute has_element?(view, "#nav-features")
       assert has_element?(view, "#features-cta")
       assert has_element?(view, ~s(#features-cta a[href="/users/register"]))

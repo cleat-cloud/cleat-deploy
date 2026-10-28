@@ -65,6 +65,10 @@ body {
   display: none;
 }
 
+.paas-shell-sidebar-toggle {
+  display: none;
+}
+
 .paas-shell-main {
   grid-column: 1;
   grid-row: 2;
@@ -91,6 +95,71 @@ body {
 
   .paas-shell-main {
     grid-column: 2;
+  }
+
+  .paas-shell-sidebar-toggle {
+    display: inline-flex;
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    justify-self: end;
+    z-index: 45;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-top: 1.15rem;
+    margin-right: -0.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid var(--color-hd-border);
+    background: var(--color-hd-card);
+    color: var(--color-hd-muted);
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      border-color 0.15s,
+      background 0.15s;
+  }
+
+  .paas-shell-sidebar-toggle:hover {
+    color: var(--color-hd-orange);
+    border-color: color-mix(in oklch, var(--color-hd-orange) 40%, var(--color-hd-border));
+  }
+
+  .paas-shell-sidebar-toggle [data-sidebar-icon="expand"] {
+    display: none;
+  }
+
+  .paas-shell.paas-shell--sidebar-collapsed,
+  html[data-sidebar="hidden"] .paas-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .paas-shell.paas-shell--sidebar-collapsed .paas-shell-sidebar,
+  html[data-sidebar="hidden"] .paas-shell-sidebar {
+    display: none;
+  }
+
+  .paas-shell.paas-shell--sidebar-collapsed .paas-shell-main,
+  html[data-sidebar="hidden"] .paas-shell-main {
+    grid-column: 1;
+  }
+
+  .paas-shell.paas-shell--sidebar-collapsed .paas-shell-sidebar-toggle,
+  html[data-sidebar="hidden"] .paas-shell-sidebar-toggle {
+    justify-self: start;
+    margin-right: 0;
+    margin-left: 0.5rem;
+  }
+
+  .paas-shell.paas-shell--sidebar-collapsed [data-sidebar-icon="collapse"],
+  html[data-sidebar="hidden"] [data-sidebar-icon="collapse"] {
+    display: none;
+  }
+
+  .paas-shell.paas-shell--sidebar-collapsed [data-sidebar-icon="expand"],
+  html[data-sidebar="hidden"] [data-sidebar-icon="expand"] {
+    display: inline-flex;
   }
 }
 
