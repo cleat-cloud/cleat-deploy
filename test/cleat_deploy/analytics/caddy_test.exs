@@ -81,12 +81,25 @@ defmodule CleatDeploy.Analytics.CaddyTest do
     refute site =~ "file_server"
 
     loopback = Caddy.loopback_site(@cleat, static_root: @static_root)
-    assert loopback =~ "http://127.0.0.1:4010"
+    assert loopback =~ "http://127.0.0.1:4010, http://cleat.sites.gestaobem.com:4010"
     assert loopback =~ "# paas:app=cleat"
     assert loopback =~ "bind 127.0.0.1"
     assert loopback =~ "root *"
     assert loopback =~ "file_server"
     assert loopback =~ @static_root
+  end
+
+  test "loopback origin matches every public host alias" do
+    loopback =
+      Caddy.loopback_site(%{@cleat | host: "a.example.com, b.example.com"},
+        static_root: @static_root
+      )
+
+    assert loopback =~
+             "http://127.0.0.1:4010, http://a.example.com:4010, http://b.example.com:4010"
+
+    ip_loopback = Caddy.loopback_site(%{@cleat | host: "1.2.3.4"}, static_root: @static_root)
+    assert ip_loopback =~ "http://127.0.0.1:4010, http://1.2.3.4:4010"
   end
 
   test "inject off static serves files on the public host" do

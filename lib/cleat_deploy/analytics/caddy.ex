@@ -25,7 +25,7 @@ defmodule CleatDeploy.Analytics.Caddy do
       robots_header = Keyword.get(opts, :robots_header, "")
 
       """
-      http://127.0.0.1:#{port} {
+      #{origin_addresses(field(app, :host), port)} {
         # paas:app=#{field(app, :slug)}
         bind 127.0.0.1
         root * #{static_root}
@@ -36,6 +36,21 @@ defmodule CleatDeploy.Analytics.Caddy do
       }
       """
     end
+  end
+
+  # The sidecar forwards the original Host header, and Caddy only serves a site
+  # whose address matches that Host. Listing the public host on the origin port
+  # keeps an inject-on static site from answering 200 with an empty body.
+  defp origin_addresses(host, port) do
+    hosts =
+      host
+      |> to_string()
+      |> String.split(",")
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.map(&"http://#{&1}:#{port}")
+
+    Enum.join(["http://127.0.0.1:#{port}" | hosts], ", ")
   end
 
   @spec address(String.t()) :: String.t()
