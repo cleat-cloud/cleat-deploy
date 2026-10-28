@@ -1,0 +1,92 @@
+name: Deploy E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Reference branch to deploy and update
+        default: main
+        type: string
+      fail_build_ref:
+        description: Branch expected to fail the deploy
+        default: cleat-e2e-fail-build
+        type: string
+      fail_release_ref:
+        description: Branch with a failing release_command (empty to skip)
+        default: cleat-e2e-fail-release
+        type: string
+      server_type:
+        description: Hetzner server type
+        default: cx22
+        type: string
+  schedule:
+    # Weekly. Requires the deploy-e2e environment secrets (see docs/deploy-e2e.md).
+    - cron: "0 3 * * 1"
+
+concurrency:
+  group: deploy-e2e
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Disposable server deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: deploy-e2e
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check e2e configuration
+        id: config
+        env:
+          HCLOUD_TOKEN: ${{ secrets.CLEAT_E2E_HCLOUD_TOKEN }}
+          SSH_KEY: ${{ secrets.CLEAT_E2E_SSH_PRIVATE_KEY }}
+        run: |
+          if [[ -n "$HCLOUD_TOKEN" && -n "$SSH_KEY" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::CLEAT_E2E_HCLOUD_TOKEN/CLEAT_E2E_SSH_PRIVATE_KEY are not set; skipping the disposable deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Elixir
+        if: steps.config.outputs.ready == 'true'
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+
+      - name: Install dependencies
+        if: steps.config.outputs.ready == 'true'
+        run: mix deps.get
+
+      - name: Run disposable deploy smoke
+        if: steps.config.outputs.ready == 'true'
+        env:
+          HCLOUD_TOKEN: ${{ secrets.CLEAT_E2E_HCLOUD_TOKEN }}
+          E2E_SSH_PRIVATE_KEY: ${{ secrets.CLEAT_E2E_SSH_PRIVATE_KEY }}
+          E2E_REPO: ${{ vars.CLEAT_E2E_REPO || 'cleat-cloud/cleat-e2e-reference' }}
+          E2E_REF: ${{ inputs.ref || 'main' }}
+          E2E_UPDATE_REF: ${{ inputs.ref || 'main' }}
+          E2E_FAIL_BUILD_REF: ${{ inputs.fail_build_ref || vars.CLEAT_E2E_FAIL_BUILD_REF || 'cleat-e2e-fail-build' }}
+          E2E_FAIL_RELEASE_REF: ${{ inputs.fail_release_ref || vars.CLEAT_E2E_FAIL_RELEASE_REF || 'cleat-e2e-fail-release' }}
+          E2E_EXPECT_BODY: ${{ vars.CLEAT_E2E_EXPECT_BODY }}
+          E2E_SERVER_TYPE: ${{ inputs.server_type || 'cx22' }}
+          E2E_SUMMARY_PATH: e2e-summary.json
+        # deploy_smoke.exs: never prints the SSH key or raw deploy logs; the
+        # nested panel log can echo the clone URL.
+        run: scripts/e2e/run.sh
+
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-e2e-summary
+          path: e2e-summary.json
+          if-no-files-found: warn
+          retention-days: 14
