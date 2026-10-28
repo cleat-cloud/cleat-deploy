@@ -4,6 +4,7 @@ defmodule CleatDeployWeb.AppLive.Index.Directory do
 
   alias CleatDeploy.Apps.App
   alias CleatDeployWeb.AppLive.Index.{Filters, Listing}
+  alias CleatDeployWeb.AppLive.Layout.Header
 
   def table(assigns) do
     ~H"""
@@ -92,14 +93,7 @@ defmodule CleatDeployWeb.AppLive.Index.Directory do
                 </.link>
               </td>
               <td>
-                <.link
-                  href={"https://#{app.host}"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="font-mono text-sm text-hd-orange hover:text-hd-orange-dark hover:underline"
-                >
-                  {app.host}
-                </.link>
+                <Header.host_links id={"app-#{app.id}-hosts"} hosts={App.hosts(app)} />
               </td>
               <td>
                 <.language_badge app={app} />

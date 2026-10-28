@@ -72,6 +72,45 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert render(view) =~ "Trip Planner"
   end
 
+  test "splits comma-separated hosts into separate listing links", %{
+    conn: conn,
+    scope: scope,
+    server: server
+  } do
+    app =
+      TenancyFixtures.app_fixture(scope, server, %{
+        name: "Purple Stock",
+        slug: "new-lp",
+        github_repo: "Purple-Stock/new_lp",
+        host: "www.purplestock.com.br, purplestock.com.br, blog.purplestock.com.br"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+
+    assert has_element?(
+             view,
+             ~s(#app-#{app.id}-hosts a[href="https://www.purplestock.com.br"][target="_blank"][rel="noopener noreferrer"]),
+             "www.purplestock.com.br"
+           )
+
+    assert has_element?(
+             view,
+             ~s(#app-#{app.id}-hosts a[href="https://purplestock.com.br"]),
+             "purplestock.com.br"
+           )
+
+    assert has_element?(
+             view,
+             ~s(#app-#{app.id}-hosts a[href="https://blog.purplestock.com.br"]),
+             "blog.purplestock.com.br"
+           )
+
+    refute has_element?(
+             view,
+             ~s(a[href="https://www.purplestock.com.br, purplestock.com.br, blog.purplestock.com.br"])
+           )
+  end
+
   test "paginates the apps list 10 per page", %{conn: conn, scope: scope, server: server} do
     for n <- 1..12 do
       label = String.pad_leading(Integer.to_string(n), 2, "0")
