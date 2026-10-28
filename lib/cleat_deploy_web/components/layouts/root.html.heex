@@ -21,6 +21,10 @@
           const meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute("content", theme === "light" ? "#f4f6fa" : "#0b0e14")
         }
+        const sidebar = localStorage.getItem("cleat-sidebar")
+        if (sidebar === "hidden" || sidebar === "shown") {
+          document.documentElement.dataset.sidebar = sidebar
+        }
       } catch (_error) {}
     </script>
     <link rel="icon" type="image/png" sizes="32x32" href={~p"/images/icons/favicon-32x32.png"} />

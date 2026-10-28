@@ -26,15 +26,17 @@ import {hooks as colocatedHooks} from "phoenix-colocated/cleat_deploy"
 import topbar from "../vendor/topbar"
 import {initPasswordToggles} from "./password_toggle"
 import {initTheme, ThemeToggle} from "./theme"
+import {initSidebar, SidebarToggle} from "./sidebar"
 import {ChartTip} from "./chart_tip"
 
 initTheme()
+initSidebar()
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {ThemeToggle, ChartTip, ...colocatedHooks},
+  hooks: {ThemeToggle, SidebarToggle, ChartTip, ...colocatedHooks},
 })
 
 // Installable PWA: /sw.js is a pass-through worker, it never serves stale

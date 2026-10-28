@@ -132,6 +132,25 @@ defmodule CleatDeployWeb.PaasShell do
         </div>
       </aside>
 
+      <button
+        id="sidebar-toggle"
+        type="button"
+        class="paas-shell-sidebar-toggle"
+        aria-controls="app-sidebar"
+        aria-expanded="true"
+        aria-label="Hide sidebar"
+        title="Hide sidebar"
+        phx-hook="SidebarToggle"
+        phx-update="ignore"
+      >
+        <span data-sidebar-icon="collapse">
+          <.icon name="hero-chevron-left" class="size-3.5" />
+        </span>
+        <span data-sidebar-icon="expand">
+          <.icon name="hero-chevron-right" class="size-3.5" />
+        </span>
+      </button>
+
       <div class="paas-shell-main flex flex-col">
         <div class="flex shrink-0 items-center justify-between gap-3 border-b border-hd-border bg-hd-bg px-3 py-3 lg:hidden">
           <nav
