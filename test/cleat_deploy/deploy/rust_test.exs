@@ -73,6 +73,40 @@ defmodule CleatDeploy.Deploy.RustTest do
     refute script =~ "chmod -R a+rX"
   end
 
+  test "publish empties the reused release dir with find, dotfiles included (#246)" do
+    slug = "#{Faker.Lorem.word()}-#{Faker.Lorem.word()}"
+
+    app = %App{
+      name: Faker.Company.name(),
+      slug: slug,
+      host: "#{slug}.example.com",
+      runtime: "rust",
+      port: 4040,
+      release_path: "/opt/#{slug}",
+      systemd_unit: "rust-#{slug}"
+    }
+
+    config = App.deploy_config(app)
+
+    script =
+      Rust.remote_build_script(
+        nil,
+        app,
+        config,
+        Faker.Internet.user_name(),
+        "/tmp/src.tar.gz",
+        %AppManifest{runtime: "rust"}
+      )
+
+    # `rm -rf "$DIR"/*` does not match dotfiles: leftovers from the previous
+    # release survived the copy.
+    refute script =~ ~S|rm -rf "${RELEASE_DIR:?}"/*|
+    # Only the release dir is emptied — never the app root that holds data/.
+    refute script =~ "find '/opt/#{slug}' -mindepth 1 -delete"
+    assert script =~ "sudo find '/opt/#{slug}/releases/build' -mindepth 1 -delete"
+    assert occurrence(script, "-mindepth 1 -delete") < occurrence(script, "sudo cp -a bin/server")
+  end
+
   test "build script compiles a Loco frontend when frontend/package.json exists", %{
     app: app,
     config: config

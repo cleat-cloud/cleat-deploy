@@ -42,6 +42,6 @@ defmodule CleatDeploy.Deploy.ServerProvision do
   defdelegate release_command_script(app, config, manifest), to: Release
   defdelegate prune_releases_script(release_path), to: Release
   defdelegate prune_releases_keep_script(release_path, keep \\ 5), to: Release
-  defdelegate clean_release_script(release_path), to: Release
+  defdelegate clean_release_script(release_dir), to: Release
   defdelegate reload_caddy_script(), to: Release
 end
