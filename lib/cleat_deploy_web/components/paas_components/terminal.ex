@@ -20,17 +20,13 @@ defmodule CleatDeployWeb.PaasComponents.Terminal do
     ~H"""
     <div
       id={@id}
-      class="overflow-hidden rounded-md border border-hd-border bg-hd-bg font-mono text-[11px] text-hd-text"
+      class="overflow-hidden rounded-xl border border-hd-border bg-hd-bg font-mono text-[11px] text-hd-text"
     >
-      <div class="flex items-center justify-between border-b border-hd-border bg-hd-aside px-3 py-1.5">
-        <div class="flex items-center gap-1.5">
-          <.icon name="hero-command-line" class="size-3.5 text-hd-orange" />
-          <span class="text-[10px] font-semibold tracking-wider text-hd-muted">
-            BUILD CONTAINER SHELL
-          </span>
-          <span class="rounded border border-hd-border bg-hd-card px-1 py-0.5 font-mono text-[9px] text-hd-muted">
-            SHA: {@deployment.git_sha}
-          </span>
+      <div class="flex items-center justify-between border-b border-hd-border bg-hd-aside px-3 py-2">
+        <div class="flex items-center gap-2">
+          <.icon name="hero-command-line" class="size-3.5 text-hd-muted" />
+          <span class="text-xs text-hd-secondary">Build output</span>
+          <span class="keycap">{@deployment.git_sha}</span>
         </div>
         <CleatDeployWeb.PaasComponents.Badges.deploy_status_badge status={@deployment.status} />
       </div>
@@ -59,18 +55,11 @@ defmodule CleatDeployWeb.PaasComponents.Terminal do
         </script>
       </div>
 
-      <div class="flex items-center justify-between border-t border-hd-border bg-hd-aside px-3 py-1 text-[10px] text-hd-muted">
-        <div class="flex items-center gap-2">
-          <span>Elixir 1.16.2</span>
-          <span>OTP 26.2.1</span>
-          <span>Phoenix 1.7.12</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <span :if={@duration && @duration != "—"} class="tabular-nums text-hd-text">
-            {@duration}
-          </span>
-          <span>Target VM: us-east-1</span>
-        </div>
+      <div class="flex items-center justify-between border-t border-hd-border bg-hd-aside px-3 py-1.5 text-[11px] text-hd-muted">
+        <span>{@deployment.git_ref}</span>
+        <span :if={@duration && @duration != "—"} class="tabular-nums text-hd-secondary">
+          {@duration}
+        </span>
       </div>
     </div>
     """
@@ -79,7 +68,7 @@ defmodule CleatDeployWeb.PaasComponents.Terminal do
   defp terminal_line_class(line) do
     cond do
       String.starts_with?(line, "==>") ->
-        "font-semibold text-hd-orange"
+        "text-hd-orange"
 
       String.starts_with?(line, "$") ->
         "text-hd-muted"
@@ -88,7 +77,7 @@ defmodule CleatDeployWeb.PaasComponents.Terminal do
         "text-hd-green"
 
       String.contains?(line, "FAIL") or String.contains?(line, "Error") ->
-        "font-medium text-rose-500"
+        "text-hd-red"
 
       true ->
         "text-hd-text"

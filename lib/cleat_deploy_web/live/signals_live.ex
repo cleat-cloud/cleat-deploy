@@ -67,14 +67,11 @@ defmodule CleatDeployWeb.SignalsLive do
       server_count={@server_count}
       app_count={@app_count}
     >
-      <div id="signals-overview" class="space-y-4">
+      <div id="signals-overview" class="space-y-5">
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
-              Cleat Signals
-            </p>
-            <h2 class="font-display text-xl font-semibold tracking-tight">Saúde das aplicações</h2>
-            <p class="mt-1 text-sm text-hd-muted">
+            <h2 class="text-xl font-medium tracking-tight">Saúde das aplicações</h2>
+            <p class="mt-1 text-xs text-hd-muted">
               Detecte degradação e o release que antecedeu a mudança, sem abrir SSH.
             </p>
           </div>
@@ -83,53 +80,49 @@ defmodule CleatDeployWeb.SignalsLive do
         <div
           :if={@ingest && (!@ingest.enabled || @ingest.stale)}
           id="signals-ingest-banner"
-          class={[
-            "rounded-md border px-4 py-3 text-sm",
-            (@ingest.enabled && "border-hd-orange/40 bg-hd-orange/10 text-hd-orange") ||
-              "border-hd-red/40 bg-hd-red/10 text-hd-red"
-          ]}
+          class="rounded-lg border border-hd-orange/30 px-4 py-3 text-[13px]"
         >
-          <p :if={!@ingest.enabled} class="font-medium">
+          <p :if={!@ingest.enabled} class="font-medium text-hd-orange">
             Coletor de logs desligado — os números abaixo não refletem a realidade.
           </p>
-          <p :if={@ingest.enabled} class="font-medium">
+          <p :if={@ingest.enabled} class="font-medium text-hd-orange">
             Ingestão de logs parada{ingest_since(@ingest)} — os números abaixo podem estar desatualizados.
           </p>
-          <p :if={@ingest.enabled && @ingest.last_failures && @ingest.last_failures > 0} class="mt-1">
+          <p
+            :if={@ingest.enabled && @ingest.last_failures && @ingest.last_failures > 0}
+            class="mt-1 text-hd-muted"
+          >
             Última coleta falhou em {ingest_failed_apps(@ingest)}.
           </p>
-          <p :if={!@ingest.enabled} class="mt-1 font-mono text-[11px]">
+          <p :if={!@ingest.enabled} class="mt-1 font-mono text-xs text-hd-muted">
             Ligue LOG_COLLECTOR_ENABLED=true e reinicie o painel para retomar a coleta.
           </p>
-          <p :if={@ingest.enabled} class="mt-1 font-mono text-[11px]">
+          <p :if={@ingest.enabled} class="mt-1 font-mono text-xs text-hd-muted">
             Verifique a fila :logs do Oban e o acesso SSH do painel aos servidores.
           </p>
         </div>
 
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-3 md:grid-cols-3">
           <.metric_card
             title="Saudáveis"
             value={Integer.to_string(count_status(@rows, :healthy))}
             hint="No ar"
-            icon="hero-heart"
           />
           <.metric_card
             title="Degradadas"
             value={Integer.to_string(count_status(@rows, :degraded))}
             hint="Taxa de erro ou saturação"
-            icon="hero-exclamation-triangle"
           />
           <.metric_card
             title="Indisponíveis"
             value={Integer.to_string(count_status(@rows, :down))}
             hint="Último deploy falhou"
-            icon="hero-signal-slash"
           />
         </div>
 
         <section class="paas-card overflow-hidden">
-          <div class="border-b border-hd-border px-4 py-3">
-            <h3 class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
+          <div class="border-b border-hd-border px-5 py-3.5">
+            <h3 class="text-sm font-medium text-hd-text">
               Overview
             </h3>
           </div>
@@ -137,7 +130,7 @@ defmodule CleatDeployWeb.SignalsLive do
             Nenhuma aplicação neste tenant.
           </div>
           <table :if={@rows != []} id="signals-health-table" class="w-full text-left text-sm">
-            <thead class="font-mono text-[10px] tracking-wider text-hd-muted uppercase">
+            <thead class="font-mono text-xs text-hd-muted">
               <tr class="border-b border-hd-border">
                 <th class="px-4 py-2 font-medium">App</th>
                 <th class="px-4 py-2 font-medium">Estado</th>
@@ -164,18 +157,16 @@ defmodule CleatDeployWeb.SignalsLive do
                 <td class="px-4 py-2">
                   <span
                     id={"signals-status-#{row.slug}"}
-                    class={[
-                      "rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase",
-                      status_class(row.status)
-                    ]}
+                    class={["flex items-center gap-1.5 font-mono text-xs", status_class(row.status)]}
                   >
+                    <span class={["size-1.5 rounded-full", status_dot(row.status)]} />
                     {status_label(row.status)}
                   </span>
                 </td>
-                <td class="px-4 py-2 font-mono text-[11px] text-hd-muted">
+                <td class="px-4 py-2 font-mono text-xs text-hd-muted">
                   {reason_label(row.reasons)}
                 </td>
-                <td class="px-4 py-2 font-mono text-[11px] text-hd-muted">
+                <td class="px-4 py-2 font-mono text-xs text-hd-muted">
                   {release_label(row.preceding_release)}
                 </td>
                 <td class="px-4 py-2 font-mono tabular-nums">
@@ -187,8 +178,8 @@ defmodule CleatDeployWeb.SignalsLive do
         </section>
 
         <section id="signals-alerts" class="paas-card overflow-hidden">
-          <div class="border-b border-hd-border px-4 py-3">
-            <h3 class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
+          <div class="border-b border-hd-border px-5 py-3.5">
+            <h3 class="text-sm font-medium text-hd-text">
               Alertas
             </h3>
           </div>
@@ -203,7 +194,7 @@ defmodule CleatDeployWeb.SignalsLive do
             >
               <div>
                 <p class="text-sm font-medium">{alert.message}</p>
-                <p class="font-mono text-[11px] text-hd-muted">
+                <p class="font-mono text-xs text-hd-muted">
                   {alert.rule} · {alert.status} · {alert.channel}
                 </p>
               </div>
@@ -231,7 +222,7 @@ defmodule CleatDeployWeb.SignalsLive do
             series={error_series(@metrics)}
           />
           <section id="signals-timeline" class="paas-card p-4">
-            <h3 class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
+            <h3 class="font-mono text-xs text-hd-muted">
               Timeline do incidente
             </h3>
             <p :if={@incident && @incident.events == []} class="mt-3 text-sm text-hd-muted">
@@ -240,9 +231,9 @@ defmodule CleatDeployWeb.SignalsLive do
             <ol :if={@incident && @incident.events != []} class="mt-3 space-y-2">
               <li
                 :for={event <- @incident.events}
-                class="rounded-md border border-hd-border bg-hd-aside px-3 py-2"
+                class="rounded-lg border border-hd-border bg-hd-aside px-3 py-2"
               >
-                <p class="font-mono text-[10px] tracking-wider text-hd-muted uppercase">
+                <p class="font-mono text-xs text-hd-muted">
                   {event.kind}
                 </p>
                 <p class="text-sm">{event.summary}</p>
@@ -254,7 +245,7 @@ defmodule CleatDeployWeb.SignalsLive do
         <div :if={@selected} class="grid gap-4 lg:grid-cols-2">
           <section id="signals-traces" class="paas-card overflow-hidden">
             <div class="border-b border-hd-border px-4 py-3">
-              <h3 class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
+              <h3 class="font-mono text-xs text-hd-muted">
                 Traces
               </h3>
             </div>
@@ -270,13 +261,13 @@ defmodule CleatDeployWeb.SignalsLive do
                 >
                   {trace.root_name}
                 </.link>
-                <p class="font-mono text-[11px] text-hd-muted">
+                <p class="font-mono text-xs text-hd-muted">
                   {trace.span_count} spans · {div(trace.duration_ns, 1_000_000)} ms
                 </p>
               </li>
             </ul>
             <div :if={@log_jumps != []} class="border-t border-hd-border px-4 py-3">
-              <p class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
+              <p class="font-mono text-xs text-hd-muted">
                 Logs → traces
               </p>
               <ul class="mt-2 space-y-1">
@@ -294,7 +285,7 @@ defmodule CleatDeployWeb.SignalsLive do
           </section>
 
           <section id="signals-sampling" class="paas-card p-4">
-            <h3 class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
+            <h3 class="font-mono text-xs text-hd-muted">
               Amostragem
             </h3>
             <p class="mt-1 text-sm text-hd-muted">
@@ -323,25 +314,25 @@ defmodule CleatDeployWeb.SignalsLive do
 
         <div :if={@waterfall} class="grid gap-4 lg:grid-cols-2">
           <section id="signals-waterfall" class="paas-card p-4">
-            <h3 class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
+            <h3 class="font-mono text-xs text-hd-muted">
               Waterfall
             </h3>
             <div class="mt-3 space-y-1">
               <div
                 :for={span <- @waterfall.spans}
                 id={"signals-span-#{span.span_id}"}
-                class="rounded-md border border-hd-border bg-hd-aside px-3 py-2"
+                class="rounded-lg border border-hd-border bg-hd-aside px-3 py-2"
                 style={"margin-left: #{span.depth * 16}px"}
               >
                 <p class="text-sm font-medium">{span.name}</p>
-                <p class="font-mono text-[11px] text-hd-muted">
+                <p class="font-mono text-xs text-hd-muted">
                   {span.service_name} · {span.kind} · {div(span.duration_ns, 1_000_000)} ms
                 </p>
               </div>
             </div>
           </section>
           <section id="signals-service-map" class="paas-card p-4">
-            <h3 class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
+            <h3 class="font-mono text-xs text-hd-muted">
               Mapa de serviços
             </h3>
             <p :if={@service_map && @service_map.edges == []} class="mt-3 text-sm text-hd-muted">
@@ -350,7 +341,7 @@ defmodule CleatDeployWeb.SignalsLive do
             <ul :if={@service_map && @service_map.edges != []} class="mt-3 space-y-1">
               <li
                 :for={edge <- @service_map.edges}
-                class="font-mono text-[12px] text-hd-muted"
+                class="font-mono text-xs text-hd-muted"
               >
                 {edge.from} → {edge.to} ({edge.count})
               </li>
@@ -499,10 +490,15 @@ defmodule CleatDeployWeb.SignalsLive do
   defp status_label(:down), do: "indisponível"
   defp status_label(_), do: "desconhecida"
 
-  defp status_class(:healthy), do: "border-hd-green/40 bg-hd-green/10 text-hd-green"
-  defp status_class(:degraded), do: "border-hd-orange/40 bg-hd-orange/10 text-hd-orange"
-  defp status_class(:down), do: "border-rose-500/40 bg-rose-500/10 text-rose-400"
-  defp status_class(_), do: "border-hd-border bg-hd-aside text-hd-muted"
+  defp status_class(:healthy), do: "text-hd-green"
+  defp status_class(:degraded), do: "text-hd-orange"
+  defp status_class(:down), do: "text-hd-red"
+  defp status_class(_), do: "text-hd-muted"
+
+  defp status_dot(:healthy), do: "bg-hd-green"
+  defp status_dot(:degraded), do: "bg-hd-orange"
+  defp status_dot(:down), do: "bg-hd-red"
+  defp status_dot(_), do: "bg-hd-muted/50"
 
   defp reason_label([]), do: "—"
   defp reason_label(reasons), do: Enum.map_join(reasons, ", ", &reason_name/1)

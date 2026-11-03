@@ -82,16 +82,14 @@ defmodule CleatDeployWeb.DashboardLive do
       server_count={@server_count}
       app_count={@app_count}
     >
-      <div id="dashboard" class="space-y-4">
+      <div id="dashboard" class="space-y-6">
         <div
           :if={@insights.server}
           id="server-overview"
-          class="paas-card flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+          class="paas-card flex flex-wrap items-start justify-between gap-4 px-5 py-4"
         >
-          <div class="min-w-0">
-            <p class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
-              Active server
-            </p>
+          <div class="min-w-0 space-y-1">
+            <p class="text-xs text-hd-muted">Active server</p>
             <form
               :if={length(@servers) > 1}
               id="active-server-form"
@@ -99,7 +97,7 @@ defmodule CleatDeployWeb.DashboardLive do
             >
               <select
                 id="active-server-select"
-                class="paas-select mt-0.5 max-w-[18rem]"
+                class="paas-select max-w-[18rem]"
                 name="server_id"
                 aria-label="Active server"
               >
@@ -115,98 +113,119 @@ defmodule CleatDeployWeb.DashboardLive do
             <h2
               :if={length(@servers) <= 1}
               id="active-server-name"
-              class="font-display text-lg font-semibold tracking-tight text-hd-text"
+              class="text-lg font-medium tracking-tight text-hd-text"
             >
               {@insights.server.name}
             </h2>
-            <p class="font-mono text-[11px] text-hd-muted">
+            <p class="font-mono text-xs text-hd-muted">
               {server_spec(@insights.server)}
             </p>
           </div>
           <span
             id="active-server-status"
-            class={[
-              "rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
-              status_class(@insights.server.instance_status)
-            ]}
+            class="flex shrink-0 items-center gap-1.5 pt-0.5 text-[13px]"
           >
-            {@insights.server.instance_status || "unknown"}
+            <span class={["size-1.5 rounded-full", status_dot(@insights.server.instance_status)]} />
+            <span class={status_class(@insights.server.instance_status)}>
+              {@insights.server.instance_status || "unknown"}
+            </span>
           </span>
         </div>
 
-        <div class="grid gap-4 md:grid-cols-2">
-          <.link navigate={~p"/servers"} class="block">
-            <.metric_card
-              title="Registered servers"
-              value={Integer.to_string(@server_count)}
-              hint="Active Hypervisors"
-              icon="hero-server-stack"
-            />
+        <div id="fleet-stats" class="paas-card grid grid-cols-2 lg:grid-cols-4">
+          <.link
+            navigate={~p"/servers"}
+            class="border-r border-b border-hd-border/60 p-5 transition-colors hover:bg-hd-raised/30 lg:border-b-0"
+          >
+            <p class="text-[13px] text-hd-secondary">Servers</p>
+            <div class="mt-1.5 flex items-baseline gap-2">
+              <p class="font-mono text-[28px] leading-8 font-medium tabular-nums tracking-tight text-hd-text">
+                {@server_count}
+              </p>
+              <p class="text-xs text-hd-muted">registered</p>
+            </div>
           </.link>
 
-          <.link navigate={~p"/apps"} id="metric-apps" class="block">
-            <.metric_card
-              title="Configured apps"
-              value={Integer.to_string(@app_count)}
-              hint="Live Routes"
-              icon="hero-globe-alt"
-            />
+          <.link
+            id="metric-apps"
+            navigate={~p"/apps"}
+            class="border-b border-hd-border/60 p-5 transition-colors hover:bg-hd-raised/30 lg:border-r lg:border-b-0"
+          >
+            <p class="text-[13px] text-hd-secondary">Apps</p>
+            <div class="mt-1.5 flex items-baseline gap-2">
+              <p class="font-mono text-[28px] leading-8 font-medium tabular-nums tracking-tight text-hd-text">
+                {@app_count}
+              </p>
+              <p class="text-xs text-hd-muted">deployed</p>
+            </div>
           </.link>
 
-          <div id="metric-disk">
-            <.metric_card
-              title="Disk used"
-              value={usage_pct(@resources && @resources.disk)}
-              hint={usage_hint(@resources && @resources.disk)}
-              icon="hero-circle-stack"
-            />
+          <div
+            id="metric-disk"
+            class="border-r border-hd-border/60 p-5"
+          >
+            <p class="text-[13px] text-hd-secondary">Disk used</p>
+            <div class="mt-1.5 flex items-baseline gap-2">
+              <p class="font-mono text-[28px] leading-8 font-medium tabular-nums tracking-tight text-hd-text">
+                {usage_pct(@resources && @resources.disk)}
+              </p>
+              <p class="text-xs text-hd-muted">{usage_hint(@resources && @resources.disk)}</p>
+            </div>
           </div>
 
-          <div id="metric-memory">
-            <.metric_card
-              title="Memory used"
-              value={usage_pct(@resources && @resources.memory)}
-              hint={usage_hint(@resources && @resources.memory)}
-              icon="hero-cpu-chip"
-            />
+          <div id="metric-memory" class="p-5">
+            <p class="text-[13px] text-hd-secondary">Memory used</p>
+            <div class="mt-1.5 flex items-baseline gap-2">
+              <p class="font-mono text-[28px] leading-8 font-medium tabular-nums tracking-tight text-hd-text">
+                {usage_pct(@resources && @resources.memory)}
+              </p>
+              <p class="text-xs text-hd-muted">{usage_hint(@resources && @resources.memory)}</p>
+            </div>
           </div>
         </div>
 
-        <div id="server-charts" class="grid gap-4 lg:grid-cols-2">
-          <.area_chart
-            id="chart-cpu"
-            title="CPU · 24h"
-            hint={cpu_hint(@live_host?)}
-            live?={@live_host?}
-            current={format_cpu(@insights.cpu_now)}
-            series={@insights.metrics.cpu}
-          />
-          <.dual_line_chart
-            id="chart-network"
-            title="Network · 24h"
-            hint={net_hint(@live_host?)}
-            live?={@live_host?}
-            current={format_net(@insights.net_in_now, @insights.net_out_now)}
-            inbound={@insights.metrics.network_in}
-            outbound={@insights.metrics.network_out}
-          />
-          <.runtime_bars
-            id="chart-runtimes"
-            elixir={@insights.runtimes.elixir}
-            gleam={@insights.runtimes.gleam}
-            go={@insights.runtimes.go}
-            js={@insights.runtimes.node}
-            ruby={@insights.runtimes.ruby}
-            rust={@insights.runtimes.rust}
-            static={@insights.runtimes.static}
-          />
-          <.deploy_bars id="chart-deploys" days={@insights.deploys} />
-          <.visited_bars
-            id="chart-visited"
-            apps={@insights.top_visited}
-            stale={@insights.visited_stale}
-          />
-          <.access_bars id="chart-access" apps={@insights.top_apps} />
+        <div id="server-charts" class="space-y-3">
+          <div class="grid gap-3 lg:grid-cols-3">
+            <div class="lg:col-span-2">
+              <.area_chart
+                id="chart-cpu"
+                title="CPU · 24h"
+                hint={cpu_hint(@live_host?)}
+                live?={@live_host?}
+                current={format_cpu(@insights.cpu_now)}
+                series={@insights.metrics.cpu}
+                height_class="h-44"
+              />
+            </div>
+            <.dual_line_chart
+              id="chart-network"
+              title="Network · 24h"
+              hint={net_hint(@live_host?)}
+              live?={@live_host?}
+              current={format_net(@insights.net_in_now, @insights.net_out_now)}
+              inbound={@insights.metrics.network_in}
+              outbound={@insights.metrics.network_out}
+            />
+          </div>
+          <div class="grid gap-3 lg:grid-cols-2">
+            <.runtime_bars
+              id="chart-runtimes"
+              elixir={@insights.runtimes.elixir}
+              gleam={@insights.runtimes.gleam}
+              go={@insights.runtimes.go}
+              js={@insights.runtimes.node}
+              ruby={@insights.runtimes.ruby}
+              rust={@insights.runtimes.rust}
+              static={@insights.runtimes.static}
+            />
+            <.deploy_bars id="chart-deploys" days={@insights.deploys} />
+            <.visited_bars
+              id="chart-visited"
+              apps={@insights.top_visited}
+              stale={@insights.visited_stale}
+            />
+            <.access_bars id="chart-access" apps={@insights.top_apps} />
+          </div>
         </div>
       </div>
     </Layouts.app>
@@ -237,9 +256,13 @@ defmodule CleatDeployWeb.DashboardLive do
   defp disk_label(gb) when is_integer(gb) and gb > 0, do: "#{gb} GB disk"
   defp disk_label(_), do: nil
 
-  defp status_class("running"), do: "border-hd-green/40 bg-hd-green/10 text-hd-green"
-  defp status_class("missing"), do: "border-rose-500/40 bg-rose-500/10 text-rose-400"
-  defp status_class(_), do: "border-hd-border bg-hd-aside text-hd-muted"
+  defp status_class("running"), do: "text-hd-green"
+  defp status_class("missing"), do: "text-hd-red"
+  defp status_class(_), do: "text-hd-muted"
+
+  defp status_dot("running"), do: "bg-hd-green"
+  defp status_dot("missing"), do: "bg-hd-red"
+  defp status_dot(_), do: "bg-hd-muted/50"
 
   defp load_insights(socket, opts) do
     assign(socket, :insights, Insights.snapshot(socket.assigns.current_scope, opts))
@@ -261,7 +284,7 @@ defmodule CleatDeployWeb.DashboardLive do
   defp usage_pct(_), do: "—"
 
   defp usage_hint(%{used: used, total: total}), do: "#{gb(used)} / #{gb(total)} GB"
-  defp usage_hint(_), do: "unavailable"
+  defp usage_hint(_), do: "—"
 
   defp gb(bytes) when is_integer(bytes) do
     :erlang.float_to_binary(bytes / 1_073_741_824, decimals: 1)
@@ -341,10 +364,10 @@ defmodule CleatDeployWeb.DashboardLive do
   end
 
   defp cpu_hint(true), do: "Live · 100% = 1 vCPU"
-  defp cpu_hint(false), do: "Hetzner utilization"
+  defp cpu_hint(false), do: "From the HCloud API"
 
   defp net_hint(true), do: "Live in / out"
-  defp net_hint(false), do: "Bandwidth in / out"
+  defp net_hint(false), do: "In / out bandwidth"
 
   defp format_cpu(nil), do: "—"
 

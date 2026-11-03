@@ -11,14 +11,11 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
   def addons_card(assigns) do
     ~H"""
     <div id="app-addons" class="paas-card overflow-hidden">
-      <div class="flex items-start gap-3 border-b border-hd-border bg-hd-aside/60 px-4 py-3">
-        <div class="flex size-9 shrink-0 items-center justify-center rounded-md border border-hd-border bg-hd-card">
-          <.icon name="hero-circle-stack" class="size-4 text-hd-orange" />
-        </div>
+      <div class="flex items-start gap-3 border-b border-hd-border px-5 py-3.5">
         <div class="min-w-0 space-y-0.5">
-          <h3 class="font-display text-sm font-semibold text-hd-text">Managed addons</h3>
+          <h3 class="text-sm font-medium text-hd-text">Managed addons</h3>
           <p class="text-xs leading-relaxed text-hd-muted">
-            Postgres and Redis come from <span class="font-mono text-hd-text">.cleat_deploy/deploy.json</span>.
+            Postgres and Redis come from <span class="font-mono text-hd-secondary">.cleat_deploy/deploy.json</span>.
             SQLite files also replicate with Litestream.
           </p>
         </div>
@@ -27,7 +24,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
           type="button"
           phx-click="refresh_addon_status"
           phx-disable-with="Checking…"
-          class="paas-btn-secondary ml-auto shrink-0 text-[10px]"
+          class="paas-btn-secondary ml-auto shrink-0"
         >
           <.icon name="hero-arrow-path" class="size-3.5" /> Refresh
         </button>
@@ -37,7 +34,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
         <li
           :for={addon <- @addons}
           id={"addon-#{addon_id(addon)}"}
-          class="flex flex-wrap items-center justify-between gap-3 border-b border-hd-border/50 px-4 py-3 last:border-b-0"
+          class="flex flex-wrap items-center justify-between gap-3 border-b border-hd-border/50 px-5 py-3 last:border-b-0"
         >
           <div class="flex items-center gap-2.5">
             <span class={[
@@ -45,8 +42,8 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
               dot_class(addon_state(@status, addon))
             ]} />
             <div class="min-w-0 space-y-0.5">
-              <p class="font-mono text-[12px] text-hd-text">{addon}</p>
-              <p class="text-[11px] text-hd-muted">{addon_detail(@status, addon)}</p>
+              <p class="font-mono text-xs text-hd-text">{addon}</p>
+              <p class="text-xs text-hd-muted">{addon_detail(@status, addon)}</p>
             </div>
           </div>
 
@@ -56,9 +53,9 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
             id={"rotate-#{addon_id(addon)}"}
             phx-click="rotate_addon_prompt"
             phx-value-addon={addon}
-            class="paas-btn-secondary text-[10px] uppercase"
+            class="paas-btn-secondary"
           >
-            <.icon name="hero-arrow-path" class="size-3" /> Rotate credentials
+            <.icon name="hero-arrow-path" class="size-3.5" /> Rotate credentials
           </button>
         </li>
       </ul>
@@ -87,24 +84,18 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
         role="dialog"
         aria-modal="true"
         aria-labelledby="rotate-addon-title"
-        class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-2xl"
       >
-        <div class="h-px bg-gradient-to-r from-transparent via-hd-orange/70 to-transparent" />
         <div class="space-y-5 p-5 sm:p-6">
-          <div class="flex items-start gap-3">
-            <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-hd-orange/30 bg-hd-orange/10 text-hd-orange">
-              <.icon name="hero-arrow-path" class="size-5" />
-            </div>
-            <div class="min-w-0 space-y-1">
-              <h3 id="rotate-addon-title" class="font-display text-base font-semibold text-hd-text">
-                Rotate {addon_label(@addon)} credentials?
-              </h3>
-              <p class="text-[13px] leading-relaxed text-hd-muted">
-                A new password is generated and stored in this app's env var right away. The server
-                only picks it up on the next deploy — until then the app keeps using the current
-                credentials, which stay valid.
-              </p>
-            </div>
+          <div class="space-y-1">
+            <h3 id="rotate-addon-title" class="text-base font-medium text-hd-text">
+              Rotate {addon_label(@addon)} credentials?
+            </h3>
+            <p class="text-[13px] leading-relaxed text-hd-muted">
+              A new password is generated and stored in this app's env var right away. The server
+              only picks it up on the next deploy — until then the app keeps using the current
+              credentials, which stay valid.
+            </p>
           </div>
 
           <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -168,6 +159,6 @@ defmodule CleatDeployWeb.AppLive.Layout.Addons do
 
   defp dot_class(:ready), do: "bg-hd-green"
   defp dot_class(:down), do: "bg-hd-muted"
-  defp dot_class(:error), do: "bg-rose-400"
+  defp dot_class(:error), do: "bg-hd-red"
   defp dot_class(_state), do: "bg-hd-muted/40"
 end

@@ -225,7 +225,7 @@ defmodule CleatDeployWeb.AppLive.Show do
         <div id="app-detail-tabs" class="paas-card overflow-hidden">
           <Layout.tab_bar app={@app} active_tab={@app_detail_tab} detail_tabs={@detail_tabs} />
 
-          <div class="p-4">
+          <div class="p-5">
             <Tabs.panel {assigns} />
           </div>
         </div>

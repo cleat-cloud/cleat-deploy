@@ -16,7 +16,7 @@ export function applyTheme(theme) {
   document.documentElement.dataset.theme = next
 
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute("content", next === "light" ? "#f4f6fa" : "#0b0e14")
+  if (meta) meta.setAttribute("content", next === "light" ? "#f4f5f8" : "#0a0c12")
 
   try {
     localStorage.setItem(STORAGE_KEY, next)

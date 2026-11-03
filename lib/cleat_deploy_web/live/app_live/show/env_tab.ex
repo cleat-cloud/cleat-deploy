@@ -10,11 +10,11 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
     <div :if={@app_detail_tab == :environment} id="app-env-vars" class="space-y-3">
       <div class="flex items-start justify-between gap-3">
         <div class="space-y-0.5">
-          <h3 class="font-display text-xs font-semibold text-hd-text">
+          <h3 class="text-sm font-medium text-hd-text">
             Environment variables
           </h3>
-          <p class="text-[11px] text-hd-muted">
-            Synced to <span class="font-mono text-hd-orange">{@env_file}</span>
+          <p class="text-xs text-hd-muted">
+            Synced to <span class="font-mono text-hd-secondary">{@env_file}</span>
             when you save a variable that applies to the running branch: the file is
             rewritten and active units restart. Vars scoped to another branch wait for
             that deploy. <span class="text-hd-text">PHX_HOST</span>
@@ -26,7 +26,7 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
             :if={Enum.any?(@env_vars, & &1.sensitive?)}
             type="button"
             phx-click="toggle_env_values"
-            class="text-[10px] text-hd-orange hover:underline"
+            class="text-xs text-hd-muted transition-colors hover:text-hd-text"
           >
             {if @show_env_values?, do: "Hide secrets", else: "Reveal secrets"}
           </button>
@@ -34,7 +34,7 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
             id="manage-env-vars-button"
             type="button"
             phx-click="open_env_modal"
-            class="paas-btn-primary uppercase"
+            class="paas-btn-primary"
           >
             <.icon name="hero-plus" class="size-3.5" /> Manage variables
           </button>
@@ -43,12 +43,12 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
 
       <div
         :if={@env_vars == []}
-        class="rounded border border-dashed border-hd-border px-4 py-6 text-center text-xs text-hd-muted"
+        class="rounded-lg border border-dashed border-hd-border px-4 py-6 text-center text-xs text-hd-muted"
       >
         No environment variables configured yet.
       </div>
 
-      <div :if={@env_vars != []} class="overflow-hidden rounded border border-hd-border">
+      <div :if={@env_vars != []} class="overflow-hidden rounded-lg border border-hd-border">
         <table class="paas-table w-full text-left font-mono">
           <thead>
             <tr>
@@ -64,12 +64,12 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
               id={Env.env_var_row_id(env_var)}
               data-branch={env_var.branch}
             >
-              <td class="align-top whitespace-nowrap text-[11px] text-hd-muted">
+              <td class="align-top whitespace-nowrap text-xs text-hd-muted">
                 {Env.branch_label(env_var.branch)}
               </td>
-              <td class="align-top text-[11px] text-hd-orange">{env_var.key}</td>
+              <td class="align-top text-xs text-hd-secondary">{env_var.key}</td>
               <td class="max-w-0">
-                <span class="block truncate text-[11px] text-hd-text">
+                <span class="block truncate text-xs text-hd-text">
                   {Apps.display_env_value(env_var.key, env_var.value, @show_env_values?)}
                 </span>
               </td>
@@ -79,7 +79,7 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
                   phx-click="edit_env_var"
                   phx-value-key={env_var.key}
                   phx-value-branch={env_var.branch}
-                  class="text-[10px] text-hd-orange hover:underline"
+                  class="text-xs text-hd-muted transition-colors hover:text-hd-text"
                 >
                   Edit
                 </button>
@@ -89,7 +89,7 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
                   phx-value-key={env_var.key}
                   phx-value-branch={env_var.branch}
                   data-confirm={"Remove #{env_var.key} for #{Env.branch_label(env_var.branch)}?"}
-                  class="ml-3 text-[10px] text-rose-400 hover:underline"
+                  class="ml-3 text-xs text-hd-muted transition-colors hover:text-hd-red"
                 >
                   Remove
                 </button>
@@ -117,12 +117,11 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
           role="dialog"
           aria-modal="true"
           aria-labelledby="env-var-title"
-          class="paas-modal-panel relative w-full max-w-lg overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+          class="paas-modal-panel relative w-full max-w-lg overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-2xl"
         >
-          <div class="h-px bg-gradient-to-r from-transparent via-hd-orange/70 to-transparent" />
           <div class="space-y-4 p-5 sm:p-6">
             <div class="space-y-1">
-              <h3 id="env-var-title" class="font-display text-base font-semibold text-hd-text">
+              <h3 id="env-var-title" class="text-base font-medium text-hd-text">
                 {if @editing_env_var?, do: "Edit variable", else: "New variable"}
               </h3>
               <p class="text-[13px] leading-relaxed text-hd-muted">
@@ -176,7 +175,7 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
                 <option value="All branches"></option>
                 <option :for={branch <- @env_branches} value={branch}></option>
               </datalist>
-              <p class="text-[11px] text-hd-muted">
+              <p class="text-xs text-hd-muted">
                 Keep <span class="text-hd-text">All branches</span>
                 to apply everywhere, or use a branch name to override only that branch.
               </p>
@@ -189,7 +188,7 @@ defmodule CleatDeployWeb.AppLive.Show.EnvTab do
                   phx-click="delete_env_var"
                   phx-value-key={@env_form[:key].value}
                   phx-value-branch={@env_form[:branch].value}
-                  class="paas-btn-secondary justify-center text-rose-400"
+                  class="paas-btn-secondary justify-center text-hd-red"
                 >
                   Remove
                 </button>

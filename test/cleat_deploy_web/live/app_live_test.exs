@@ -65,7 +65,7 @@ defmodule CleatDeployWeb.AppLiveTest do
     {:ok, view, _html} = live(conn, ~p"/apps")
     assert has_element?(view, "#apps-list")
     assert has_element?(view, "#apps-table")
-    assert has_element?(view, "#apps-table th", "Main language")
+    assert has_element?(view, "#apps-table th", "Language")
     assert has_element?(view, "#apps-table th", "RAM")
     assert has_element?(view, "#apps-table th", "CPU")
     assert has_element?(view, "#apps-table th", "Disk")
@@ -176,7 +176,7 @@ defmodule CleatDeployWeb.AppLiveTest do
     {:ok, view, _html} = live(conn, ~p"/apps")
 
     assert has_element?(view, "#apps-table")
-    assert has_element?(view, "#apps-table th", "Main language")
+    assert has_element?(view, "#apps-table th", "Language")
     assert has_element?(view, "#app-#{phoenix_app.id}-language", "Elixir")
     assert has_element?(view, "#app-#{go_app.id}-language", "Go")
     wait_for(view, fn -> has_element?(view, "#app-#{phoenix_app.id}-disk", "510 MB") end)
@@ -484,7 +484,7 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert has_element?(view, "#deploy-button")
     assert has_element?(view, "#app-detail-tabs")
     assert has_element?(view, "#deployments-history")
-    assert html =~ "Deployments Version History"
+    assert html =~ "Deploy history"
     assert html =~ "abc123"
     wait_for(view, fn -> has_element?(view, "#app-disk-tile", "510 MB") end)
     assert has_element?(view, "#app-memory-tile", "163 MB")
@@ -1092,7 +1092,7 @@ defmodule CleatDeployWeb.AppLiveTest do
     html = render(view)
     assert html =~ "webhook-sha"
     assert has_element?(view, "#deployments-#{deployment.id}")
-    assert has_element?(view, "#deploy-button", "Build in progress")
+    assert has_element?(view, "#deploy-button", "Deploying")
   end
 
   test "updates deploy status without a page refresh", %{
@@ -1110,13 +1110,13 @@ defmodule CleatDeployWeb.AppLiveTest do
     html = render(view)
     assert html =~ "running"
     assert has_element?(view, "#deployments-#{running.id}")
-    assert has_element?(view, "#deploy-button", "Build in progress")
+    assert has_element?(view, "#deploy-button", "Deploying")
 
     {:ok, _success} = Deployments.mark_success(running, "deploy finished live")
     html = render(view)
     assert html =~ "success"
     assert html =~ "deploy finished live"
-    refute has_element?(view, "#deploy-button", "Build in progress")
+    refute has_element?(view, "#deploy-button", "Deploying")
   end
 
   test "shows deploy duration in history", %{conn: conn, scope: scope, server: server} do
@@ -1188,7 +1188,8 @@ defmodule CleatDeployWeb.AppLiveTest do
 
     assert has_element?(view, "#view-deploy-log-#{older.id}[aria-pressed=true]")
     assert has_element?(view, "#view-deploy-log-#{newer.id}[aria-pressed=false]")
-    assert render(view) =~ "Viewing deploy ##{older.id}"
+    assert render(view) =~ "Viewing deploy"
+    assert render(view) =~ "##{older.id}"
   end
 
   test "hides history pagination when there are 10 or fewer deployments", %{
@@ -1527,7 +1528,7 @@ defmodule CleatDeployWeb.AppLiveTest do
     html = render(view)
     refute html =~ running.host
     refute html =~ static.host
-    assert html =~ "No applications match this filter."
+    assert html =~ "No applications match this filter"
     assert_patch(view, ~p"/apps?state=off")
 
     view |> element("#apps-filter-state-on") |> render_click()

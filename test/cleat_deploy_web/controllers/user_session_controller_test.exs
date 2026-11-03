@@ -355,6 +355,19 @@ defmodule CleatDeployWeb.UserSessionControllerTest do
       refute get_session(conn, :user_token)
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Logged out successfully"
     end
+
+    test "a stale form after the session ended redirects instead of erroring", %{conn: conn} do
+      # Browser back button / second tab / PWA restore: the log-out form is
+      # resubmitted after the session was already renewed, so it carries no
+      # user token and the previous CSRF token.
+      conn =
+        conn
+        |> with_csrf()
+        |> post(~p"/users/log-out", %{"_method" => "delete", "_csrf_token" => "stale"})
+
+      assert redirected_to(conn) == ~p"/users/log-in"
+      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "already signed out"
+    end
   end
 
   defp failed_password_login(conn, email) do

@@ -9,7 +9,7 @@ defmodule CleatDeployWeb.Router do
     plug :redirect_authenticated_login_post
     plug :fetch_live_flash
     plug :put_root_layout, html: {CleatDeployWeb.Layouts, :root}
-    plug :protect_from_forgery
+    plug :verify_csrf
     plug :put_secure_browser_headers
     plug :fetch_current_scope_for_user
   end

@@ -11,7 +11,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Tabs do
     <div
       role="tablist"
       aria-label="App configuration"
-      class="flex flex-wrap items-center gap-1 border-b border-hd-border bg-hd-aside p-1"
+      class="flex flex-wrap items-center gap-1 border-b border-hd-border"
     >
       <.detail_tab_link
         tab={:deployments}
@@ -91,11 +91,11 @@ defmodule CleatDeployWeb.AppLive.Layout.Tabs do
       role="tab"
       aria-selected={@active?}
       class={[
-        "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold tracking-wide transition-all",
-        @active? && @tone == :danger && "border border-rose-500/40 bg-hd-card text-rose-400",
-        @active? && @tone != :danger && "border border-hd-border bg-hd-card text-hd-orange",
-        !@active? && @tone == :danger && "text-hd-muted hover:text-rose-400",
-        !@active? && @tone != :danger && "text-hd-muted hover:text-hd-text"
+        "-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2 text-[13px] font-medium transition-colors",
+        @active? && @tone == :danger && "border-hd-red text-hd-red",
+        @active? && @tone != :danger && "border-hd-orange text-hd-text",
+        !@active? && @tone == :danger && "border-transparent text-hd-muted hover:text-hd-red",
+        !@active? && @tone != :danger && "border-transparent text-hd-muted hover:text-hd-text"
       ]}
     >
       <.icon name={@icon} class="size-3.5" />

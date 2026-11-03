@@ -54,7 +54,7 @@ defmodule CleatDeployWeb.PaasComponents.RepoPicker do
             autocomplete="off"
             class={[
               "paas-input w-full pl-9",
-              @errors != [] && "border-rose-500"
+              @errors != [] && "border-hd-red"
             ]}
           />
           <input type="hidden" name={@field.name} id={@field.id} value={@selected} />
@@ -64,10 +64,10 @@ defmodule CleatDeployWeb.PaasComponents.RepoPicker do
       <ul
         :if={@open?}
         id="github-repo-options"
-        class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-hd-border bg-hd-card shadow-xl"
+        class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-hd-border bg-hd-card shadow-xl"
       >
         <li :if={@filtered == []} class="px-3 py-2 text-xs text-hd-muted">
-          No repositories match your search.
+          No repositories match your search
         </li>
         <li :for={{label, value} <- @filtered} id={"github-repo-option-#{slugify_option_id(value)}"}>
           <button
@@ -75,8 +75,8 @@ defmodule CleatDeployWeb.PaasComponents.RepoPicker do
             phx-click="pick_repo"
             phx-value-repo={value}
             class={[
-              "flex w-full items-center px-3 py-2 text-left font-mono text-xs transition-colors hover:bg-hd-aside",
-              @selected == value && "bg-hd-aside/80 text-hd-orange"
+              "flex w-full items-center px-3 py-2 text-left font-mono text-xs transition-colors hover:bg-hd-raised",
+              @selected == value && "bg-hd-raised text-hd-text"
             ]}
           >
             {label}
@@ -84,13 +84,13 @@ defmodule CleatDeployWeb.PaasComponents.RepoPicker do
         </li>
         <li
           :if={@total_matches > @repo_picker_limit}
-          class="border-t border-hd-border px-3 py-2 text-[10px] text-hd-muted"
+          class="border-t border-hd-border px-3 py-2 text-xs text-hd-muted"
         >
           Showing first 50 of {@total_matches} matches. Refine your search.
         </li>
       </ul>
 
-      <p :for={msg <- @errors} class="mt-1 text-xs text-rose-400">
+      <p :for={msg <- @errors} class="mt-1 text-xs text-hd-red">
         {translate_form_error(msg)}
       </p>
     </div>

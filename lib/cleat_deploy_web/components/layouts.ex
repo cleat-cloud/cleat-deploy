@@ -23,10 +23,8 @@ defmodule CleatDeployWeb.Layouts do
             <PaasShell.theme_toggle id="theme-toggle-auth" />
           </div>
           <div class="mb-8 flex items-center gap-2.5">
-            <div class="flex size-9 items-center justify-center rounded-lg border border-hd-border bg-hd-card">
-              <.icon name="hero-fire" class="size-5 text-hd-orange" />
-            </div>
-            <h1 class="font-display text-lg font-semibold tracking-tight">Cleat</h1>
+            <.icon name="hero-fire" class="size-5 text-hd-orange" />
+            <h1 class="text-base tracking-tight">Cleat</h1>
           </div>
 
           <div class="w-full max-w-sm space-y-4">
@@ -43,21 +41,14 @@ defmodule CleatDeployWeb.Layouts do
           <header class="border-b border-hd-border bg-hd-aside px-4 py-3">
             <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
               <.link navigate={~p"/"} class="group flex items-center gap-2.5" aria-label="Cleat">
-                <div class="flex size-9 items-center justify-center rounded-lg border border-hd-border bg-hd-card">
-                  <.icon name="hero-fire" class="size-5 text-hd-orange" />
-                </div>
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <h1 class="font-display text-lg font-semibold tracking-tight">Cleat</h1>
-                    <span class="rounded-full border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] tracking-widest text-hd-muted uppercase">
-                      MVP
-                    </span>
-                  </div>
+                <.icon name="hero-fire" class="size-[18px] text-hd-orange" />
+                <div class="flex items-baseline gap-2.5">
+                  <h1 class="text-base tracking-tight">Cleat</h1>
                   <p class="hidden text-xs text-hd-muted sm:block">GitHub → SSH → your VPS</p>
                 </div>
               </.link>
 
-              <div class="flex items-center gap-2 text-xs font-medium">
+              <div class="flex items-center gap-2 text-[13px] font-medium">
                 <PaasShell.theme_toggle id="theme-toggle-landing" />
                 <span :if={@current_scope} class="hidden text-hd-muted sm:inline">
                   {@current_scope.user.email}
@@ -65,21 +56,21 @@ defmodule CleatDeployWeb.Layouts do
                 <.link
                   :if={@current_scope}
                   navigate={~p"/"}
-                  class="paas-btn-primary px-3 py-1.5"
+                  class="paas-btn-primary"
                 >
                   Open panel
                 </.link>
                 <.link
                   :if={is_nil(@current_scope)}
                   href={~p"/users/log-in"}
-                  class="paas-btn-secondary px-3 py-1.5"
+                  class="paas-btn-secondary"
                 >
                   Log in
                 </.link>
                 <.link
                   :if={is_nil(@current_scope) and CleatDeploy.Accounts.registration_allowed?()}
                   href={~p"/users/register"}
-                  class="paas-btn-primary px-3 py-1.5"
+                  class="paas-btn-primary"
                 >
                   Register
                 </.link>
@@ -93,9 +84,9 @@ defmodule CleatDeployWeb.Layouts do
             {render_slot(@inner_block)}
           </main>
 
-          <footer class="border-t border-hd-border bg-hd-aside px-4 py-4">
-            <p class="text-center font-mono text-[10px] tracking-wider text-hd-muted">
-              CLEAT · SELF-HOSTED PAAS PANEL
+          <footer class="border-t border-hd-border bg-hd-aside px-4 py-3.5">
+            <p class="text-center font-mono text-xs text-hd-muted">
+              Cleat · self-hosted PaaS
             </p>
           </footer>
         </div>

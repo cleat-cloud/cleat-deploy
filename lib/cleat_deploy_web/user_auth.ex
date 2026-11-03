@@ -213,6 +213,34 @@ defmodule CleatDeployWeb.UserAuth do
   defp login_post?(_conn), do: false
 
   @doc """
+  Verifies the CSRF token, but a log-out resubmitted from a restored page goes
+  to the log-in page instead of the 403 error page.
+
+  The first log out renews the session, so resubmitting the same form (browser
+  back button, a second tab, the installed PWA) carries no user token and the
+  previous CSRF token. There is no session left to end. Every other invalid
+  token keeps raising `Plug.CSRFProtection.InvalidCSRFTokenError`.
+  """
+  def verify_csrf(conn, opts) do
+    Plug.CSRFProtection.call(conn, Plug.CSRFProtection.init(opts))
+  rescue
+    exception in Plug.CSRFProtection.InvalidCSRFTokenError ->
+      if logout_request?(conn) and is_nil(get_session(conn, :user_token)) do
+        conn
+        |> put_flash(:info, "You are already signed out.")
+        |> redirect(to: ~p"/users/log-in")
+        |> halt()
+      else
+        reraise exception, __STACKTRACE__
+      end
+  end
+
+  defp logout_request?(%Plug.Conn{method: "DELETE", path_info: ["users", "log-out"]}),
+    do: true
+
+  defp logout_request?(_conn), do: false
+
+  @doc """
   Plug for routes that require the user to not be authenticated.
   """
   def redirect_if_user_is_authenticated(conn, _opts) do

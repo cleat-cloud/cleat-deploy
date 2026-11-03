@@ -8,9 +8,9 @@ defmodule CleatDeployWeb.AppLive.Index.Form do
   def register_form(assigns) do
     ~H"""
     <div :if={@live_action == :new} class="paas-card">
-      <div class="space-y-4 p-4">
+      <div class="space-y-4 p-5">
         <div class="space-y-1">
-          <h3 class="font-display text-sm font-semibold text-hd-text">
+          <h3 class="text-[15px] font-medium text-hd-text">
             Register application
           </h3>
           <p class="text-xs text-hd-muted">
@@ -38,9 +38,9 @@ defmodule CleatDeployWeb.AppLive.Index.Form do
           <div
             :if={repo_selected?(@form)}
             id="app-provision-preview"
-            class="rounded-md border border-hd-border bg-hd-aside p-3"
+            class="rounded-lg border border-hd-border bg-hd-aside p-4"
           >
-            <p class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+            <p class="text-xs text-hd-muted">
               Auto-configured profile
             </p>
             <dl class="mt-2 grid gap-2 sm:grid-cols-2">
@@ -56,7 +56,7 @@ defmodule CleatDeployWeb.AppLive.Index.Form do
               <.preview_item label="Systemd unit" value={@form[:systemd_unit].value} mono />
               <.preview_item label="Release path" value={@form[:release_path].value} mono />
             </dl>
-            <p class="mt-2 text-[11px] text-hd-muted">
+            <p class="mt-2 text-xs text-hd-muted">
               Push webhook is provisioned on save. Runtime packages can come from
               <span class="font-mono">.cleat_deploy/runtime-packages</span>
               in the repo.
@@ -93,7 +93,7 @@ defmodule CleatDeployWeb.AppLive.Index.Form do
             id="app-advanced-fields"
             class="space-y-4 border-t border-hd-border pt-4"
           >
-            <p class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+            <p class="text-xs text-hd-muted">
               Advanced overrides
             </p>
             <div class="grid gap-4 sm:grid-cols-2">
@@ -209,7 +209,7 @@ defmodule CleatDeployWeb.AppLive.Index.Form do
   def preview_item(assigns) do
     ~H"""
     <div class="min-w-0">
-      <dt class="font-mono text-[9px] uppercase tracking-wider text-hd-muted">{@label}</dt>
+      <dt class="text-xs text-hd-muted">{@label}</dt>
       <dd class={["truncate text-xs font-medium text-hd-text", @mono && "font-mono"]}>
         {@value || "—"}
       </dd>

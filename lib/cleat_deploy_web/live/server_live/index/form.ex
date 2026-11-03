@@ -10,12 +10,12 @@ defmodule CleatDeployWeb.ServerLive.Index.Form do
     <div :if={@live_action == :new} class="paas-card overflow-hidden">
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-hd-border px-4 py-3">
         <div>
-          <h3 class="font-display text-sm font-semibold text-hd-text">New Hetzner VM</h3>
-          <p class="text-[11px] text-hd-muted">
+          <h3 class="text-sm text-hd-text">New Hetzner VM</h3>
+          <p class="text-xs text-hd-muted">
             Creates a real Ubuntu box in Hetzner Cloud and registers it here
           </p>
         </div>
-        <div class="flex rounded-md border border-hd-border bg-hd-aside p-0.5 text-[11px] font-semibold">
+        <div class="flex rounded-lg border border-hd-border bg-hd-aside p-0.5 text-xs">
           <button
             id="form-mode-create"
             type="button"
@@ -72,12 +72,12 @@ defmodule CleatDeployWeb.ServerLive.Index.Form do
 
           <div class="space-y-2">
             <div class="flex items-center justify-between gap-3">
-              <p class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+              <p class="text-xs text-hd-muted">
                 Plan
               </p>
               <div
                 id="plan-currency"
-                class="flex rounded-md border border-hd-border bg-hd-aside p-0.5 text-[11px] font-semibold"
+                class="flex rounded-lg border border-hd-border bg-hd-aside p-0.5 text-xs"
                 role="group"
                 aria-label="Plan currency"
               >
@@ -131,30 +131,30 @@ defmodule CleatDeployWeb.ServerLive.Index.Form do
                   class="sr-only"
                 />
                 <div class="flex items-start justify-between gap-2">
-                  <p class="font-display text-sm font-semibold text-hd-text">
+                  <p class="text-sm text-hd-text">
                     {bundle.bundle_name}
                   </p>
                   <span
                     :if={bundle.bundle_id == "cx33"}
-                    class="rounded-full border border-hd-orange/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-hd-orange"
+                    class="rounded-full border border-hd-orange/40 px-1.5 py-0.5 font-mono text-xs text-hd-orange"
                   >
                     Rec
                   </span>
                 </div>
-                <p class="mt-1 font-mono text-[11px] text-hd-muted">
+                <p class="mt-1 font-mono text-xs text-hd-muted">
                   {bundle.cpu_count} vCPU · {CleatDeploy.Servers.Server.format_ram(
                     %CleatDeploy.Servers.Server{ram_mb: bundle.ram_mb}
                   )} · {bundle.disk_gb} GB
                 </p>
                 <p
                   id={"bundle-#{bundle.bundle_id}-price"}
-                  class="mt-2 font-mono text-xs font-semibold text-hd-text"
+                  class="mt-2 font-mono text-xs text-hd-text"
                 >
                   {Catalog.format_price(bundle, @plan_currency)}
                 </p>
               </label>
             </div>
-            <p :if={@plan_currency == :usd} class="text-[10px] text-hd-muted">
+            <p :if={@plan_currency == :usd} class="text-xs text-hd-muted">
               Estimate · Hetzner bills in euro (€1 = $1.16)
             </p>
           </div>
@@ -169,7 +169,7 @@ defmodule CleatDeployWeb.ServerLive.Index.Form do
             ]}
           />
 
-          <p class="text-[11px] leading-relaxed text-hd-muted">
+          <p class="text-xs leading-relaxed text-hd-muted">
             Ubuntu 24.04, user <span class="font-mono text-hd-text">ubuntu</span>, SSH key
             reused from an existing server or generated automatically. Public IPv4 comes
             from Hetzner after the VM boots.
@@ -189,7 +189,7 @@ defmodule CleatDeployWeb.ServerLive.Index.Form do
       </div>
 
       <div :if={@form_mode == :register} class="space-y-4 p-4">
-        <p class="text-[11px] text-hd-muted">
+        <p class="text-xs text-hd-muted">
           Use this only for a box that already exists (Tailscale or an imported IP).
         </p>
         <.form

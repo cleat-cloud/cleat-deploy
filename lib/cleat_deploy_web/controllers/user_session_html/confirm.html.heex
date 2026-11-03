@@ -1,7 +1,10 @@
 <Layouts.app flash={@flash} current_scope={@current_scope} active_tab={:auth}>
   <div class="mx-auto max-w-sm">
     <div class="text-center">
-      <.header>Welcome {@user.email}</.header>
+      <.header>
+        Confirm log in
+        <:subtitle>{@user.email}</:subtitle>
+      </.header>
     </div>
 
     <.form

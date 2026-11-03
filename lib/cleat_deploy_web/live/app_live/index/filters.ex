@@ -24,7 +24,7 @@ defmodule CleatDeployWeb.AppLive.Index.Filters do
               id="apps-query"
               value={@apps_query}
               phx-debounce="150"
-              placeholder="Filter by name, host, language, or server"
+              placeholder="Filter apps"
               class="paas-input w-full pl-9"
             />
           </label>
@@ -85,9 +85,9 @@ defmodule CleatDeployWeb.AppLive.Index.Filters do
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
         <div class="flex flex-wrap items-center gap-1.5">
-          <span class="font-mono text-[9px] font-semibold tracking-wider text-hd-muted uppercase">
+          <span class="pr-1 text-xs text-hd-muted">
             Idle
           </span>
           <.filter_chip
@@ -117,7 +117,7 @@ defmodule CleatDeployWeb.AppLive.Index.Filters do
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5">
-          <span class="font-mono text-[9px] font-semibold tracking-wider text-hd-muted uppercase">
+          <span class="pr-1 text-xs text-hd-muted">
             Status
           </span>
           <.filter_chip
@@ -166,10 +166,10 @@ defmodule CleatDeployWeb.AppLive.Index.Filters do
       phx-click={@event}
       phx-value-value={@value}
       class={[
-        "rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide transition-colors",
-        @active? && "border-hd-orange/50 bg-hd-orange/10 text-hd-orange",
+        "rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+        @active? && "border-hd-text/25 bg-hd-raised text-hd-text",
         not @active? &&
-          "border-hd-border bg-hd-card text-hd-muted hover:border-hd-orange/40 hover:text-hd-text"
+          "border-hd-border bg-hd-card text-hd-muted hover:text-hd-text"
       ]}
     >
       {render_slot(@inner_block)}
@@ -193,10 +193,10 @@ defmodule CleatDeployWeb.AppLive.Index.Filters do
       phx-click="filter_runtime"
       phx-value-runtime={@runtime}
       class={[
-        "rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide transition-colors",
-        @active? && "border-hd-orange/50 bg-hd-orange/10 text-hd-orange",
+        "rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+        @active? && "border-hd-text/25 bg-hd-raised text-hd-text",
         not @active? &&
-          "border-hd-border bg-hd-card text-hd-muted hover:border-hd-orange/40 hover:text-hd-text"
+          "border-hd-border bg-hd-card text-hd-muted hover:text-hd-text"
       ]}
     >
       {render_slot(@inner_block)}

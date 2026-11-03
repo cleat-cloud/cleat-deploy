@@ -14,127 +14,61 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
   attr :rust, :integer, default: 0
   attr :static, :integer, default: 0
 
+  # One ranked list with a single ember leader: seven colored bars would be a
+  # legend of hues for a chart that only has to rank seven counts.
   def runtime_bars(assigns) do
     counts = [
-      assigns.elixir,
-      assigns.gleam,
-      assigns.go,
-      assigns.js,
-      assigns.ruby,
-      assigns.rust,
-      assigns.static
+      {"Elixir", :phoenix, assigns.elixir},
+      {"Gleam", :gleam, assigns.gleam},
+      {"Go", :golang, assigns.go},
+      {"JavaScript", :node, assigns.js},
+      {"Ruby", :rails, assigns.ruby},
+      {"Rust", :rust, assigns.rust},
+      {"Static", :static, assigns.static}
     ]
 
-    total = max(Enum.sum(counts), 1)
-    elixir_pct = round(assigns.elixir / total * 100)
-    gleam_pct = round(assigns.gleam / total * 100)
-    go_pct = round(assigns.go / total * 100)
-    js_pct = round(assigns.js / total * 100)
-    ruby_pct = round(assigns.ruby / total * 100)
-    rust_pct = round(assigns.rust / total * 100)
-    static_pct = round(assigns.static / total * 100)
+    total = counts |> Enum.map(&elem(&1, 2)) |> Enum.sum()
+    peak = counts |> Enum.map(&elem(&1, 2)) |> Enum.max(fn -> 0 end)
 
-    assigns =
-      assign(assigns,
-        elixir_pct: elixir_pct,
-        gleam_pct: gleam_pct,
-        go_pct: go_pct,
-        js_pct: js_pct,
-        ruby_pct: ruby_pct,
-        rust_pct: rust_pct,
-        static_pct: static_pct,
-        total: Enum.sum(counts)
-      )
+    rows =
+      counts
+      |> Enum.reject(fn {_label, _runtime, count} -> count == 0 end)
+      |> Enum.map(fn {label, runtime, count} ->
+        %{
+          label: label,
+          runtime: runtime,
+          count: count,
+          pct: if(total > 0, do: round(count / total * 100), else: 0),
+          width: if(peak > 0, do: max(round(count / peak * 100), 3), else: 0),
+          lead?: count == peak
+        }
+      end)
+
+    assigns = assign(assigns, rows: rows, total: total)
 
     ~H"""
-    <section id={@id} class="paas-card p-4">
-      <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
-        Apps by language
-      </h3>
-      <p class="text-[11px] text-hd-muted">{@total} registered on this server</p>
-      <div class="mt-5 space-y-4">
-        <.link navigate={~p"/apps?runtime=phoenix"} class="group/row block">
-          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-orange group-hover/row:underline">Elixir</span>
-            <span class="tabular-nums text-hd-text">{@elixir}</span>
+    <section id={@id} class="paas-card p-5">
+      <h3 class="text-[13px] font-medium text-hd-secondary">Apps by language</h3>
+      <p class="text-xs text-hd-muted">{@total} registered on this server</p>
+      <div :if={@rows == []} class="py-10 text-center text-[13px] text-hd-muted">
+        No apps on this server
+      </div>
+      <div :if={@rows != []} class="mt-4 space-y-3">
+        <.link
+          :for={row <- @rows}
+          navigate={~p"/apps?runtime=#{row.runtime}"}
+          class="group/row block"
+          title={"#{row.count} apps · #{row.pct}%"}
+        >
+          <div class="mb-1 flex items-center justify-between gap-3 text-xs">
+            <span class="text-hd-secondary group-hover/row:text-hd-text">{row.label}</span>
+            <span class="font-mono tabular-nums text-hd-muted">{row.count}</span>
           </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-hd-orange" style={"width: #{@elixir_pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {@elixir} apps · {@elixir_pct}%
-            </span>
-          </div>
-        </.link>
-        <.link navigate={~p"/apps?runtime=gleam"} class="group/row block">
-          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-pink-400 group-hover/row:underline">Gleam</span>
-            <span class="tabular-nums text-hd-text">{@gleam}</span>
-          </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-pink-400" style={"width: #{@gleam_pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {@gleam} apps · {@gleam_pct}%
-            </span>
-          </div>
-        </.link>
-        <.link navigate={~p"/apps?runtime=golang"} class="group/row block">
-          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-green group-hover/row:underline">Go</span>
-            <span class="tabular-nums text-hd-text">{@go}</span>
-          </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-hd-green" style={"width: #{@go_pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {@go} apps · {@go_pct}%
-            </span>
-          </div>
-        </.link>
-        <.link navigate={~p"/apps?runtime=node"} class="group/row block">
-          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-blue group-hover/row:underline">JavaScript</span>
-            <span class="tabular-nums text-hd-text">{@js}</span>
-          </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-hd-blue" style={"width: #{@js_pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {@js} apps · {@js_pct}%
-            </span>
-          </div>
-        </.link>
-        <.link navigate={~p"/apps?runtime=rails"} class="group/row block">
-          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-red group-hover/row:underline">Ruby</span>
-            <span class="tabular-nums text-hd-text">{@ruby}</span>
-          </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-hd-red" style={"width: #{@ruby_pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {@ruby} apps · {@ruby_pct}%
-            </span>
-          </div>
-        </.link>
-        <.link navigate={~p"/apps?runtime=rust"} class="group/row block">
-          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-amber-500 group-hover/row:underline">Rust</span>
-            <span class="tabular-nums text-hd-text">{@rust}</span>
-          </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-amber-500" style={"width: #{@rust_pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {@rust} apps · {@rust_pct}%
-            </span>
-          </div>
-        </.link>
-        <.link navigate={~p"/apps?runtime=static"} class="group/row block">
-          <div class="mb-1 flex items-center justify-between font-mono text-[11px]">
-            <span class="text-hd-muted group-hover/row:underline">Static</span>
-            <span class="tabular-nums text-hd-text">{@static}</span>
-          </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-hd-muted" style={"width: #{@static_pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {@static} apps · {@static_pct}%
-            </span>
+          <div class="h-1.5 rounded-sm bg-hd-raised">
+            <div
+              class={["h-1.5 rounded-sm", row.lead? && "bg-hd-orange", !row.lead? && "bg-hd-muted/40"]}
+              style={"width: #{row.width}%"}
+            />
           </div>
         </.link>
       </div>
@@ -146,14 +80,15 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
   attr :days, :list, required: true
 
   def deploy_bars(assigns) do
-    max_v =
-      assigns.days
-      |> Enum.map(&(&1.success + &1.failed))
-      |> Enum.max(fn -> 1 end)
-      |> max(1)
+    totals = Enum.map(assigns.days, &(&1.success + &1.failed))
+    max_v = totals |> Enum.max(fn -> 1 end) |> max(1)
+    total_deploys = Enum.sum(totals)
+
+    success_total = Enum.map(assigns.days, & &1.success) |> Enum.sum()
+    failed_total = Enum.map(assigns.days, & &1.failed) |> Enum.sum()
 
     bar_w = 18
-    gap = 2
+    gap = 4
     slot = bar_w + gap
     width = max(length(assigns.days) * slot, 1)
     height = 96
@@ -195,66 +130,89 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
       end)
 
     assigns =
-      assign(assigns, bars: bars, width: width, height: height, bar_w: bar_w, points: points)
+      assign(assigns,
+        bars: bars,
+        width: width,
+        height: height,
+        bar_w: bar_w,
+        points: points,
+        total_deploys: total_deploys,
+        success_total: success_total,
+        failed_total: failed_total
+      )
 
     ~H"""
-    <section id={@id} class="paas-card p-4">
-      <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
-        Deploys · 14 days
-      </h3>
-      <p class="text-[11px] text-hd-muted">Success vs failed on this server</p>
-      <.chart_hover_layer id={"#{@id}-plot"} points={@points} view_width={@width}>
-        <svg
-          viewBox={"0 0 #{@width} #{@height}"}
-          preserveAspectRatio="none"
-          class="h-24 w-full"
-          role="img"
-          aria-label="Deployments last 14 days"
-        >
-          <g :for={bar <- @bars}>
-            <rect
-              :if={bar.success_h > 0}
-              x={bar.x}
-              y={bar.y_ok}
-              width={@bar_w}
-              height={bar.success_h}
-              rx="2"
-              fill="var(--color-hd-green)"
+    <section id={@id} class="paas-card p-5">
+      <h3 class="text-[13px] font-medium text-hd-secondary">Deploys · 14 days</h3>
+      <p :if={@total_deploys > 0} class="text-xs text-hd-muted">
+        {@success_total} ok · {@failed_total} failed on this server
+      </p>
+      <div :if={@total_deploys > 0}>
+        <.chart_hover_layer id={"#{@id}-plot"} points={@points} view_width={@width}>
+          <svg
+            viewBox={"0 0 #{@width} #{@height}"}
+            preserveAspectRatio="none"
+            class="h-24 w-full"
+            role="img"
+            aria-label="Deployments last 14 days"
+          >
+            <g :for={bar <- @bars}>
+              <rect
+                :if={bar.success_h > 0}
+                x={bar.x}
+                y={bar.y_ok}
+                width={@bar_w}
+                height={bar.success_h}
+                rx="2"
+                fill="var(--color-hd-green)"
+              />
+              <rect
+                :if={bar.fail_h > 0}
+                x={bar.x}
+                y={bar.y_fail}
+                width={@bar_w}
+                height={bar.fail_h}
+                rx="2"
+                fill="var(--color-hd-red)"
+              />
+              <rect
+                x={bar.x}
+                y="0"
+                width={@bar_w}
+                height={@height}
+                fill="transparent"
+                class="cursor-crosshair"
+              />
+            </g>
+            <line
+              x1="0"
+              y1={@height}
+              x2={@width}
+              y2={@height}
+              stroke="var(--color-hd-text)"
+              stroke-opacity="0.12"
+              stroke-width="1"
             />
-            <rect
-              :if={bar.fail_h > 0}
-              x={bar.x}
-              y={bar.y_fail}
-              width={@bar_w}
-              height={bar.fail_h}
-              rx="2"
-              fill="#f85149"
-            />
-            <rect
-              x={bar.x}
-              y="0"
-              width={@bar_w}
-              height={@height}
-              fill="transparent"
-              class="cursor-crosshair"
-            />
-          </g>
-        </svg>
-      </.chart_hover_layer>
-      <div id={"#{@id}-labels"} class="mt-1 flex">
+          </svg>
+        </.chart_hover_layer>
+      </div>
+      <div :if={@total_deploys == 0} class="flex h-28 items-center justify-center">
+        <p class="text-[13px] text-hd-muted">No deploys in the last 14 days</p>
+      </div>
+      <div :if={@total_deploys > 0} id={"#{@id}-labels"} class="mt-1 flex">
         <span
           :for={bar <- @bars}
-          class="flex-1 text-center font-mono text-[9px] tabular-nums text-hd-muted"
+          class="flex-1 text-center font-mono text-[11px] tabular-nums text-hd-muted"
         >
           {bar.label}
         </span>
       </div>
-      <div class="mt-1 flex gap-3 font-mono text-[10px] text-hd-muted">
-        <span class="inline-flex items-center gap-1">
+      <div :if={@total_deploys > 0} class="mt-2 flex gap-4 font-mono text-[11px] text-hd-muted">
+        <span class="inline-flex items-center gap-1.5">
           <span class="size-1.5 rounded-full bg-hd-green" /> Success
         </span>
-        <span class="inline-flex items-center gap-1">
-          <span class="size-1.5 rounded-full bg-rose-500" /> Failed
+        <span class="inline-flex items-center gap-1.5">
+          <span class="size-1.5 rounded-full bg-hd-red" /> Failed
         </span>
       </div>
     </section>
@@ -265,46 +223,38 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
   attr :apps, :list, default: []
 
   def access_bars(assigns) do
-    max_v =
-      assigns.apps
-      |> Enum.map(& &1.requests)
-      |> Enum.max(fn -> 1 end)
-      |> max(1)
-
-    rows =
-      Enum.map(assigns.apps, fn app ->
-        Map.put(app, :pct, round(app.requests / max_v * 100))
-      end)
-
-    assigns = assign(assigns, rows: rows)
+    assigns = assign(assigns, rows: ranked_rows(assigns.apps, :requests))
 
     ~H"""
-    <section id={@id} class="paas-card p-4 lg:col-span-2">
-      <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
-        Most requested · 24h
-      </h3>
-      <p class="text-[11px] text-hd-muted">HTTP requests on this server</p>
-      <div :if={@rows == []} class="mt-8 text-center font-mono text-[11px] text-hd-muted">
+    <section id={@id} class="paas-card p-5 lg:col-span-2">
+      <h3 class="text-[13px] font-medium text-hd-secondary">Most requested · 24h</h3>
+      <p class="text-xs text-hd-muted">HTTP requests on this server</p>
+      <div :if={@rows == []} class="py-10 text-center text-[13px] text-hd-muted">
         No request samples yet
       </div>
-      <div :if={@rows != []} class="mt-5 space-y-4">
+      <div :if={@rows != []} class="mt-4 space-y-3">
         <.link
           :for={row <- @rows}
           id={"#{@id}-#{row.slug}"}
           navigate={~p"/apps/#{row.id}"}
           class="group/row block"
+          title={"#{row.value} requests"}
         >
-          <div class="mb-1 flex items-center justify-between gap-3 font-mono text-[11px]">
-            <span class="truncate text-hd-text group-hover/row:text-hd-orange group-hover/row:underline">
+          <div class="mb-1 flex items-center justify-between gap-3 text-xs">
+            <span class="truncate text-hd-secondary group-hover/row:text-hd-text">
               {row.name}
             </span>
-            <span class="shrink-0 tabular-nums text-hd-muted">{row.requests}</span>
+            <span class="shrink-0 font-mono tabular-nums text-hd-muted">{row.value}</span>
           </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-hd-orange" style={"width: #{row.pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {row.requests} requests
-            </span>
+          <div class="h-1.5 rounded-sm bg-hd-raised">
+            <div
+              class={[
+                "h-1.5 rounded-sm",
+                row.lead? && "bg-hd-orange",
+                !row.lead? && "bg-hd-muted/40"
+              ]}
+              style={"width: #{row.width}%"}
+            />
           </div>
         </.link>
       </div>
@@ -317,50 +267,62 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
   attr :stale, :boolean, default: false
 
   def visited_bars(assigns) do
-    max_v =
-      assigns.apps
-      |> Enum.map(& &1.pageviews)
-      |> Enum.max(fn -> 1 end)
-      |> max(1)
-
-    rows =
-      Enum.map(assigns.apps, fn app ->
-        Map.put(app, :pct, round(app.pageviews / max_v * 100))
-      end)
-
-    assigns = assign(assigns, rows: rows)
+    assigns = assign(assigns, rows: ranked_rows(assigns.apps, :pageviews))
 
     ~H"""
-    <section id={@id} class="paas-card p-4 lg:col-span-2">
-      <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+    <section id={@id} class="paas-card p-5 lg:col-span-2">
+      <h3 class="text-[13px] font-medium text-hd-secondary">
         Most visited · 24h{if(@stale, do: " · stale")}
       </h3>
-      <p class="text-[11px] text-hd-muted">Pageviews on this server</p>
-      <div :if={@rows == []} class="mt-8 text-center font-mono text-[11px] text-hd-muted">
+      <p class="text-xs text-hd-muted">Pageviews on this server</p>
+      <div :if={@rows == []} class="py-10 text-center text-[13px] text-hd-muted">
         No pageviews yet
       </div>
-      <div :if={@rows != []} class="mt-5 space-y-4">
+      <div :if={@rows != []} class="mt-4 space-y-3">
         <.link
           :for={row <- @rows}
           id={"#{@id}-#{row.slug}"}
           navigate={~p"/apps/#{row.id}?tab=analytics"}
           class="group/row block"
+          title={"#{row.value} pageviews"}
         >
-          <div class="mb-1 flex items-center justify-between gap-3 font-mono text-[11px]">
-            <span class="truncate text-hd-text group-hover/row:text-hd-orange group-hover/row:underline">
+          <div class="mb-1 flex items-center justify-between gap-3 text-xs">
+            <span class="truncate text-hd-secondary group-hover/row:text-hd-text">
               {row.name}
             </span>
-            <span class="shrink-0 tabular-nums text-hd-muted">{row.pageviews}</span>
+            <span class="shrink-0 font-mono tabular-nums text-hd-muted">{row.value}</span>
           </div>
-          <div class="group relative h-2 overflow-visible rounded-full bg-hd-aside">
-            <div class="h-2 rounded-full bg-hd-orange" style={"width: #{row.pct}%"} />
-            <span class="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] text-hd-text shadow-lg group-hover:block">
-              {row.pageviews} pageviews
-            </span>
+          <div class="h-1.5 rounded-sm bg-hd-raised">
+            <div
+              class={[
+                "h-1.5 rounded-sm",
+                row.lead? && "bg-hd-orange",
+                !row.lead? && "bg-hd-muted/40"
+              ]}
+              style={"width: #{row.width}%"}
+            />
           </div>
         </.link>
       </div>
     </section>
     """
+  end
+
+  defp ranked_rows(apps, key) do
+    values = Enum.map(apps, &Map.get(&1, key))
+    peak = values |> Enum.max(fn -> 0 end) |> max(1)
+
+    Enum.map(apps, fn app ->
+      value = Map.get(app, key)
+
+      %{
+        id: app.id,
+        slug: app.slug,
+        name: app.name,
+        value: value,
+        width: max(round(value / peak * 100), if(value > 0, do: 3, else: 0)),
+        lead?: value == peak and value > 0
+      }
+    end)
   end
 end

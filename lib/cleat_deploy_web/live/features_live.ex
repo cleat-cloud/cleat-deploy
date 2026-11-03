@@ -19,17 +19,17 @@ defmodule CleatDeployWeb.FeaturesLive do
     >
       <div id="features" class="mx-auto max-w-4xl space-y-4">
         <div class="space-y-1">
-          <h2 class="font-display text-lg font-semibold tracking-tight text-hd-text">Features</h2>
+          <h2 class="text-lg font-medium tracking-tight text-hd-text">Features</h2>
           <p class="text-xs leading-relaxed text-hd-muted">
             Everything Cleat does today and where to find it. The JSON API under
-            <span class="font-mono text-hd-text">/api/v1</span>
-            is what the <span class="font-mono text-hd-text">cleat</span>
+            <span class="font-mono text-hd-secondary">/api/v1</span>
+            is what the <span class="font-mono text-hd-secondary">cleat</span>
             CLI talks to, and every key of the deploy manifest is documented in <.link
               id="features-manifest-docs"
               href="https://github.com/cleat-cloud/cleat-deploy/blob/main/docs/deploy-json.md"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-hd-blue transition-colors hover:underline"
+              class="text-hd-secondary underline decoration-hd-border transition-colors hover:text-hd-text"
             >
               docs/deploy-json.md
             </.link>.
@@ -37,12 +37,10 @@ defmodule CleatDeployWeb.FeaturesLive do
         </div>
 
         <div :for={section <- sections()} id={section.id} class="paas-card overflow-hidden">
-          <div class="flex items-start gap-3 border-b border-hd-border bg-hd-aside/60 px-4 py-3">
-            <div class="flex size-9 shrink-0 items-center justify-center rounded-md border border-hd-border bg-hd-card">
-              <.icon name={section.icon} class="size-4 text-hd-orange" />
-            </div>
+          <div class="flex items-start gap-2.5 border-b border-hd-border px-5 py-4">
+            <.icon name={section.icon} class="mt-0.5 size-4 shrink-0 text-hd-muted" />
             <div class="min-w-0 space-y-0.5">
-              <h3 class="font-display text-sm font-semibold text-hd-text">{section.title}</h3>
+              <h3 class="text-[15px] font-medium text-hd-text">{section.title}</h3>
               <p class="text-xs leading-relaxed text-hd-muted">{section.hint}</p>
             </div>
           </div>
@@ -51,26 +49,23 @@ defmodule CleatDeployWeb.FeaturesLive do
             <li
               :for={item <- section.items}
               id={item.id}
-              class="flex flex-wrap items-center justify-between gap-3 border-b border-hd-border/50 px-4 py-3 last:border-b-0"
+              class="flex flex-wrap items-center justify-between gap-3 border-b border-hd-border/50 px-5 py-3 last:border-b-0"
             >
               <div class="min-w-0 space-y-0.5">
-                <p class="flex flex-wrap items-center gap-2 text-[12px] font-semibold text-hd-text">
+                <p class="flex flex-wrap items-center gap-2 text-[13px] text-hd-text">
                   {item.title}
-                  <span
-                    :if={item[:code]}
-                    class="rounded border border-hd-border bg-hd-aside px-1.5 py-0.5 font-mono text-[10px] font-normal text-hd-orange"
-                  >
+                  <span :if={item[:code]} class="keycap">
                     {item.code}
                   </span>
                 </p>
-                <p class="text-[11px] leading-relaxed text-hd-muted">{item.hint}</p>
+                <p class="text-xs leading-relaxed text-hd-muted">{item.hint}</p>
               </div>
 
               <.link
                 :if={item[:href]}
                 id={"#{item.id}-open"}
                 navigate={item.href}
-                class="paas-btn-secondary shrink-0 text-[10px] uppercase"
+                class="paas-btn-secondary shrink-0"
               >
                 {item[:link_label] || "Open"}
               </.link>
@@ -80,13 +75,13 @@ defmodule CleatDeployWeb.FeaturesLive do
 
         <div
           id="features-cta"
-          class="paas-card flex flex-wrap items-center justify-between gap-3 p-4"
+          class="paas-card flex flex-wrap items-center justify-between gap-3 p-5"
         >
           <div class="space-y-0.5">
-            <p class="font-display text-sm font-semibold text-hd-text">
+            <p class="text-[13px] font-medium text-hd-text">
               {if @current_scope, do: "Ready to use it", else: "Ready to try it?"}
             </p>
-            <p class="text-[11px] text-hd-muted">
+            <p class="text-xs text-hd-muted">
               {if @current_scope,
                 do: "Everything above is one click away in the panel.",
                 else: "Register a server, connect a repository and push to deploy."}

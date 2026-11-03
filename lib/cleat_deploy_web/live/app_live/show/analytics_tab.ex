@@ -7,8 +7,8 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
     <div :if={@app_detail_tab == :analytics} id="app-analytics" class="space-y-6">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-0.5">
-          <h3 class="font-display text-xs font-semibold text-hd-text">Analytics</h3>
-          <p class="text-[11px] text-hd-muted">Applies on the next deploy.</p>
+          <h3 class="text-sm font-medium text-hd-text">Analytics</h3>
+          <p class="text-xs text-hd-muted">Applies on the next deploy.</p>
         </div>
         <button
           id="analytics-inject-toggle"
@@ -17,14 +17,17 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
           data-state={if @app.analytics_inject, do: "on", else: "off"}
           title="First-party pageviews. Takes effect on the next deploy."
           class={[
-            "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wide uppercase transition-colors",
-            @app.analytics_inject && "border-hd-green/50 bg-hd-green/10 text-hd-green",
-            !@app.analytics_inject &&
-              "border-hd-border bg-hd-card text-hd-muted hover:border-hd-orange/40 hover:text-hd-text"
+            "inline-flex items-center gap-1.5 rounded-lg border border-hd-border bg-hd-card px-2.5 py-1.5 text-xs font-medium transition-colors",
+            @app.analytics_inject && "text-hd-text",
+            !@app.analytics_inject && "text-hd-muted hover:text-hd-text"
           ]}
         >
-          <.icon name="hero-chart-bar" class="size-3" />
-          analytics {if @app.analytics_inject, do: "on", else: "off"}
+          <.icon name="hero-chart-bar" class="size-3" /> Analytics
+          <span class={[
+            "size-1.5 rounded-full",
+            @app.analytics_inject && "bg-hd-orange",
+            !@app.analytics_inject && "bg-hd-muted/50"
+          ]} />
         </button>
       </div>
 
@@ -34,9 +37,9 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
           id={"analytics-range-#{range}"}
           patch={~p"/apps/#{@app.id}?#{[tab: "analytics", range: range]}"}
           class={[
-            "rounded-md px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide transition-colors",
-            @analytics_range == range && "border border-hd-border bg-hd-card text-hd-orange",
-            @analytics_range != range && "text-hd-muted hover:text-hd-text"
+            "rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+            @analytics_range == range && "border-hd-text/25 bg-hd-raised text-hd-text",
+            @analytics_range != range && "border-transparent text-hd-muted hover:text-hd-text"
           ]}
         >
           {range}
@@ -45,37 +48,37 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
 
       <div
         :if={!@app.analytics_inject}
-        class="rounded border border-dashed border-hd-border px-4 py-6 text-center text-xs text-hd-muted"
+        class="rounded-lg border border-dashed border-hd-border px-4 py-6 text-center text-xs text-hd-muted"
       >
         Not measuring
       </div>
 
       <div :if={@app.analytics_inject && @analytics_summary} class="space-y-6">
         <div class="grid gap-3 sm:grid-cols-2">
-          <div class="rounded-md border border-hd-border bg-hd-aside px-3 py-2">
-            <p class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+          <div class="paas-card px-4 py-3.5">
+            <p class="text-[13px] text-hd-secondary">
               Pageviews
             </p>
-            <p class="mt-1 font-mono text-lg tabular-nums text-hd-text">
+            <p class="mt-1 font-mono text-2xl tabular-nums text-hd-text">
               {@analytics_summary.pageviews}
             </p>
           </div>
-          <div class="rounded-md border border-hd-border bg-hd-aside px-3 py-2">
-            <p class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+          <div class="paas-card px-4 py-3.5">
+            <p class="text-[13px] text-hd-secondary">
               Uniques
             </p>
-            <p class="mt-1 font-mono text-lg tabular-nums text-hd-text">
+            <p class="mt-1 font-mono text-2xl tabular-nums text-hd-text">
               {@analytics_summary.uniques}
             </p>
-            <p class="text-[11px] text-hd-muted">hash per UTC day</p>
+            <p class="text-xs text-hd-muted">hash per UTC day</p>
           </div>
         </div>
 
         <div class="space-y-2">
-          <h4 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+          <h4 class="text-xs text-hd-muted">
             Paths
           </h4>
-          <div class="overflow-hidden rounded border border-hd-border">
+          <div class="overflow-hidden rounded-lg border border-hd-border">
             <table id="analytics-paths" class="paas-table w-full text-left font-mono">
               <thead>
                 <tr>
@@ -85,11 +88,11 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
               </thead>
               <tbody>
                 <tr :if={@analytics_summary.paths == []}>
-                  <td colspan="2" class="text-[11px] text-hd-muted">No paths yet</td>
+                  <td colspan="2" class="text-xs text-hd-muted">No paths yet</td>
                 </tr>
                 <tr :for={row <- @analytics_summary.paths}>
-                  <td class="text-[11px] text-hd-text">{row.path}</td>
-                  <td class="tabular-nums text-[11px] text-hd-muted">{row.pageviews}</td>
+                  <td class="text-xs text-hd-text">{row.path}</td>
+                  <td class="tabular-nums text-xs text-hd-muted">{row.pageviews}</td>
                 </tr>
               </tbody>
             </table>
@@ -97,10 +100,10 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
         </div>
 
         <div class="space-y-2">
-          <h4 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+          <h4 class="text-xs text-hd-muted">
             Referrers
           </h4>
-          <div class="overflow-hidden rounded border border-hd-border">
+          <div class="overflow-hidden rounded-lg border border-hd-border">
             <table id="analytics-referrers" class="paas-table w-full text-left font-mono">
               <thead>
                 <tr>
@@ -110,11 +113,11 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
               </thead>
               <tbody>
                 <tr :if={@analytics_summary.referrers == []}>
-                  <td colspan="2" class="text-[11px] text-hd-muted">No referrers yet</td>
+                  <td colspan="2" class="text-xs text-hd-muted">No referrers yet</td>
                 </tr>
                 <tr :for={row <- @analytics_summary.referrers}>
-                  <td class="text-[11px] text-hd-text">{row.referrer}</td>
-                  <td class="tabular-nums text-[11px] text-hd-muted">{row.pageviews}</td>
+                  <td class="text-xs text-hd-text">{row.referrer}</td>
+                  <td class="tabular-nums text-xs text-hd-muted">{row.pageviews}</td>
                 </tr>
               </tbody>
             </table>
@@ -122,10 +125,10 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
         </div>
 
         <div class="space-y-2">
-          <h4 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
+          <h4 class="text-xs text-hd-muted">
             UTM
           </h4>
-          <div class="overflow-hidden rounded border border-hd-border">
+          <div class="overflow-hidden rounded-lg border border-hd-border">
             <table id="analytics-utm" class="paas-table w-full text-left font-mono">
               <thead>
                 <tr>
@@ -137,13 +140,13 @@ defmodule CleatDeployWeb.AppLive.Show.AnalyticsTab do
               </thead>
               <tbody>
                 <tr :if={@analytics_summary.utm == []}>
-                  <td colspan="4" class="text-[11px] text-hd-muted">No UTM yet</td>
+                  <td colspan="4" class="text-xs text-hd-muted">No UTM yet</td>
                 </tr>
                 <tr :for={row <- @analytics_summary.utm}>
-                  <td class="text-[11px] text-hd-text">{row.source}</td>
-                  <td class="text-[11px] text-hd-muted">{row.medium}</td>
-                  <td class="text-[11px] text-hd-text">{row.campaign}</td>
-                  <td class="tabular-nums text-[11px] text-hd-muted">{row.pageviews}</td>
+                  <td class="text-xs text-hd-text">{row.source}</td>
+                  <td class="text-xs text-hd-muted">{row.medium}</td>
+                  <td class="text-xs text-hd-text">{row.campaign}</td>
+                  <td class="tabular-nums text-xs text-hd-muted">{row.pageviews}</td>
                 </tr>
               </tbody>
             </table>

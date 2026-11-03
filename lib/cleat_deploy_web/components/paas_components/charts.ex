@@ -2,30 +2,23 @@ defmodule CleatDeployWeb.PaasComponents.Charts do
   @moduledoc false
   use Phoenix.Component
 
-  import CleatDeployWeb.CoreComponents, only: [icon: 1]
-
+  # A stat is a label, a figure and what it refers to. No icon tiles: they add
+  # a second focal point to a card whose whole job is the number.
   attr :title, :string, required: true
   attr :value, :string, required: true
   attr :hint, :string, default: nil
-  attr :icon, :string, default: "hero-server-stack"
 
   def metric_card(assigns) do
     ~H"""
-    <div class="paas-card group flex cursor-pointer items-center justify-between p-4 transition-all hover:border-hd-orange/40">
+    <div class="paas-card flex items-baseline justify-between gap-3 px-4 py-3.5">
       <div class="space-y-0.5">
-        <p class="block font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
-          {@title}
-        </p>
-        <div class="flex items-baseline gap-1.5">
-          <p class="font-mono text-2xl font-bold tabular-nums text-hd-text">{@value}</p>
-          <p :if={@hint} class="font-sans text-[11px] text-hd-muted">{@hint}</p>
+        <p class="text-[13px] text-hd-secondary">{@title}</p>
+        <div class="flex items-baseline gap-2">
+          <p class="font-mono text-[28px] leading-8 font-medium tabular-nums tracking-tight text-hd-text">
+            {@value}
+          </p>
+          <p :if={@hint} class="text-xs text-hd-muted">{@hint}</p>
         </div>
-      </div>
-      <div class="flex size-9 items-center justify-center rounded border border-hd-border bg-hd-aside transition-colors">
-        <.icon
-          name={@icon}
-          class="size-5 text-hd-orange transition-transform group-hover:scale-110"
-        />
       </div>
     </div>
     """
@@ -38,29 +31,29 @@ defmodule CleatDeployWeb.PaasComponents.Charts do
   attr :live?, :boolean, default: false
   attr :series, :list, default: []
   attr :color, :string, default: "var(--color-hd-orange)"
+  attr :height_class, :string, default: "h-32"
 
   def area_chart(assigns) do
     {fill, line} = series_paths(assigns.series, 400, 128)
     points = hover_points(assigns.series, 400, &format_cpu/1)
-    assigns = assign(assigns, fill: fill, line: line, points: points)
+    labels = time_labels(assigns.series)
+    assigns = assign(assigns, fill: fill, line: line, points: points, labels: labels)
 
     ~H"""
-    <section id={@id} class="paas-card p-4">
+    <section id={@id} class="paas-card p-5">
       <div class="flex items-baseline justify-between gap-3">
         <div>
-          <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
-            {@title}
-          </h3>
-          <p :if={@hint} class="text-[11px] text-hd-muted">{@hint}</p>
+          <h3 class="text-[13px] font-medium text-hd-secondary">{@title}</h3>
+          <p :if={@hint} class="text-xs text-hd-muted">{@hint}</p>
         </div>
         <p
           :if={@current}
           id={"#{@id}-current"}
-          class="flex items-center gap-2 font-mono text-lg font-semibold tabular-nums text-hd-text"
+          class="flex items-center gap-2 font-mono text-xl font-medium tabular-nums text-hd-text"
         >
           <span
             :if={@live?}
-            class="size-1.5 rounded-full bg-hd-green motion-safe:animate-pulse"
+            class="size-1.5 rounded-full bg-hd-orange motion-safe:animate-pulse"
             aria-hidden="true"
           />
           {@current}
@@ -72,13 +65,30 @@ defmodule CleatDeployWeb.PaasComponents.Charts do
         points={@points}
         view_width={400}
       >
-        <svg viewBox="0 0 400 128" class="h-28 w-full overflow-visible" role="img" aria-label={@title}>
-          <path d={@fill} fill={@color} fill-opacity="0.16" />
+        <svg
+          viewBox="0 0 400 128"
+          preserveAspectRatio="none"
+          class={["w-full overflow-visible", @height_class]}
+          role="img"
+          aria-label={@title}
+        >
+          <g stroke="var(--color-hd-text)" stroke-opacity="0.07" stroke-width="1">
+            <line x1="0" y1="32" x2="400" y2="32" />
+            <line x1="0" y1="64" x2="400" y2="64" />
+            <line x1="0" y1="96" x2="400" y2="96" />
+          </g>
+          <path d={@fill} fill={@color} fill-opacity="0.12" />
           <path d={@line} fill="none" stroke={@color} stroke-width="2" stroke-linejoin="round" />
           <rect x="0" y="0" width="400" height="128" fill="transparent" class="cursor-crosshair" />
         </svg>
       </.chart_hover_layer>
-      <p :if={@line == ""} class="mt-8 text-center font-mono text-[11px] text-hd-muted">
+      <div
+        :if={@line != "" and @labels != []}
+        class="mt-1.5 flex items-center justify-between font-mono text-[11px] text-hd-muted"
+      >
+        <span :for={label <- @labels}>{label}</span>
+      </div>
+      <p :if={@line == ""} class="py-10 text-center text-[13px] text-hd-muted">
         No samples yet
       </p>
     </section>
@@ -103,26 +113,26 @@ defmodule CleatDeployWeb.PaasComponents.Charts do
     {_fill_in, line_in} = series_paths(assigns.inbound, 400, 128, max_v)
     {_fill_out, line_out} = series_paths(assigns.outbound, 400, 128, max_v)
     points = dual_hover_points(assigns.inbound, assigns.outbound, 400)
+    labels = time_labels(assigns.inbound)
 
-    assigns = assign(assigns, line_in: line_in, line_out: line_out, points: points)
+    assigns =
+      assign(assigns, line_in: line_in, line_out: line_out, points: points, labels: labels)
 
     ~H"""
-    <section id={@id} class="paas-card p-4">
-      <div class="flex items-baseline justify-between gap-3">
+    <section id={@id} class="paas-card p-5">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <div>
-          <h3 class="font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted">
-            {@title}
-          </h3>
-          <p :if={@hint} class="text-[11px] text-hd-muted">{@hint}</p>
+          <h3 class="text-[13px] font-medium text-hd-secondary">{@title}</h3>
+          <p :if={@hint} class="text-xs text-hd-muted">{@hint}</p>
         </div>
         <p
           :if={@current}
           id={"#{@id}-current"}
-          class="flex items-center gap-2 font-mono text-sm font-semibold tabular-nums text-hd-text"
+          class="flex items-center gap-2 whitespace-nowrap font-mono text-[13px] font-medium tabular-nums text-hd-secondary"
         >
           <span
             :if={@live?}
-            class="size-1.5 rounded-full bg-hd-green motion-safe:animate-pulse"
+            class="size-1.5 rounded-full bg-hd-orange motion-safe:animate-pulse"
             aria-hidden="true"
           />
           {@current}
@@ -134,7 +144,18 @@ defmodule CleatDeployWeb.PaasComponents.Charts do
         points={@points}
         view_width={400}
       >
-        <svg viewBox="0 0 400 128" class="h-28 w-full overflow-visible" role="img" aria-label={@title}>
+        <svg
+          viewBox="0 0 400 128"
+          preserveAspectRatio="none"
+          class="h-32 w-full overflow-visible"
+          role="img"
+          aria-label={@title}
+        >
+          <g stroke="var(--color-hd-text)" stroke-opacity="0.07" stroke-width="1">
+            <line x1="0" y1="32" x2="400" y2="32" />
+            <line x1="0" y1="64" x2="400" y2="64" />
+            <line x1="0" y1="96" x2="400" y2="96" />
+          </g>
           <path
             :if={@line_in != ""}
             d={@line_in}
@@ -147,25 +168,31 @@ defmodule CleatDeployWeb.PaasComponents.Charts do
             :if={@line_out != ""}
             d={@line_out}
             fill="none"
-            stroke="var(--color-hd-green)"
-            stroke-width="2"
+            stroke="var(--color-hd-muted)"
+            stroke-width="1.5"
             stroke-linejoin="round"
           />
           <rect x="0" y="0" width="400" height="128" fill="transparent" class="cursor-crosshair" />
         </svg>
       </.chart_hover_layer>
-      <div class="mt-2 flex gap-3 font-mono text-[10px] text-hd-muted">
-        <span class="inline-flex items-center gap-1">
+      <div
+        :if={(@line_in != "" or @line_out != "") and @labels != []}
+        class="mt-1.5 flex items-center justify-between font-mono text-[11px] text-hd-muted"
+      >
+        <span :for={label <- @labels}>{label}</span>
+      </div>
+      <div
+        :if={@line_in != "" or @line_out != ""}
+        class="mt-2 flex gap-4 font-mono text-[11px] text-hd-muted"
+      >
+        <span class="inline-flex items-center gap-1.5">
           <span class="size-1.5 rounded-full bg-hd-orange" /> In
         </span>
-        <span class="inline-flex items-center gap-1">
-          <span class="size-1.5 rounded-full bg-hd-green" /> Out
+        <span class="inline-flex items-center gap-1.5">
+          <span class="size-1.5 rounded-full bg-hd-muted" /> Out
         </span>
       </div>
-      <p
-        :if={@line_in == "" and @line_out == ""}
-        class="mt-8 text-center font-mono text-[11px] text-hd-muted"
-      >
+      <p :if={@line_in == "" and @line_out == ""} class="py-10 text-center text-[13px] text-hd-muted">
         No samples yet
       </p>
     </section>
@@ -194,12 +221,12 @@ defmodule CleatDeployWeb.PaasComponents.Charts do
       </div>
       <div
         data-chart-tip
-        class="pointer-events-none absolute top-1 z-20 hidden min-w-28 rounded border border-hd-border bg-hd-card px-2 py-1.5 shadow-lg"
+        class="pointer-events-none absolute top-1 z-20 hidden min-w-28 rounded-lg border border-hd-border bg-hd-raised px-2.5 py-1.5 shadow-lg"
       >
-        <p data-chart-tip-label class="font-mono text-[10px] text-hd-muted"></p>
+        <p data-chart-tip-label class="font-mono text-[11px] text-hd-muted"></p>
         <p
           data-chart-tip-value
-          class="whitespace-pre-line font-mono text-[11px] font-semibold tabular-nums text-hd-text"
+          class="whitespace-pre-line font-mono text-xs font-medium tabular-nums text-hd-text"
         >
         </p>
       </div>
@@ -243,6 +270,31 @@ defmodule CleatDeployWeb.PaasComponents.Charts do
   end
 
   defp dual_hover_points(_, _, _), do: []
+
+  # First, middle and last sample time, so the plot has a real time frame
+  # instead of an unlabelled shape.
+  defp time_labels(series) when is_list(series) and length(series) >= 2 do
+    timestamps = Enum.map(series, &Map.get(&1, :t))
+
+    [
+      List.first(timestamps),
+      Enum.at(timestamps, div(length(timestamps), 2)),
+      List.last(timestamps)
+    ]
+    |> Enum.map(&format_axis_time/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp time_labels(_), do: []
+
+  defp format_axis_time(t) when is_integer(t) do
+    case DateTime.from_unix(t) do
+      {:ok, dt} -> Calendar.strftime(dt, "%H:%M")
+      _ -> nil
+    end
+  end
+
+  defp format_axis_time(_), do: nil
 
   defp format_sample_time(t) when is_integer(t) do
     case DateTime.from_unix(t) do
