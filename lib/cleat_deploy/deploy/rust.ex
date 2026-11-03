@@ -96,8 +96,7 @@ defmodule CleatDeploy.Deploy.Rust do
     #{start_command_script(manifest.start_command)}
 
     RELEASE_DIR="#{config.release_path}/releases/build"
-    sudo mkdir -p "$RELEASE_DIR"
-    sudo rm -rf "${RELEASE_DIR:?}"/*
+    #{ServerProvision.clean_release_script("#{config.release_path}/releases/build")}
     sudo mkdir -p "$RELEASE_DIR/bin"
     log "Publishing binary and runtime files to $RELEASE_DIR"
     sudo cp -a bin/server "$RELEASE_DIR/bin/server"

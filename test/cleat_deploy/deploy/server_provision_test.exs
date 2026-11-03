@@ -571,6 +571,46 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     assert script =~ "mkdir -p tmp/pids tmp/cache log storage"
   end
 
+  test "publish empties the reused release dir with find, dotfiles included (#246)", %{
+    server: server
+  } do
+    slug = "#{Faker.Lorem.word()}-#{Faker.Lorem.word()}"
+
+    app = %App{
+      name: Faker.Company.name(),
+      slug: slug,
+      host: "#{slug}.example.com",
+      runtime: "phoenix",
+      port: 4040,
+      release_path: "/opt/#{slug}",
+      systemd_unit: slug
+    }
+
+    config = App.deploy_config(app)
+    runtime = %{packages: [], post_install: []}
+
+    script =
+      CleatDeploy.Deploy.Ssh.Phoenix.phoenix_remote_build_script(
+        server,
+        app,
+        config,
+        Faker.Internet.user_name(),
+        "/tmp/src.tar.gz",
+        runtime,
+        %AppManifest{runtime: "phoenix"}
+      )
+
+    # `rm -rf "$DIR"/*` does not match dotfiles: leftovers from the previous
+    # release survived the copy.
+    refute script =~ ~S|rm -rf "${RELEASE_DIR:?}"/*|
+    # Only the release dir is emptied — never the app root that holds data/.
+    refute script =~ "find '/opt/#{slug}' -mindepth 1 -delete"
+    assert script =~ "sudo find '/opt/#{slug}/releases/build' -mindepth 1 -delete"
+
+    assert occurrence(script, "-mindepth 1 -delete") <
+             occurrence(script, ~s|sudo cp -a "$REL_DIR/."|)
+  end
+
   defp awk_strip(caddyfile, site, app \\ "") do
     path = Path.join(System.tmp_dir!(), "caddy-#{System.unique_integer([:positive])}")
     File.write!(path, caddyfile)

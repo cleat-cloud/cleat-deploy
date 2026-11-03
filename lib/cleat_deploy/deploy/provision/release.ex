@@ -106,11 +106,14 @@ defmodule CleatDeploy.Deploy.Provision.Release do
   `rm -rf "$DIR"/*` does not match dotfiles, so a stale `.next`, `.output` or
   `.gitignore` from a previous release survives the copy. `find -mindepth 1
   -delete` removes everything, hidden entries included.
+
+  Pass the release directory itself (`<release_path>/releases/build`), never
+  the app root — the app root also holds `data/` and other persistent paths.
   """
-  def clean_release_script(release_path) do
+  def clean_release_script(release_dir) do
     """
-    sudo mkdir -p #{Shell.shell_escape(release_path)}
-    sudo find #{Shell.shell_escape(release_path)} -mindepth 1 -delete
+    sudo mkdir -p #{Shell.shell_escape(release_dir)}
+    sudo find #{Shell.shell_escape(release_dir)} -mindepth 1 -delete
     """
     |> String.trim()
   end

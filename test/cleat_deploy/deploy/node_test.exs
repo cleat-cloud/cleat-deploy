@@ -227,6 +227,40 @@ defmodule CleatDeploy.Deploy.NodeTest do
     assert script =~ "rm -rf .next/cache"
   end
 
+  test "publish empties the reused release dir with find, dotfiles included (#246)" do
+    slug = "#{Faker.Lorem.word()}-#{Faker.Lorem.word()}"
+
+    app = %App{
+      name: Faker.Company.name(),
+      slug: slug,
+      host: "#{slug}.example.com",
+      runtime: "node",
+      port: 4040,
+      release_path: "/opt/#{slug}",
+      systemd_unit: "node-#{slug}"
+    }
+
+    config = App.deploy_config(app)
+
+    script =
+      Node.remote_build_script(
+        nil,
+        app,
+        config,
+        Faker.Internet.user_name(),
+        "/tmp/src.tar.gz",
+        %AppManifest{runtime: "node"}
+      )
+
+    # `rm -rf "$DIR"/*` does not match dotfiles: the previous release's `.next`
+    # survived the copy and Next 16 served its old HTML from `server/route-cache`.
+    refute script =~ ~S|rm -rf "${RELEASE_DIR:?}"/*|
+    # Only the release dir is emptied — never the app root that holds data/.
+    refute script =~ "find '/opt/#{slug}' -mindepth 1 -delete"
+    assert script =~ "sudo find '/opt/#{slug}/releases/build' -mindepth 1 -delete"
+    assert occurrence(script, "-mindepth 1 -delete") < occurrence(script, "sudo cp -a .")
+  end
+
   test "manifest custom build/start commands and node version win over detection" do
     app = %App{
       name: "Web",

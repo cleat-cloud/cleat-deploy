@@ -88,8 +88,7 @@ defmodule CleatDeploy.Deploy.Ssh.Phoenix do
     fi
 
     RELEASE_DIR="#{config.release_path}/releases/build"
-    sudo mkdir -p "$RELEASE_DIR"
-    sudo rm -rf "${RELEASE_DIR:?}"/*
+    #{ServerProvision.clean_release_script("#{config.release_path}/releases/build")}
     sudo cp -a "$REL_DIR/." "$RELEASE_DIR/"
     sudo ln -sfn "$RELEASE_DIR" #{config.release_path}/current
     #{ServerProvision.prune_releases_script(config.release_path)}
