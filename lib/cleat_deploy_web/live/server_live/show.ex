@@ -97,14 +97,17 @@ defmodule CleatDeployWeb.ServerLive.Show do
       server_count={@server_count}
       app_count={@app_count}
     >
-      <div class="space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-hd-border/40 pb-3">
-          <div>
-            <.link navigate={~p"/servers"} class="text-[11px] text-hd-muted hover:text-hd-orange">
+      <div class="space-y-5">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div class="space-y-1">
+            <.link
+              navigate={~p"/servers"}
+              class="text-xs text-hd-muted transition-colors hover:text-hd-text"
+            >
               ← Back to servers
             </.link>
-            <h2 class="font-display text-base font-semibold text-hd-text">{@server.name}</h2>
-            <p class="font-mono text-[11px] text-hd-muted">
+            <h2 class="text-xl font-medium tracking-tight text-hd-text">{@server.name}</h2>
+            <p class="font-mono text-xs text-hd-muted">
               {@server.region} · {@server.host_ip}
               <span :if={@server.aws_instance_name}>
                 · {@server.aws_instance_name}
@@ -121,61 +124,56 @@ defmodule CleatDeployWeb.ServerLive.Show do
           </button>
         </div>
 
-        <div id="server-specs" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <.info_tile
-            label="Instance Plan"
-            value={@server.bundle_name || "Unknown"}
-            mono
-            sub={@server.bundle_id || "Not synced"}
-          />
-          <.info_tile
-            label="vCPU"
-            value={if(@server.cpu_count, do: "#{@server.cpu_count} cores", else: "—")}
-            sub="Compute capacity"
-          />
-          <.info_tile
-            label="Memory"
-            value={Server.format_ram(@server)}
-            sub="RAM allocation"
-          />
-          <.info_tile
-            label="Disk"
-            value={if(@server.disk_gb, do: "#{@server.disk_gb} GB", else: "—")}
-            sub="SSD storage"
-          />
-          <.info_tile
-            label="Status"
-            value={@server.instance_status || "—"}
-            sub={@server.blueprint_name || "Blueprint"}
-          />
-          <.info_tile
-            label="Monthly cost"
-            value={Server.format_price(@server)}
-            sub={provider_label(@server)}
-          />
-          <.info_tile
-            label="Last synced"
-            value={format_synced_at(@server.specs_synced_at)}
-            sub={provider_label(@server)}
-          />
-          <.info_tile
-            label="SSH key"
-            value={if(Servers.ssh_key_configured?(@server), do: "Configured", else: "Missing")}
-            sub="Deploy access"
-          />
-          <.info_tile
-            label="Deploy mode"
-            value={if(@server.deploy_mode == "dedicated", do: "Dedicated", else: "Shared")}
-            sub="Solo vs multi-app"
-          />
+        <div class="paas-card p-5">
+          <div id="server-specs" class="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+            <.info_tile
+              label="Plan"
+              value={@server.bundle_name || "Unknown"}
+              mono
+              sub={@server.bundle_id || "Not synced"}
+            />
+            <.info_tile
+              label="vCPU"
+              value={if(@server.cpu_count, do: "#{@server.cpu_count} cores", else: "—")}
+            />
+            <.info_tile
+              label="Memory"
+              value={Server.format_ram(@server)}
+            />
+            <.info_tile
+              label="Disk"
+              value={if(@server.disk_gb, do: "#{@server.disk_gb} GB", else: "—")}
+            />
+            <.info_tile
+              label="Status"
+              value={@server.instance_status || "—"}
+            />
+            <.info_tile
+              label="Cost"
+              value={Server.format_price(@server)}
+              sub={provider_label(@server)}
+            />
+            <.info_tile
+              label="Synced"
+              value={format_synced_at(@server.specs_synced_at)}
+            />
+            <.info_tile
+              label="SSH key"
+              value={if(Servers.ssh_key_configured?(@server), do: "Configured", else: "Missing")}
+            />
+            <.info_tile
+              label="Mode"
+              value={if(@server.deploy_mode == "dedicated", do: "Dedicated", else: "Shared")}
+            />
+          </div>
         </div>
 
-        <div class="paas-card space-y-4 p-4">
+        <div class="paas-card space-y-4 p-5">
           <div class="space-y-0.5">
-            <h3 class="font-display text-xs font-semibold text-hd-text">
+            <h3 class="text-sm font-medium text-hd-text">
               Upgrade or downgrade plan
             </h3>
-            <p class="text-[11px] text-hd-muted">
+            <p class="text-xs text-hd-muted">
               Changes the instance plan for this VM. The instance may restart briefly.
             </p>
           </div>
@@ -205,7 +203,7 @@ defmodule CleatDeployWeb.ServerLive.Show do
               type="button"
               phx-click="resize_bundle"
               disabled={@selected_bundle_id == "" or @resizing?}
-              class={["paas-btn-primary uppercase", @resizing? && "opacity-50"]}
+              class={["paas-btn-primary", @resizing? && "opacity-50"]}
             >
               <.icon
                 name={if @resizing?, do: "hero-arrow-path", else: "hero-arrows-up-down"}

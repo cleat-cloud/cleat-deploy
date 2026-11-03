@@ -20,34 +20,31 @@ defmodule CleatDeployWeb.AppLive.Layout.Tiles do
       )
 
     ~H"""
-    <div class="space-y-3">
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <.info_tile label="Domain Host" value={@app.host} mono sub="IPv4 ingress endpoint" />
+    <div class="paas-card p-5">
+      <div class="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+        <.info_tile label="Domain" value={@app.host} mono />
         <.info_tile
           id="app-deploy-branch-tile"
-          label="Deploy Branch"
+          label="Branch"
           value={@app.branch}
           mono
-          sub="Edit auto-deploy target"
+          sub="Edit in Webhook"
           href={~p"/apps/#{@app.id}?tab=webhook"}
         />
-        <.info_tile label="Target Server" value={@app.server.host_ip} mono sub={@app.server.name} />
+        <.info_tile label="Server" value={@app.server.host_ip} mono sub={@app.server.name} />
         <.info_tile
-          label="Auto Deploy"
-          value={if @app.auto_deploy, do: "Webhook Enabled", else: "Manual Selector"}
-          sub="HMAC Sha256 keys"
+          label="Auto deploy"
+          value={if @app.auto_deploy, do: "Webhook", else: "Manual"}
+          sub={if @app.auto_deploy, do: "GitHub push triggers a deploy"}
         />
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <.info_tile id="app-memory-tile" label="Memory" value={@ram_label} mono sub={@ram_sub} />
-        <.info_tile id="app-cpu-tile" label="CPU" value={@cpu_label} mono sub="Share of one vCPU" />
-        <.info_tile id="app-disk-tile" label="Disk" value={@disk_label} mono sub="Release + data" />
+        <.info_tile id="app-cpu-tile" label="CPU" value={@cpu_label} mono />
+        <.info_tile id="app-disk-tile" label="Disk" value={@disk_label} mono />
         <.info_tile
           id="app-status-tile"
-          label="Status"
+          label="Unit"
           value={@status_label}
           mono
-          sub="systemd unit"
         />
       </div>
     </div>

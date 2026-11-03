@@ -15,11 +15,11 @@ defmodule CleatDeployWeb.PaasComponents.Copy do
     <div class="space-y-1">
       <span
         :if={@label != ""}
-        class="font-mono text-[9px] font-semibold uppercase tracking-wider text-hd-muted"
+        class="text-xs text-hd-muted"
       >
         {@label}
       </span>
-      <div class="flex items-center justify-between gap-2 rounded border border-hd-border bg-hd-aside px-2.5 py-1.5 text-xs">
+      <div class="flex items-center justify-between gap-2 rounded-lg border border-hd-border bg-hd-aside px-2.5 py-1.5 text-xs">
         <span class={["min-w-0 flex-1 truncate font-medium text-hd-text", @mono && "font-mono"]}>
           {if @hidden?, do: String.duplicate("•", 32), else: @value}
         </span>
@@ -29,7 +29,7 @@ defmodule CleatDeployWeb.PaasComponents.Copy do
           type="button"
           phx-hook=".Copy"
           data-clipboard={@value}
-          class="shrink-0 text-hd-muted transition-colors hover:text-hd-orange"
+          class="shrink-0 text-hd-muted transition-colors hover:text-hd-text"
           aria-label={"Copy #{@label}"}
         >
           <.icon name="hero-clipboard-document" class="size-3.5" />
@@ -64,25 +64,32 @@ defmodule CleatDeployWeb.PaasComponents.Copy do
     <.link
       id={@id}
       navigate={@href}
-      class="paas-card flex flex-col justify-between space-y-1 p-3 transition-colors hover:border-hd-orange/50"
+      class="group space-y-0.5"
     >
-      <span class="font-mono text-[9px] font-bold uppercase tracking-widest text-hd-muted">
+      <span class="text-xs text-hd-muted">
         {@label}
       </span>
-      <p class={["truncate text-xs font-semibold text-hd-text", @mono && "font-mono"]}>{@value}</p>
-      <p :if={@sub} class="block font-mono text-[10px] text-hd-orange">{@sub}</p>
+      <p class={[
+        "truncate text-[13px] font-medium text-hd-text group-hover:text-hd-orange",
+        @mono && "font-mono"
+      ]}>
+        {@value}
+      </p>
+      <p :if={@sub} class="block text-xs text-hd-muted">{@sub}</p>
     </.link>
     """
   end
 
   def info_tile(assigns) do
     ~H"""
-    <div id={@id} class="paas-card flex flex-col justify-between space-y-1 p-3">
-      <span class="font-mono text-[9px] font-bold uppercase tracking-widest text-hd-muted">
+    <div id={@id} class="space-y-0.5">
+      <span class="text-xs text-hd-muted">
         {@label}
       </span>
-      <p class={["truncate text-xs font-semibold text-hd-text", @mono && "font-mono"]}>{@value}</p>
-      <p :if={@sub} class="block font-mono text-[10px] text-hd-muted">{@sub}</p>
+      <p class={["truncate text-[13px] font-medium text-hd-text", @mono && "font-mono"]}>
+        {@value}
+      </p>
+      <p :if={@sub} class="block text-xs text-hd-muted">{@sub}</p>
     </div>
     """
   end

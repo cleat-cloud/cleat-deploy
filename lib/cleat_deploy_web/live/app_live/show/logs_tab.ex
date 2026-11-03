@@ -7,16 +7,16 @@ defmodule CleatDeployWeb.AppLive.Show.LogsTab do
     <div id="app-log-events" class="space-y-3">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-0.5">
-          <h3 class="font-display text-xs font-semibold text-hd-text">Collected events</h3>
-          <p class="text-[11px] text-hd-muted">
-            Searchable store for this app, enriched with release and environment <span class="font-mono text-hd-orange">{@app.branch}</span>.
+          <h3 class="text-sm font-medium text-hd-text">Collected events</h3>
+          <p class="text-xs text-hd-muted">
+            Searchable store for this app, enriched with release and environment <span class="font-mono text-hd-secondary">{@app.branch}</span>.
           </p>
         </div>
         <button
           id="refresh-log-events"
           type="button"
           phx-click="refresh_log_events"
-          class="paas-btn-secondary text-[10px]"
+          class="paas-btn-secondary"
         >
           <.icon name="hero-arrow-path" class="size-3.5" /> Refresh store
         </button>
@@ -34,12 +34,12 @@ defmodule CleatDeployWeb.AppLive.Show.LogsTab do
           name="q"
           value={@log_filters["q"]}
           placeholder="Search message"
-          class="paas-input font-mono text-[11px]"
+          class="paas-input font-mono text-xs"
         />
         <select
           id="log-events-min-severity"
           name="min_severity"
-          class="paas-input font-mono text-[11px]"
+          class="paas-input font-mono text-xs"
         >
           <option value="" selected={@log_filters["min_severity"] in [nil, ""]}>All levels</option>
           <option
@@ -56,7 +56,7 @@ defmodule CleatDeployWeb.AppLive.Show.LogsTab do
           name="release"
           value={@log_filters["release"]}
           placeholder="Release sha"
-          class="paas-input font-mono text-[11px]"
+          class="paas-input font-mono text-xs"
           spellcheck="false"
         />
       </form>
@@ -69,22 +69,22 @@ defmodule CleatDeployWeb.AppLive.Show.LogsTab do
         <article
           :for={group <- @log_groups}
           id={"log-group-#{group.fingerprint}"}
-          class="rounded-md border border-hd-border bg-hd-aside px-3 py-2"
+          class="rounded-lg border border-hd-border bg-hd-aside px-3 py-2"
         >
           <div class="flex items-center justify-between gap-2">
-            <span class="font-mono text-[10px] uppercase tracking-wider text-rose-400">
+            <span class="font-mono text-[11px] text-hd-red">
               {group.severity}
             </span>
-            <span class="font-mono text-[10px] text-hd-muted">{group.count}×</span>
+            <span class="font-mono text-[11px] text-hd-muted">{group.count}×</span>
           </div>
-          <p class="mt-1 truncate font-mono text-[11px] text-hd-text">{group.sample}</p>
+          <p class="mt-1 truncate font-mono text-xs text-hd-text">{group.sample}</p>
         </article>
       </div>
 
-      <div class="overflow-hidden rounded-md border border-hd-border bg-hd-bg font-mono text-[11px] text-hd-text">
-        <div class="flex items-center justify-between border-b border-hd-border bg-hd-aside px-3 py-1.5">
-          <span class="text-[10px] font-semibold tracking-wider text-hd-muted">EVENT STORE</span>
-          <span class="font-mono text-[10px] text-hd-muted">{length(@log_events)} rows</span>
+      <div class="overflow-hidden rounded-xl border border-hd-border bg-hd-bg font-mono text-xs text-hd-text">
+        <div class="flex items-center justify-between border-b border-hd-border bg-hd-aside px-3 py-2">
+          <span class="text-xs text-hd-secondary">Events</span>
+          <span class="font-mono text-[11px] text-hd-muted">{length(@log_events)} rows</span>
         </div>
         <div id="app-log-events-body" class="max-h-80 overflow-auto p-3 leading-5">
           <div :if={@log_events == []} class="text-hd-muted">
@@ -108,7 +108,7 @@ defmodule CleatDeployWeb.AppLive.Show.LogsTab do
   defp format_time(%DateTime{} = datetime), do: Calendar.strftime(datetime, "%H:%M:%S")
   defp format_time(_), do: "—"
 
-  defp severity_class(level) when level in ~w(emerg alert crit err), do: "text-rose-400"
+  defp severity_class(level) when level in ~w(emerg alert crit err), do: "text-hd-red"
   defp severity_class("warning"), do: "text-hd-orange"
   defp severity_class(_), do: "text-hd-muted"
 end

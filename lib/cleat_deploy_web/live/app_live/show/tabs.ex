@@ -9,27 +9,27 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
     ~H"""
     <div :if={@app_detail_tab == :domains} id="custom-domain-checklist" class="space-y-3">
       <div class="flex flex-wrap items-center gap-2">
-        <h3 class="font-display text-xs font-semibold text-hd-text">Custom tenant domains</h3>
-        <span class="rounded border border-hd-orange/40 bg-hd-orange/10 px-2 py-0.5 font-mono text-[9px] text-hd-orange">
+        <h3 class="text-sm font-medium text-hd-text">Custom tenant domains</h3>
+        <span class="text-xs text-hd-muted">
           Solo server · on-demand TLS
         </span>
       </div>
-      <p class="text-[11px] leading-relaxed text-hd-muted">
-        Tenants point a <span class="font-mono text-hd-text">CNAME</span>
-        to <span class="font-mono text-hd-orange">DOMAIN_CNAME_TARGET</span>
+      <p class="text-xs leading-relaxed text-hd-muted">
+        Tenants point a <span class="font-mono text-hd-secondary">CNAME</span>
+        to <span class="font-mono text-hd-secondary">DOMAIN_CNAME_TARGET</span>
         (set to {@app.host}), then verify DNS in the admin panel.
         Caddy issues certificates only after the tenant domain is verified.
       </p>
-      <ul class="space-y-1 font-mono text-[10px] text-hd-muted">
+      <ul class="space-y-1 font-mono text-xs text-hd-muted">
         <li>
-          <span class="text-hd-orange">PLATFORM_HOSTS</span> — platform hostnames served directly
+          <span class="text-hd-secondary">PLATFORM_HOSTS</span> — platform hostnames served directly
         </li>
         <li>
-          <span class="text-hd-orange">DOMAIN_CNAME_TARGET</span>
+          <span class="text-hd-secondary">DOMAIN_CNAME_TARGET</span>
           — CNAME anchor for tenant custom domains
         </li>
         <li>
-          <span class="text-hd-orange">PHX_HOST</span> — primary platform host ({@app.host})
+          <span class="text-hd-secondary">PHX_HOST</span> — primary platform host ({@app.host})
         </li>
       </ul>
     </div>
@@ -38,12 +38,12 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
       <LogsTab.explorer {assigns} />
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-0.5">
-          <h3 class="font-display text-xs font-semibold text-hd-text">
+          <h3 class="text-sm font-medium text-hd-text">
             Runtime logs
           </h3>
-          <p class="text-[11px] text-hd-muted">
+          <p class="text-xs text-hd-muted">
             Last {RuntimeLogs.line_count()} journal lines from
-            <span class="font-mono text-hd-orange">
+            <span class="font-mono text-hd-secondary">
               {Runtime.log_unit(@app, @runtime_logs)}
             </span>
             on {@app.server.name}.
@@ -54,7 +54,7 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
           type="button"
           phx-click="refresh_logs"
           phx-disable-with="Reading…"
-          class="paas-btn-secondary text-[10px]"
+          class="paas-btn-secondary"
         >
           <.icon name="hero-arrow-path" class="size-3.5" /> Refresh
         </button>
@@ -62,20 +62,20 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
 
       <div
         :if={@logs_error}
-        class="rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 font-mono text-[11px] text-rose-400"
+        class="rounded-lg border border-hd-red/40 px-3 py-2 font-mono text-xs text-hd-red"
       >
         {@logs_error}
       </div>
 
-      <div class="overflow-hidden rounded-md border border-hd-border bg-hd-bg font-mono text-[11px] text-hd-text">
-        <div class="flex items-center justify-between border-b border-hd-border bg-hd-aside px-3 py-1.5">
-          <div class="flex items-center gap-1.5">
-            <.icon name="hero-command-line" class="size-3.5 text-hd-orange" />
-            <span class="text-[10px] font-semibold tracking-wider text-hd-muted">
-              SYSTEMD JOURNAL
+      <div class="overflow-hidden rounded-xl border border-hd-border bg-hd-bg font-mono text-xs text-hd-text">
+        <div class="flex items-center justify-between border-b border-hd-border bg-hd-aside px-3 py-2">
+          <div class="flex items-center gap-2">
+            <.icon name="hero-command-line" class="size-3.5 text-hd-muted" />
+            <span class="text-xs text-hd-secondary">
+              systemd journal
             </span>
           </div>
-          <span :if={@runtime_logs} class="font-mono text-[10px] text-hd-muted">
+          <span :if={@runtime_logs} class="font-mono text-[11px] text-hd-muted">
             {Calendar.strftime(@runtime_logs.fetched_at, "%Y-%m-%d %H:%M:%S UTC")}
           </span>
         </div>
@@ -120,16 +120,13 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
     <EnvTab.panel {assigns} />
     <div :if={@app_detail_tab == :runtime} id="runtime-packages" class="space-y-3">
       <div class="space-y-0.5">
-        <h3 class="font-display text-xs font-semibold text-hd-text">Runtime packages</h3>
-        <p class="text-[11px] text-hd-muted">
+        <h3 class="text-sm font-medium text-hd-text">Runtime packages</h3>
+        <p class="text-xs text-hd-muted">
           Installed automatically on every deploy via apt.
         </p>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <span
-          :for={package <- @runtime_packages}
-          class="rounded border border-hd-border bg-hd-aside px-2 py-0.5 font-mono text-[10px] text-hd-orange"
-        >
+      <div class="flex flex-wrap gap-1.5">
+        <span :for={package <- @runtime_packages} class="keycap">
           {package}
         </span>
       </div>
@@ -138,10 +135,10 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
     <div :if={@app_detail_tab == :webhook} id="app-webhook" class="space-y-5">
       <div class="space-y-3">
         <div class="space-y-0.5">
-          <h3 class="font-display text-xs font-semibold text-hd-text">
+          <h3 class="text-sm font-medium text-hd-text">
             Deploy branch
           </h3>
-          <p class="text-[11px] leading-relaxed text-hd-muted">
+          <p class="text-xs leading-relaxed text-hd-muted">
             Auto-deploy queues only when GitHub pushes this branch.
             Other refs are ignored.
           </p>
@@ -175,24 +172,24 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
       </div>
 
       <div class="space-y-0.5">
-        <h3 class="font-display text-xs font-semibold text-hd-text">
-          GitHub Push webhook URL Credentials
+        <h3 class="text-sm font-medium text-hd-text">
+          Webhook credentials
         </h3>
-        <p class="text-[11px] text-hd-muted">
-          Configure these properties on GitHub (Repository Settings → Webhooks) to enable instant automatic deploys on push
+        <p class="text-xs text-hd-muted">
+          Add this URL in GitHub → Repository settings → Webhooks to deploy on push
         </p>
       </div>
       <div class="grid gap-3 md:grid-cols-2">
         <.copy_field id="webhook-url" label="Payload URL" value={@webhook_url} mono />
         <div class="space-y-1">
           <div class="flex items-center justify-between">
-            <span class="font-mono text-[9px] font-semibold uppercase tracking-wider text-hd-muted">
-              Webhook Secret token
+            <span class="text-xs text-hd-muted">
+              Secret token
             </span>
             <button
               type="button"
               phx-click="toggle_secret"
-              class="text-[10px] text-hd-orange hover:underline"
+              class="text-xs text-hd-muted transition-colors hover:text-hd-text"
             >
               {if @show_secret?, do: "Hide", else: "Reveal"}
             </button>
@@ -207,7 +204,7 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
           <div
             :if={not @show_secret?}
             id="webhook-secret-masked"
-            class="rounded border border-hd-border bg-hd-aside px-2.5 py-1.5 font-mono text-xs text-hd-muted/60"
+            class="rounded-lg border border-hd-border bg-hd-aside px-2.5 py-1.5 font-mono text-xs text-hd-muted/60"
           >
             {String.duplicate("•", 32)}
           </div>
@@ -217,8 +214,8 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
 
     <div :if={@app_detail_tab == :danger} id="app-danger-zone" class="space-y-4">
       <div class="space-y-0.5">
-        <h3 class="font-display text-xs font-semibold text-rose-400">Danger zone</h3>
-        <p class="text-[11px] leading-relaxed text-hd-muted">
+        <h3 class="text-sm font-medium text-hd-red">Danger zone</h3>
+        <p class="text-xs leading-relaxed text-hd-muted">
           Permanently removes <span class="font-medium text-hd-text">{@app.name}</span>
           from Cleat — deploy history, env vars, and the GitHub webhook.
           The unit on {@app.server.name} is stopped and
@@ -227,7 +224,7 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
         </p>
       </div>
 
-      <div class="rounded-lg border border-rose-500/30 bg-rose-500/5 p-4">
+      <div class="rounded-xl border border-hd-red/40 p-4">
         <.form
           for={@delete_form}
           id="delete-app-form"
@@ -235,7 +232,7 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
           phx-submit="delete_app"
           class="space-y-3"
         >
-          <p class="text-[11px] text-hd-muted">
+          <p class="text-xs text-hd-muted">
             Type <span class="font-mono text-hd-text">{@app.slug}</span> to confirm.
           </p>
           <input
@@ -252,7 +249,7 @@ defmodule CleatDeployWeb.AppLive.Show.Tabs do
             id="delete-app-button"
             type="submit"
             disabled={String.trim(@delete_confirm) != @app.slug or @deploying?}
-            class="inline-flex items-center justify-center gap-1.5 rounded-md bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+            class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-hd-red px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <.icon name="hero-trash" class="size-3.5" /> Delete {@app.name}
           </button>

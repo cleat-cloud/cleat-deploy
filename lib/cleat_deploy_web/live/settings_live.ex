@@ -104,7 +104,7 @@ defmodule CleatDeployWeb.SettingsLive do
     >
       <div id="settings" class="mx-auto max-w-3xl space-y-4">
         <div class="space-y-1">
-          <h2 class="font-display text-lg font-semibold tracking-tight text-hd-text">Settings</h2>
+          <h2 class="text-lg tracking-tight text-hd-text">Settings</h2>
           <p class="text-xs text-hd-muted">
             Signed in as <span class="font-mono text-hd-text">{@current_scope.user.email}</span>
           </p>
@@ -115,7 +115,7 @@ defmodule CleatDeployWeb.SettingsLive do
             id="settings-tabs"
             role="tablist"
             aria-label="Settings"
-            class="flex flex-wrap items-center gap-1 border-b border-hd-border bg-hd-aside p-1"
+            class="flex flex-wrap items-center gap-1 border-b border-hd-border px-2 pt-2"
           >
             <.settings_tab
               tab={:platform}
@@ -133,12 +133,12 @@ defmodule CleatDeployWeb.SettingsLive do
             />
           </div>
 
-          <div :if={@settings_tab == :platform} id="settings-platform" class="space-y-4 p-4">
+          <div :if={@settings_tab == :platform} id="settings-platform" class="space-y-4 p-5">
             <div class="space-y-1">
-              <h3 class="font-display text-xs font-semibold text-hd-text">
+              <h3 class="text-sm font-medium text-hd-text">
                 Auto sleep · idle shutdown
               </h3>
-              <p class="text-[11px] leading-relaxed text-hd-muted">
+              <p class="text-xs leading-relaxed text-hd-muted">
                 Applies to every app of this tenant. Apps with the per-app flag on are stopped
                 after this window without any request; the next request starts them again (cold
                 start) — the wake agent runs on the server, so waking does not depend on this panel.
@@ -147,12 +147,15 @@ defmodule CleatDeployWeb.SettingsLive do
 
             <div class="flex flex-wrap items-center gap-2">
               <span class={[
-                "rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
-                @setting.idle_shutdown_enabled &&
-                  "border-hd-green/40 bg-hd-green/10 text-hd-green",
-                !@setting.idle_shutdown_enabled &&
-                  "border-hd-border bg-hd-aside text-hd-muted"
+                "flex items-center gap-1.5 text-xs",
+                @setting.idle_shutdown_enabled && "text-hd-green",
+                !@setting.idle_shutdown_enabled && "text-hd-muted"
               ]}>
+                <span class={[
+                  "size-1.5 rounded-full",
+                  @setting.idle_shutdown_enabled && "bg-hd-green",
+                  !@setting.idle_shutdown_enabled && "bg-hd-muted/50"
+                ]} />
                 {if @setting.idle_shutdown_enabled, do: "Enabled", else: "Disabled"}
               </span>
             </div>
@@ -190,7 +193,7 @@ defmodule CleatDeployWeb.SettingsLive do
 
             <div
               id="idle-shutdown-hint"
-              class="rounded border border-hd-border bg-hd-aside px-3 py-2 text-[11px] leading-relaxed text-hd-muted"
+              class="rounded-lg border border-hd-border bg-hd-aside px-3.5 py-3 text-xs leading-relaxed text-hd-muted"
             >
               <p>
                 <span class="font-mono text-hd-text">{@armed_count}</span>
@@ -208,7 +211,7 @@ defmodule CleatDeployWeb.SettingsLive do
             </div>
           </div>
 
-          <div :if={@settings_tab == :account} id="settings-account" class="space-y-4 p-4">
+          <div :if={@settings_tab == :account} id="settings-account" class="space-y-4 p-5">
             <.settings_section
               icon="hero-envelope"
               title="Email address"
@@ -265,7 +268,7 @@ defmodule CleatDeployWeb.SettingsLive do
                   />
                 </div>
 
-                <ul class="space-y-1.5 rounded-md border border-hd-border bg-hd-aside/50 px-3 py-2.5">
+                <ul class="space-y-1.5 rounded-lg border border-hd-border bg-hd-aside/50 px-3 py-2.5">
                   <.password_requirement label="At least 12 characters" />
                   <.password_requirement label="Confirmation must match" />
                 </ul>
@@ -296,9 +299,9 @@ defmodule CleatDeployWeb.SettingsLive do
       role="tab"
       aria-selected={@active?}
       class={[
-        "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold tracking-wide transition-all",
-        @active? && "border border-hd-border bg-hd-card text-hd-orange",
-        !@active? && "text-hd-muted hover:text-hd-text"
+        "-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2 text-[13px] font-medium transition-colors",
+        @active? && "border-hd-orange text-hd-text",
+        !@active? && "border-transparent text-hd-muted hover:text-hd-text"
       ]}
     >
       <.icon name={@icon} class="size-3.5" />
@@ -315,16 +318,14 @@ defmodule CleatDeployWeb.SettingsLive do
   defp settings_section(assigns) do
     ~H"""
     <section class="paas-card overflow-hidden">
-      <div class="flex items-start gap-3 border-b border-hd-border bg-hd-aside/60 px-4 py-3.5">
-        <div class="flex size-9 shrink-0 items-center justify-center rounded-md border border-hd-border bg-hd-card">
-          <.icon name={@icon} class="size-4 text-hd-orange" />
-        </div>
+      <div class="flex items-start gap-2.5 border-b border-hd-border px-5 py-4">
+        <.icon name={@icon} class="mt-0.5 size-4 shrink-0 text-hd-muted" />
         <div class="min-w-0 space-y-0.5">
-          <h3 class="font-display text-sm font-semibold text-hd-text">{@title}</h3>
+          <h3 class="text-sm font-medium text-hd-text">{@title}</h3>
           <p class="text-xs leading-relaxed text-hd-muted">{@description}</p>
         </div>
       </div>
-      <div class="p-4">
+      <div class="p-5">
         {render_slot(@inner_block)}
       </div>
     </section>

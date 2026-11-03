@@ -205,12 +205,12 @@ defmodule CleatDeployWeb.ServerLive.Index do
       server_count={@server_count}
       app_count={@app_count}
     >
-      <div class="space-y-4">
+      <div class="space-y-6">
         <div class="flex items-center justify-between gap-4">
           <div>
-            <h2 class="font-display text-sm font-semibold text-hd-text">Deploy servers</h2>
-            <p class="text-[11px] text-hd-muted">
-              Hetzner Cloud and AWS Lightsail VMs hosting Phoenix and Go applications
+            <h2 class="text-lg font-medium tracking-tight text-hd-text">Servers</h2>
+            <p class="text-xs text-hd-muted">
+              Hetzner Cloud and AWS Lightsail VMs hosting your apps
             </p>
           </div>
           <div :if={@live_action == :index} class="flex items-center gap-2">

@@ -132,7 +132,7 @@ defmodule CleatDeployWeb.ServerLiveTest do
     assert has_element?(view, "#sync-cloud-button")
 
     html = render_click(view, "sync_cloud", %{})
-    assert html =~ "MISSING"
+    assert html =~ "missing"
     assert has_element?(view, "#remove-server-#{server.id}")
     refute has_element?(view, "#remove-confirm-modal")
 

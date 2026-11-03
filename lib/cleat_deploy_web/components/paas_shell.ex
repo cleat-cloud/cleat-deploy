@@ -15,48 +15,51 @@ defmodule CleatDeployWeb.PaasShell do
   def shell(assigns) do
     ~H"""
     <div id="app-shell" class="paas-shell bg-hd-bg text-hd-text antialiased">
-      <header class="paas-shell-header z-40 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hd-border bg-hd-aside px-4 py-3">
+      <header class="paas-shell-header z-40 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hd-border bg-hd-aside px-4 py-2.5">
         <.link
           href={~p"/"}
-          class="group flex items-center gap-2.5 rounded-lg transition-opacity hover:opacity-90"
+          class="group flex items-center gap-2.5"
           aria-label="Back to dashboard"
         >
-          <div class="flex size-9 items-center justify-center rounded-lg border border-hd-border bg-hd-card transition-colors group-hover:border-hd-orange/40">
-            <.icon name="hero-fire" class="size-5 text-hd-orange" />
-          </div>
-          <div>
-            <div class="flex items-center gap-1.5">
-              <h1 class="font-display text-lg font-semibold tracking-tight">Cleat</h1>
-              <span class="rounded-full border border-hd-border bg-hd-card px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-hd-muted">
-                MVP
-              </span>
-            </div>
+          <.icon name="hero-fire" class="size-[18px] text-hd-orange" />
+          <div class="flex items-baseline gap-2.5">
+            <h1 class="text-base tracking-tight">Cleat</h1>
             <p class="hidden text-xs text-hd-muted sm:block">
               GitHub → SSH → your VPS
             </p>
           </div>
         </.link>
 
-        <nav class="flex flex-wrap items-center gap-2 text-xs font-medium">
+        <nav class="flex flex-wrap items-center gap-1 text-[13px]">
           <.theme_toggle id="theme-toggle" />
           <%= if @current_scope do %>
-            <span class="hidden rounded-md border border-hd-border bg-hd-card px-2.5 py-1.5 text-hd-muted sm:inline">
+            <span class="hidden px-2 text-hd-muted sm:inline">
               {@current_scope.user.email}
             </span>
-            <.link href={~p"/settings?tab=account"} class="paas-btn-secondary px-3 py-1.5">
+            <.link
+              href={~p"/settings?tab=account"}
+              class="rounded-lg px-2.5 py-1.5 text-hd-secondary transition-colors hover:bg-hd-raised hover:text-hd-text"
+            >
               Account
             </.link>
-            <.link href={~p"/users/log-out"} method="delete" class="paas-btn-secondary px-3 py-1.5">
+            <.link
+              href={~p"/users/log-out"}
+              method="delete"
+              class="rounded-lg px-2.5 py-1.5 text-hd-secondary transition-colors hover:bg-hd-raised hover:text-hd-text"
+            >
               Log out
             </.link>
           <% else %>
-            <.link href={~p"/users/log-in"} class="paas-btn-secondary px-3 py-1.5">
+            <.link
+              href={~p"/users/log-in"}
+              class="rounded-lg px-2.5 py-1.5 text-hd-secondary transition-colors hover:bg-hd-raised hover:text-hd-text"
+            >
               Log in
             </.link>
             <.link
               :if={CleatDeploy.Accounts.registration_allowed?()}
               href={~p"/users/register"}
-              class="paas-btn-primary px-3 py-1.5"
+              class="paas-btn-primary"
             >
               Register
             </.link>
@@ -68,12 +71,10 @@ defmodule CleatDeployWeb.PaasShell do
         id="app-sidebar"
         class="paas-shell-sidebar flex-col border-r border-hd-border bg-hd-aside"
       >
-        <div class="px-4 pt-5 pb-3">
-          <p class="font-mono text-[10px] font-semibold tracking-[0.18em] text-hd-muted uppercase">
-            Navigate
-          </p>
+        <div class="px-5 pt-6 pb-2">
+          <p class="text-xs text-hd-muted">Navigate</p>
         </div>
-        <nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3" aria-label="Main">
+        <nav class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3" aria-label="Main">
           <.nav_link
             id="nav-dashboard"
             navigate={~p"/"}
@@ -94,7 +95,7 @@ defmodule CleatDeployWeb.PaasShell do
             navigate={~p"/apps"}
             active?={@active_tab == :apps}
             icon="hero-globe-alt"
-            label="App Details"
+            label="Apps"
             count={@app_count}
           />
           <.nav_link
@@ -124,7 +125,7 @@ defmodule CleatDeployWeb.PaasShell do
           class="mt-auto shrink-0 space-y-2 border-t border-hd-border px-3 py-4"
         >
           <.link navigate={~p"/servers/new"} class="paas-btn-secondary w-full justify-center">
-            <.icon name="hero-plus" class="size-3.5 text-hd-orange" /> New VM
+            <.icon name="hero-plus" class="size-3.5" /> New VM
           </.link>
           <.link navigate={~p"/apps/new"} class="paas-btn-primary w-full justify-center">
             <.icon name="hero-plus" class="size-3.5" /> Register App
@@ -152,10 +153,10 @@ defmodule CleatDeployWeb.PaasShell do
       </button>
 
       <div class="paas-shell-main flex flex-col">
-        <div class="flex shrink-0 items-center justify-between gap-3 border-b border-hd-border bg-hd-bg px-3 py-3 lg:hidden">
+        <div class="flex shrink-0 items-center justify-between gap-3 border-b border-hd-border bg-hd-bg px-3 py-2 lg:hidden">
           <nav
             id="app-nav-mobile"
-            class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border border-hd-border bg-hd-aside p-1"
+            class="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg border border-hd-border bg-hd-aside p-1"
           >
             <.nav_link
               id="nav-dashboard-mobile"
@@ -211,8 +212,7 @@ defmodule CleatDeployWeb.PaasShell do
         </div>
 
         <main class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div class="paas-grid-bg pointer-events-none absolute inset-0 opacity-[0.03]" />
-          <div class="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 lg:p-6">
+          <div class="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 lg:p-8">
             {render_slot(@inner_block)}
           </div>
         </main>
@@ -220,22 +220,15 @@ defmodule CleatDeployWeb.PaasShell do
 
       <footer
         id="app-footer"
-        class="paas-shell-footer shrink-0 border-t border-hd-border bg-hd-aside px-4 py-3.5 text-xs text-hd-muted select-none"
+        class="paas-shell-footer shrink-0 border-t border-hd-border bg-hd-aside px-4 py-2.5 select-none"
       >
-        <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 md:flex-row">
-          <div class="flex items-center gap-1.5">
-            <.icon name="hero-fire" class="size-3.5 text-hd-orange" />
-            <span class="font-mono text-[10px] font-semibold tracking-wider text-hd-text">
-              PHOENIX PAAS CLUSTER MGMT
-            </span>
-            <span class="rounded-full border border-hd-border bg-hd-card px-2 py-0.5 text-[10px]">
-              v0.1.0-alpha
-            </span>
-          </div>
-          <div class="flex items-center gap-3 font-mono text-[10px]">
-            <span>Hetzner · fsn1</span>
-            <span class="text-hd-green">Node Sync: ONLINE</span>
-          </div>
+        <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 md:flex-row">
+          <p class="font-mono text-[11px] text-hd-muted">
+            Cleat <span class="text-hd-border">·</span> v0.1.0-alpha
+          </p>
+          <p class="font-mono text-[11px] text-hd-muted">
+            self-hosted PaaS
+          </p>
         </div>
       </footer>
 
@@ -253,7 +246,7 @@ defmodule CleatDeployWeb.PaasShell do
       type="button"
       phx-hook="ThemeToggle"
       phx-update="ignore"
-      class="paas-btn-secondary size-9 justify-center px-0"
+      class="flex size-8 items-center justify-center rounded-lg text-hd-muted transition-colors hover:bg-hd-raised hover:text-hd-text"
       aria-label="Switch to light mode"
       aria-pressed="false"
       title="Light mode"
@@ -282,23 +275,19 @@ defmodule CleatDeployWeb.PaasShell do
       id={@id}
       navigate={@navigate}
       class={[
-        "group flex items-center gap-2 rounded-lg text-xs font-semibold tracking-wide transition-all",
+        "group flex items-center gap-2.5 rounded-lg text-[13px] font-medium transition-colors",
         @compact && "px-2.5 py-1.5",
-        !@compact && "px-3 py-2.5",
-        @active? && "bg-hd-card text-hd-orange shadow-sm ring-1 ring-hd-border",
-        !@active? && "text-hd-muted hover:bg-hd-card/70 hover:text-hd-text"
+        !@compact && "px-3 py-2",
+        @active? && "bg-hd-raised text-hd-text ring-1 ring-hd-border ring-inset",
+        !@active? && "text-hd-secondary hover:bg-hd-card/60 hover:text-hd-text"
       ]}
     >
-      <.icon name={@icon} class="size-4 shrink-0" />
+      <.icon
+        name={@icon}
+        class={["size-4 shrink-0", @active? && "text-hd-orange", !@active? && "text-hd-muted"]}
+      />
       <span class="min-w-0 truncate">{@label}</span>
-      <span
-        :if={@count != nil}
-        class={[
-          "ml-auto rounded-md px-1.5 py-0.5 font-mono text-[10px]",
-          @active? && "bg-hd-orange/10 text-hd-orange",
-          !@active? && "bg-hd-card text-hd-muted ring-1 ring-hd-border"
-        ]}
-      >
+      <span :if={@count != nil} class="ml-auto font-mono text-xs tabular-nums text-hd-muted">
         {@count}
       </span>
     </.link>
@@ -312,20 +301,20 @@ defmodule CleatDeployWeb.PaasShell do
     <div
       id="flash-toast"
       aria-live="polite"
-      class="pointer-events-none fixed top-20 left-1/2 z-50 -translate-x-1/2"
+      class="pointer-events-none fixed top-16 left-1/2 z-50 -translate-x-1/2"
     >
       <div
         :if={msg = Phoenix.Flash.get(@flash, :info)}
-        class="flex items-center gap-2 rounded-md border border-hd-green bg-hd-card px-3 py-2 font-mono text-[11px] font-medium text-hd-green shadow-xl"
+        class="mt-2 flex items-center gap-2.5 rounded-lg border border-hd-border bg-hd-raised px-3.5 py-2 text-[13px] text-hd-text shadow-lg"
       >
         <span class="size-1.5 rounded-full bg-hd-green" />
         {msg}
       </div>
       <div
         :if={msg = Phoenix.Flash.get(@flash, :error)}
-        class="flex items-center gap-2 rounded-md border border-hd-orange bg-hd-card px-3 py-2 font-mono text-[11px] font-medium text-hd-orange shadow-xl"
+        class="mt-2 flex items-center gap-2.5 rounded-lg border border-hd-border bg-hd-raised px-3.5 py-2 text-[13px] text-hd-text shadow-lg"
       >
-        <span class="size-1.5 rounded-full bg-hd-orange" />
+        <span class="size-1.5 rounded-full bg-hd-red" />
         {msg}
       </div>
     </div>

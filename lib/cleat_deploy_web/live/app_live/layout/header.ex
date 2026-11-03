@@ -8,10 +8,10 @@ defmodule CleatDeployWeb.AppLive.Layout.Header do
 
   def shell_header(assigns) do
     ~H"""
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-hd-border/40 pb-3">
-      <div class="flex items-center gap-2">
-        <span class="font-mono text-[10px] uppercase tracking-wider text-hd-muted">
-          Active Application:
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <span class="text-xs text-hd-muted">
+          Active app
         </span>
         <select
           id="app-selector"
@@ -26,24 +26,24 @@ defmodule CleatDeployWeb.AppLive.Layout.Header do
       </div>
       <div class="flex flex-wrap items-center gap-3 text-xs text-hd-muted">
         <div :if={@instances != []} id="app-instances" class="flex items-center gap-2">
-          <span class="font-mono text-[10px] uppercase tracking-wider text-hd-muted">
-            Instances:
+          <span class="text-xs text-hd-muted">
+            Instances
           </span>
           <.link
             :for={instance <- @instances}
             id={"app-instance-#{instance.slug}"}
             navigate={~p"/apps/#{instance.id}/deployments"}
-            class="font-mono text-[11px] text-hd-orange hover:underline"
+            class="font-mono text-xs text-hd-secondary transition-colors hover:text-hd-text"
           >
             {instance.slug} ({instance.branch})
           </.link>
         </div>
-        <div>
-          Repository mapping:
+        <div class="flex items-center gap-1.5">
+          <span>Repository</span>
           <.repo_link
             id="app-repo-mapping"
             repo={@app.github_repo}
-            class="font-mono text-hd-orange hover:text-hd-orange-dark"
+            class="font-mono text-xs text-hd-secondary hover:text-hd-text"
           />
         </div>
       </div>
@@ -62,12 +62,9 @@ defmodule CleatDeployWeb.AppLive.Layout.Header do
   def runtime_badge_label("static"), do: "HTML"
   def runtime_badge_label(_runtime), do: "PHX"
 
-  def runtime_badge_class("golang"), do: "border-hd-green/40 bg-hd-green/10 text-hd-green"
-  def runtime_badge_class("node"), do: "border-hd-blue/40 bg-hd-blue/10 text-hd-blue"
-  def runtime_badge_class("rails"), do: "border-hd-red/40 bg-hd-red/10 text-hd-red"
-  def runtime_badge_class("rust"), do: "border-amber-500/40 bg-amber-500/10 text-amber-500"
-  def runtime_badge_class("gleam"), do: "border-pink-400/40 bg-pink-400/10 text-pink-400"
-  def runtime_badge_class(_runtime), do: "border-hd-border bg-hd-aside text-hd-orange"
+  # One neutral treatment for every runtime: the language is a fact, the
+  # ember accent is reserved for the app that is live or selected.
+  def runtime_badge_class(_runtime), do: "border-hd-border bg-hd-raised text-hd-secondary"
 
   attr :id, :string, required: true
   attr :hosts, :list, required: true
@@ -83,15 +80,15 @@ defmodule CleatDeployWeb.AppLive.Layout.Header do
         @class
       ]}
     >
-      <.icon name="hero-globe-alt" class="size-3.5 shrink-0 text-hd-orange" />
+      <.icon name="hero-globe-alt" class="size-3.5 shrink-0 text-hd-muted" />
       <%= for {host, index} <- Enum.with_index(@hosts) do %>
-        <span :if={index > 0} class="select-none text-hd-border" aria-hidden="true">·</span>
+        <span :if={index > 0} class="select-none text-hd-muted/50" aria-hidden="true">·</span>
         <.link
           id={"#{@id}-#{host_dom_id(host)}"}
           href={"https://#{host}"}
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center font-mono text-sm text-hd-orange transition-colors hover:text-hd-orange-dark hover:underline"
+          class="inline-flex items-center whitespace-nowrap font-mono text-[13px] text-hd-secondary transition-colors hover:text-hd-text"
         >
           {host}
         </.link>

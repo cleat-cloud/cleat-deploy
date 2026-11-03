@@ -57,22 +57,19 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
       server_count={@server_count}
       app_count={@app_count}
     >
-      <div id="deployments-index" class="space-y-4">
+      <div id="deployments-index" class="space-y-5">
         <div>
-          <p class="font-mono text-[10px] font-semibold tracking-wider text-hd-muted uppercase">
-            Tenant history
-          </p>
-          <h2 class="font-display text-xl font-semibold tracking-tight">Deploys</h2>
-          <p class="mt-1 text-sm text-hd-muted">
+          <h2 class="text-xl font-medium tracking-tight">Deploys</h2>
+          <p class="mt-1 text-xs text-hd-muted">
             Every build in this tenant. Open an app to read logs or cancel a run.
           </p>
         </div>
 
-        <div class="overflow-hidden rounded-md border border-hd-border bg-hd-card">
-          <div class="flex items-center justify-between border-b border-hd-border bg-hd-aside px-4 py-2.5">
+        <div class="overflow-hidden rounded-xl border border-hd-border bg-hd-card">
+          <div class="flex items-center justify-between border-b border-hd-border px-5 py-3.5">
             <div class="space-y-0.5">
-              <h3 class="font-display text-xs font-semibold text-hd-text">Deployments</h3>
-              <p class="text-[11px] text-hd-muted">Newest first · 10 per page</p>
+              <h3 class="text-sm font-medium text-hd-text">Deployments</h3>
+              <p class="text-xs text-hd-muted">Newest first · 10 per page</p>
             </div>
           </div>
 
@@ -92,13 +89,13 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
               </thead>
               <tbody id="deployments-list" phx-update="stream">
                 <tr :if={@total == 0 and not @filtered?} id="deployments-empty">
-                  <td colspan="6" class="py-8 text-center text-hd-muted">
-                    <p class="font-mono text-xs">No deployments yet.</p>
+                  <td colspan="6" class="py-10 text-center text-hd-muted">
+                    <p class="text-[13px]">No deployments yet</p>
                   </td>
                 </tr>
                 <tr :if={@total == 0 and @filtered?} id="deployments-filter-empty">
-                  <td colspan="6" class="py-8 text-center text-hd-muted">
-                    <p class="font-mono text-xs">No deployments match this filter.</p>
+                  <td colspan="6" class="py-10 text-center text-hd-muted">
+                    <p class="text-[13px]">No deployments match this filter</p>
                   </td>
                 </tr>
                 <tr :for={{id, deployment} <- @streams.deployments} id={id}>
@@ -106,7 +103,7 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
                     <.link
                       id={"deployment-#{deployment.id}-app"}
                       navigate={~p"/apps/#{deployment.app.id}/deployments"}
-                      class="font-medium text-hd-orange hover:text-hd-orange-dark"
+                      class="font-medium text-hd-text transition-colors hover:text-hd-orange"
                     >
                       {deployment.app.name}
                     </.link>
@@ -115,21 +112,21 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
                     <.deploy_status_badge status={deployment.status} />
                   </td>
                   <td>
-                    <span class="rounded border border-hd-border bg-hd-aside px-1.5 py-0.5 text-[10px] text-hd-orange">
+                    <span class="keycap">
                       {deployment.git_sha}
                     </span>
                     <span
                       :if={deployment.git_ref not in [nil, ""]}
-                      class="mt-0.5 block text-[10px] text-hd-muted"
+                      class="mt-0.5 block text-xs text-hd-muted"
                     >
                       {deployment.git_ref}
                     </span>
                   </td>
-                  <td class="text-[11px] text-hd-muted">{deployment.triggered_by}</td>
-                  <td class="text-[11px] tabular-nums text-hd-text">
+                  <td class="text-xs text-hd-muted">{deployment.triggered_by}</td>
+                  <td class="text-xs tabular-nums text-hd-text">
                     {Deployments.format_duration(Deployments.duration(deployment))}
                   </td>
-                  <td class="text-[11px] text-hd-muted">
+                  <td class="text-xs text-hd-muted">
                     {format_datetime(deployment.started_at || deployment.inserted_at)}
                   </td>
                 </tr>
@@ -213,7 +210,7 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
       phx-click="filter_status"
       phx-value-status={@status}
       class={[
-        "rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide transition-colors",
+        "rounded-md border px-2.5 py-1 font-mono text-xs transition-colors",
         @active? && "border-hd-orange/50 bg-hd-orange/10 text-hd-orange",
         not @active? &&
           "border-hd-border bg-hd-card text-hd-muted hover:border-hd-orange/40 hover:text-hd-text"
@@ -234,7 +231,7 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
       id="deployments-pagination"
       class="flex flex-wrap items-center justify-between gap-3 border-t border-hd-border bg-hd-aside px-4 py-2"
     >
-      <span id="deployments-page-status" class="font-mono text-[11px] tabular-nums text-hd-muted">
+      <span id="deployments-page-status" class="font-mono text-xs tabular-nums text-hd-muted">
         {page_range(@page, @total)} of {@total}
       </span>
       <div class="flex items-center gap-2">
@@ -245,7 +242,7 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
           phx-value-page={1}
           disabled={@page <= 1}
           title="First page"
-          class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+          class="paas-btn-secondary px-2 py-1 text-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
         >
           <.icon name="hero-chevron-double-left" class="size-3.5" />
         </button>
@@ -255,11 +252,11 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
           phx-click="paginate"
           phx-value-page={@page - 1}
           disabled={@page <= 1}
-          class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+          class="paas-btn-secondary px-2 py-1 text-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
         >
           <.icon name="hero-chevron-left" class="size-3.5" /> Prev
         </button>
-        <span class="font-mono text-[10px] tracking-widest text-hd-muted uppercase">
+        <span class="font-mono text-xs text-hd-muted">
           Page {@page}/{@total_pages}
         </span>
         <button
@@ -268,7 +265,7 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
           phx-click="paginate"
           phx-value-page={@page + 1}
           disabled={@page >= @total_pages}
-          class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+          class="paas-btn-secondary px-2 py-1 text-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next <.icon name="hero-chevron-right" class="size-3.5" />
         </button>
@@ -279,7 +276,7 @@ defmodule CleatDeployWeb.DeploymentLive.Index do
           phx-value-page={@total_pages}
           disabled={@page >= @total_pages}
           title="Last page"
-          class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+          class="paas-btn-secondary px-2 py-1 text-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
         >
           <.icon name="hero-chevron-double-right" class="size-3.5" />
         </button>

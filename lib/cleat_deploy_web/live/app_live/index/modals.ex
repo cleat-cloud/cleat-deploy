@@ -11,11 +11,12 @@ defmodule CleatDeployWeb.AppLive.Index.Modals do
       id="apps-delete-modal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
     >
-      <div class="w-full max-w-md rounded-lg border border-rose-500/30 bg-hd-card p-5 shadow-xl">
-        <h3 class="font-display text-sm font-semibold text-rose-400">
+      <div class="paas-modal-panel w-full max-w-md rounded-xl border border-hd-red/40 bg-hd-card p-5 shadow-xl">
+        <h3 class="flex items-center gap-2 text-[15px] font-medium text-hd-text">
+          <.icon name="hero-exclamation-triangle" class="size-4 text-hd-red" />
           Delete {@pending_delete.name}?
         </h3>
-        <p class="mt-2 text-[11px] leading-relaxed text-hd-muted">
+        <p class="mt-2 text-[13px] leading-relaxed text-hd-muted">
           Permanently removes the app from Cleat — deploy history, env vars, and the GitHub
           webhook. The unit on {@pending_delete.server.name} is stopped and
           <span class="font-mono text-hd-text">{@pending_delete.release_path}</span>
@@ -28,7 +29,7 @@ defmodule CleatDeployWeb.AppLive.Index.Modals do
           phx-submit="delete_app"
           class="mt-4 space-y-3"
         >
-          <p class="text-[11px] text-hd-muted">
+          <p class="text-[13px] text-hd-muted">
             Type <span class="font-mono text-hd-text">{@pending_delete.slug}</span> to confirm.
           </p>
           <input
@@ -54,7 +55,7 @@ defmodule CleatDeployWeb.AppLive.Index.Modals do
               id="apps-delete-button"
               type="submit"
               disabled={String.trim(@delete_confirm) != @pending_delete.slug}
-              class="inline-flex items-center justify-center gap-1.5 rounded-md bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+              class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-hd-red px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <.icon name="hero-trash" class="size-3.5" /> Delete app
             </button>
@@ -75,23 +76,23 @@ defmodule CleatDeployWeb.AppLive.Index.Modals do
         role="dialog"
         aria-modal="true"
         aria-labelledby="apps-hibernate-title"
-        class="w-full max-w-md rounded-lg border border-hd-border bg-hd-card p-5 shadow-xl"
+        class="paas-modal-panel w-full max-w-md rounded-xl border border-hd-border bg-hd-card p-5 shadow-xl"
       >
         <h3
           id="apps-hibernate-title"
-          class="font-display text-sm font-semibold text-hd-text"
+          class="flex items-center gap-2 text-[15px] font-medium text-hd-text"
         >
-          Hibernate {@pending_hibernate.name}?
+          <.icon name="hero-moon" class="size-4 text-hd-muted" /> Hibernate {@pending_hibernate.name}?
         </h3>
-        <p class="mt-2 text-[11px] leading-relaxed text-hd-muted">
+        <p class="mt-2 text-[13px] leading-relaxed text-hd-muted">
           The process is stopped, so it stops using CPU and RAM. The release, the data
           directory and the Caddy site stay on disk — nothing is rebuilt to bring it back. {RuntimeControl.wake_hint(
             @pending_hibernate
           )}
         </p>
-        <div class="mt-3 rounded-md border border-hd-border bg-hd-aside px-3 py-2">
-          <p class="font-mono text-[11px] text-hd-text">{@pending_hibernate.host}</p>
-          <p class="mt-0.5 font-mono text-[10px] text-hd-muted">
+        <div class="mt-3 rounded-lg border border-hd-border bg-hd-aside px-3 py-2">
+          <p class="font-mono text-xs text-hd-text">{@pending_hibernate.host}</p>
+          <p class="mt-0.5 font-mono text-[11px] text-hd-muted">
             unit {App.unit_name(@pending_hibernate)}
           </p>
         </div>

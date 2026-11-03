@@ -267,7 +267,7 @@ defmodule CleatDeployWeb.AppLive.Show.Runtime do
 
     cond do
       String.contains?(down, "error") or String.contains?(down, "fail") ->
-        "text-rose-400"
+        "text-hd-red"
 
       String.contains?(down, "warn") ->
         "text-hd-orange"

@@ -72,18 +72,17 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
         role="dialog"
         aria-modal="true"
         aria-labelledby="cancel-deploy-title"
-        class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-2xl"
       >
-        <div class="h-px bg-gradient-to-r from-transparent via-rose-500/70 to-transparent" />
         <div class="space-y-5 p-5 sm:p-6">
           <div class="flex items-start gap-3">
-            <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-rose-500/30 bg-rose-500/10 text-rose-400">
+            <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-hd-border bg-hd-raised text-hd-muted">
               <.icon name="hero-exclamation-triangle" class="size-5" />
             </div>
             <div class="min-w-0 space-y-1">
               <h3
                 id="cancel-deploy-title"
-                class="font-display text-base font-semibold text-hd-text"
+                class="text-base font-medium text-hd-text"
               >
                 Cancel this deploy?
               </h3>
@@ -95,8 +94,8 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
           </div>
 
           <div class="rounded-lg border border-hd-border bg-hd-aside px-3 py-3">
-            <p class="font-display text-sm font-semibold text-hd-text">{@app.name}</p>
-            <p class="mt-1 font-mono text-[11px] text-hd-muted">
+            <p class="text-sm text-hd-text">{@app.name}</p>
+            <p class="mt-1 font-mono text-xs text-hd-muted">
               {@app.github_repo} · branch {@app.branch}
             </p>
           </div>
@@ -115,7 +114,7 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
               type="button"
               phx-click="cancel_deploy"
               phx-disable-with="Cancelling…"
-              class="inline-flex items-center justify-center gap-1.5 rounded-md bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-rose-400"
+              class="inline-flex items-center justify-center gap-1.5 rounded-md bg-hd-red px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:opacity-90"
             >
               <.icon name="hero-x-mark" class="size-3.5" /> Yes, cancel it
             </button>
@@ -142,16 +141,15 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
         role="dialog"
         aria-modal="true"
         aria-labelledby="hibernate-title"
-        class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-2xl"
       >
-        <div class="h-px bg-gradient-to-r from-transparent via-hd-blue/70 to-transparent" />
         <div class="space-y-5 p-5 sm:p-6">
           <div class="flex items-start gap-3">
-            <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-hd-blue/30 bg-hd-blue/10 text-hd-blue">
+            <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-hd-border bg-hd-raised text-hd-muted">
               <.icon name="hero-moon" class="size-5" />
             </div>
             <div class="min-w-0 space-y-1">
-              <h3 id="hibernate-title" class="font-display text-base font-semibold text-hd-text">
+              <h3 id="hibernate-title" class="text-base font-medium text-hd-text">
                 Hibernate {@app.name}?
               </h3>
               <p class="text-[13px] leading-relaxed text-hd-muted">
@@ -162,8 +160,8 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
           </div>
 
           <div class="rounded-lg border border-hd-border bg-hd-aside px-3 py-3">
-            <p class="font-display text-sm font-semibold text-hd-text">{@app.name}</p>
-            <p class="mt-1 font-mono text-[11px] text-hd-muted">
+            <p class="text-sm text-hd-text">{@app.name}</p>
+            <p class="mt-1 font-mono text-xs text-hd-muted">
               {@app.host} · unit {@unit_label}
             </p>
           </div>
@@ -208,16 +206,15 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
         role="dialog"
         aria-modal="true"
         aria-labelledby="idle-sleep-title"
-        class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        class="paas-modal-panel relative w-full max-w-md overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-2xl"
       >
-        <div class="h-px bg-gradient-to-r from-transparent via-hd-green/70 to-transparent" />
         <div class="space-y-5 p-5 sm:p-6">
           <div class="flex items-start gap-3">
-            <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-hd-green/30 bg-hd-green/10 text-hd-green">
+            <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-hd-border bg-hd-raised text-hd-muted">
               <.icon name="hero-moon" class="size-5" />
             </div>
             <div class="min-w-0 space-y-1">
-              <h3 id="idle-sleep-title" class="font-display text-base font-semibold text-hd-text">
+              <h3 id="idle-sleep-title" class="text-base font-medium text-hd-text">
                 {if @idle_on?, do: "Turn off auto sleep?", else: "Turn on auto sleep?"}
               </h3>
               <p class="text-[13px] leading-relaxed text-hd-muted">{@idle_confirm_hint}</p>
@@ -225,8 +222,8 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
           </div>
 
           <div class="rounded-lg border border-hd-border bg-hd-aside px-3 py-3">
-            <p class="font-display text-sm font-semibold text-hd-text">{@app.name}</p>
-            <p class="mt-1 font-mono text-[11px] text-hd-muted">
+            <p class="text-sm text-hd-text">{@app.name}</p>
+            <p class="mt-1 font-mono text-xs text-hd-muted">
               {@app.host} · idle window {@idle_window}
             </p>
           </div>
@@ -271,17 +268,16 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-instance-title"
-        class="paas-modal-panel relative w-full max-w-lg overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        class="paas-modal-panel relative w-full max-w-lg overflow-hidden rounded-xl border border-hd-border bg-hd-card shadow-2xl"
       >
-        <div class="h-px bg-gradient-to-r from-transparent via-hd-blue/70 to-transparent" />
         <div class="space-y-4 p-5 sm:p-6">
           <div class="space-y-1">
-            <h3 id="new-instance-title" class="font-display text-base font-semibold text-hd-text">
+            <h3 id="new-instance-title" class="text-base font-medium text-hd-text">
               New instance
             </h3>
             <p class="text-[13px] leading-relaxed text-hd-muted">
               Registers another instance of
-              <span class="font-mono text-hd-orange">{@app.github_repo}</span>
+              <span class="font-mono text-hd-secondary">{@app.github_repo}</span>
               on a different branch, with its own slug, host, port, systemd unit and environment
               variables. Pushes keep deploying both instances.
             </p>
@@ -290,7 +286,7 @@ defmodule CleatDeployWeb.AppLive.Layout.HeroModals do
           <div
             :if={@instance_errors != []}
             id="new-instance-errors"
-            class="space-y-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300"
+            class="space-y-1 rounded-lg border border-hd-red/40 bg-hd-red/10 px-3 py-2 text-[11px] text-hd-red"
           >
             <p :for={error <- @instance_errors}>{error}</p>
           </div>

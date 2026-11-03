@@ -26,22 +26,22 @@ defmodule CleatDeployWeb.AppLive.Layout.Hero do
       )
 
     ~H"""
-    <div id="app-hero" class="paas-card space-y-3 p-4">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <div id="app-hero" class="paas-card space-y-4 p-5">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="min-w-0 space-y-2">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2.5">
             <span
               id="app-runtime-badge"
               class={[
-                "inline-flex h-7 w-12 shrink-0 items-center justify-center rounded border font-mono text-[10px] font-bold",
+                "inline-flex h-7 w-11 shrink-0 items-center justify-center rounded-md border font-mono text-[11px] font-medium",
                 @runtime_badge_class
               ]}
             >
               {@runtime_badge}
             </span>
             <div class="min-w-0">
-              <h2 class="font-display text-base font-semibold text-hd-text">{@app.name}</h2>
-              <p class="flex flex-wrap items-center gap-1 font-mono text-[11px] text-hd-muted">
+              <h2 class="text-xl font-medium tracking-tight text-hd-text">{@app.name}</h2>
+              <p class="flex flex-wrap items-center gap-1 font-mono text-xs text-hd-muted">
                 <.icon name="hero-code-bracket" class="size-3" />
                 <Header.repo_link
                   id="app-repo-hero"
@@ -57,7 +57,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Hero do
           <Header.host_links id="app-host-hero" hosts={@hosts} class="sm:pl-14" />
         </div>
 
-        <div class="flex flex-wrap items-center gap-2 lg:justify-end lg:shrink-0">
+        <div class="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
           <button
             :if={@can_hibernate?}
             id="hibernate-button"
@@ -65,7 +65,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Hero do
             phx-click={if @hibernated?, do: "wake_app", else: "open_hibernate"}
             disabled={@deploying?}
             phx-disable-with={@hibernated? && "Waking…"}
-            class={["paas-btn-secondary uppercase", @deploying? && "opacity-50"]}
+            class={["paas-btn-secondary", @deploying? && "opacity-50"]}
             title="Stops the process (no CPU/RAM); release and data stay on disk"
           >
             <.icon name={if @hibernated?, do: "hero-bolt", else: "hero-moon"} class="size-3.5" />
@@ -79,13 +79,16 @@ defmodule CleatDeployWeb.AppLive.Layout.Hero do
             data-state={if @idle_on?, do: "on", else: "off"}
             title={@idle_hint}
             class={[
-              "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wide uppercase transition-colors",
-              @idle_on? && "border-hd-green/50 bg-hd-green/10 text-hd-green",
-              !@idle_on? &&
-                "border-hd-border bg-hd-card text-hd-muted hover:border-hd-orange/40 hover:text-hd-text"
+              "inline-flex items-center gap-2 rounded-lg border border-hd-border bg-hd-card px-2.5 py-1.5 text-xs font-medium transition-colors",
+              @idle_on? && "text-hd-text",
+              !@idle_on? && "text-hd-muted hover:text-hd-text"
             ]}
           >
-            <.icon name="hero-moon" class="size-3" /> auto sleep {if @idle_on?, do: "on", else: "off"}
+            <span class={[
+              "size-2 rounded-full",
+              @idle_on? && "bg-hd-orange",
+              !@idle_on? && "bg-hd-muted/40"
+            ]} /> Auto sleep
           </button>
           <button
             :if={@static?}
@@ -95,21 +98,23 @@ defmodule CleatDeployWeb.AppLive.Layout.Hero do
             data-state={if @indexable?, do: "on", else: "off"}
             title="Google indexing. Takes effect on the next deploy."
             class={[
-              "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wide uppercase transition-colors",
-              @indexable? && "border-hd-green/50 bg-hd-green/10 text-hd-green",
-              !@indexable? &&
-                "border-hd-border bg-hd-card text-hd-muted hover:border-hd-orange/40 hover:text-hd-text"
+              "inline-flex items-center gap-2 rounded-lg border border-hd-border bg-hd-card px-2.5 py-1.5 text-xs font-medium transition-colors",
+              @indexable? && "text-hd-text",
+              !@indexable? && "text-hd-muted hover:text-hd-text"
             ]}
           >
-            <.icon name="hero-magnifying-glass" class="size-3" />
-            indexing {if @indexable?, do: "on", else: "off"}
+            <span class={[
+              "size-2 rounded-full",
+              @indexable? && "bg-hd-orange",
+              !@indexable? && "bg-hd-muted/40"
+            ]} /> Indexing
           </button>
           <button
             :if={@app.github_repo not in [nil, ""]}
             id="new-instance-button"
             type="button"
             phx-click="open_new_instance"
-            class="paas-btn-secondary uppercase"
+            class="paas-btn-secondary"
             title="Register another instance of this repository on a different branch"
           >
             <.icon name="hero-square-2-stack" class="size-3.5" /> New instance
@@ -119,29 +124,29 @@ defmodule CleatDeployWeb.AppLive.Layout.Hero do
             type="button"
             phx-click="deploy"
             disabled={@deploying?}
-            class={["paas-btn-primary uppercase", @deploying? && "opacity-50"]}
+            class={["paas-btn-primary", @deploying? && "opacity-50"]}
           >
             <.icon
               name={if @deploying?, do: "hero-arrow-path", else: "hero-play"}
               class={["size-3.5", @deploying? && "motion-safe:animate-spin"]}
             />
-            {if @deploying?, do: "Build in progress…", else: "Deploy now"}
+            {if @deploying?, do: "Deploying…", else: "Deploy"}
           </button>
           <button
             :if={@deploying?}
             id="cancel-deploy-button"
             type="button"
             phx-click="open_cancel_deploy"
-            class="paas-btn-secondary uppercase"
+            class="paas-btn-secondary"
           >
-            <.icon name="hero-x-mark" class="size-3.5 text-rose-400" /> Cancel deploy
+            <.icon name="hero-x-mark" class="size-3.5 text-hd-red" /> Cancel deploy
           </button>
         </div>
       </div>
 
-      <p :if={not @global_enabled?} id="app-sleep-global-off" class="text-[11px] text-hd-orange">
+      <p :if={not @global_enabled?} id="app-sleep-global-off" class="text-[13px] text-hd-secondary">
         Platform auto sleep is disabled —
-        <.link navigate={~p"/settings"} class="underline">open Settings</.link>
+        <.link navigate={~p"/settings"} class="text-hd-orange underline">open Settings</.link>
         — the per-app flag only hibernates once the platform switch is on.
       </p>
 

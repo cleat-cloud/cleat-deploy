@@ -5,7 +5,7 @@
         Create your account
         <:subtitle>
           Already have an account?
-          <.link navigate={~p"/users/log-in"} class="font-semibold text-hd-orange hover:underline">
+          <.link navigate={~p"/users/log-in"} class="text-hd-orange hover:underline">
             Log in
           </.link>
         </:subtitle>
@@ -20,7 +20,7 @@
       <.input
         field={@form[:email]}
         type="email"
-        label="Work email"
+        label="Email"
         autocomplete="username"
         spellcheck="false"
         required
@@ -44,7 +44,7 @@
       />
 
       <.button
-        phx-disable-with="Creating account..."
+        phx-disable-with="Creating account…"
         class="paas-btn-primary mt-4 w-full justify-center py-2.5"
       >
         Create account

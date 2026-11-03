@@ -237,7 +237,7 @@ defmodule CleatDeployWeb.CoreComponents do
       <label for={@id}>
         <span
           :if={@label}
-          class="mb-1 block font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted"
+          class="mb-1.5 block text-[13px] text-hd-secondary"
         >
           {@label}
         </span>
@@ -246,7 +246,7 @@ defmodule CleatDeployWeb.CoreComponents do
           name={@name}
           class={[
             @class || "paas-select w-full",
-            @errors != [] && (@error_class || "border-rose-500")
+            @errors != [] && (@error_class || "border-hd-red")
           ]}
           multiple={@multiple}
           {@rest}
@@ -266,7 +266,7 @@ defmodule CleatDeployWeb.CoreComponents do
       <label for={@id}>
         <span
           :if={@label}
-          class="mb-1 block font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted"
+          class="mb-1.5 block text-[13px] text-hd-secondary"
         >
           {@label}
         </span>
@@ -275,7 +275,7 @@ defmodule CleatDeployWeb.CoreComponents do
           name={@name}
           class={[
             @class || "paas-input min-h-24 resize-y",
-            @errors != [] && (@error_class || "border-rose-500")
+            @errors != [] && (@error_class || "border-hd-red")
           ]}
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
@@ -291,7 +291,7 @@ defmodule CleatDeployWeb.CoreComponents do
       <label for={@id}>
         <span
           :if={@label}
-          class="mb-1 block font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted"
+          class="mb-1.5 block text-[13px] text-hd-secondary"
         >
           {@label}
         </span>
@@ -304,7 +304,7 @@ defmodule CleatDeployWeb.CoreComponents do
             class={[
               @class || "paas-input w-full",
               "pr-10",
-              @errors != [] && (@error_class || "border-rose-500")
+              @errors != [] && (@error_class || "border-hd-red")
             ]}
             {@rest}
           />
@@ -337,7 +337,7 @@ defmodule CleatDeployWeb.CoreComponents do
       <label for={@id}>
         <span
           :if={@label}
-          class="mb-1 block font-mono text-[10px] font-semibold uppercase tracking-wider text-hd-muted"
+          class="mb-1.5 block text-[13px] text-hd-secondary"
         >
           {@label}
         </span>
@@ -348,7 +348,7 @@ defmodule CleatDeployWeb.CoreComponents do
           value={Phoenix.HTML.Form.normalize_value(@type, @value)}
           class={[
             @class || "paas-input w-full",
-            @errors != [] && (@error_class || "border-rose-500")
+            @errors != [] && (@error_class || "border-hd-red")
           ]}
           {@rest}
         />
@@ -361,7 +361,7 @@ defmodule CleatDeployWeb.CoreComponents do
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
-    <p class="mt-1.5 flex items-center gap-1.5 text-xs text-rose-400">
+    <p class="mt-1.5 flex items-center gap-1.5 text-xs text-hd-red">
       <.icon name="hero-exclamation-circle" class="size-3.5 shrink-0" />
       {render_slot(@inner_block)}
     </p>
@@ -379,10 +379,10 @@ defmodule CleatDeployWeb.CoreComponents do
     ~H"""
     <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
       <div>
-        <h1 class="text-lg font-semibold leading-8">
+        <h1 class="text-xl font-medium leading-7">
           {render_slot(@inner_block)}
         </h1>
-        <p :if={@subtitle != []} class="text-sm text-base-content/70">
+        <p :if={@subtitle != []} class="text-[13px] text-hd-muted">
           {render_slot(@subtitle)}
         </p>
       </div>
@@ -441,7 +441,7 @@ defmodule CleatDeployWeb.CoreComponents do
           >
             {render_slot(col, @row_item.(row))}
           </td>
-          <td :if={@action != []} class="w-0 font-semibold">
+          <td :if={@action != []} class="w-0">
             <div class="flex gap-4">
               <%= for action <- @action do %>
                 {render_slot(action, @row_item.(row))}

@@ -85,7 +85,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
 
     {:ok, view, html} = live(conn, ~p"/")
     assert has_element?(view, "#dashboard")
-    assert html =~ "Configured apps"
+    assert has_element?(view, "#fleet-stats", "Apps")
     assert has_element?(view, "#metric-disk", "Disk used")
     assert has_element?(view, "#metric-memory", "Memory used")
     refute has_element?(view, "#dashboard-hero")
@@ -95,10 +95,7 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert has_element?(view, "#chart-cpu")
     assert has_element?(view, "#chart-network")
     assert has_element?(view, "#chart-runtimes")
-    assert has_element?(view, "#chart-deploys")
-    assert has_element?(view, "#chart-deploys-plot")
-    assert has_element?(view, "#chart-deploys svg[preserveAspectRatio='none']")
-    assert has_element?(view, "#chart-deploys-labels")
+    assert has_element?(view, "#chart-deploys", "No deploys in the last 14 days")
     assert has_element?(view, "#chart-access")
     assert has_element?(view, "#chart-visited", "No pageviews yet")
     refute has_element?(view, "#dashboard-apps-table")
@@ -268,29 +265,20 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=phoenix']")
-    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=golang']")
-    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=node']")
-    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=rails']")
-    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=rust']")
-    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=gleam']")
-    assert has_element?(view, "#chart-runtimes a[href='/apps?runtime=static']")
+    # Zero-count languages stay out of the ranked list.
+    refute has_element?(view, "#chart-runtimes a[href='/apps?runtime=golang']")
+    refute has_element?(view, "#chart-runtimes a[href='/apps?runtime=static']")
 
-    view |> element("#chart-runtimes a[href='/apps?runtime=static']") |> render_click()
+    view |> element("#chart-runtimes a[href='/apps?runtime=phoenix']") |> render_click()
 
-    assert_redirect(view, "/apps?runtime=static")
+    assert_redirect(view, "/apps?runtime=phoenix")
   end
 
-  test "deploy chart hover points skip 0/0 copy on empty days", %{conn: conn} do
-    {:ok, _view, html} = live(conn, ~p"/")
+  test "deploy chart shows an empty state before the first deploy", %{conn: conn} do
+    {:ok, view, html} = live(conn, ~p"/")
 
-    points = chart_points(html, "chart-deploys-plot")
-    assert length(points) == 14
-
-    for point <- points do
-      refute "0 success" in point["lines"]
-      refute "0 failed" in point["lines"]
-      assert point["lines"] == ["No deploys"]
-    end
+    assert has_element?(view, "#chart-deploys", "No deploys in the last 14 days")
+    refute html =~ "chart-deploys-plot"
   end
 
   test "deploy chart hover points show counts on days with deploys", %{

@@ -8,31 +8,19 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
 
   attr :app, App, required: true
 
+  # The runtime is a quiet mono word, not a colored identity badge: six
+  # saturated hues in one table would fight the single ember accent.
   def language_badge(assigns) do
     language = App.main_language(assigns.app)
-    badge_classes = language_badge_classes(assigns.app.runtime)
 
-    assigns = assign(assigns, language: language, badge_classes: badge_classes)
+    assigns = assign(assigns, language: language)
 
     ~H"""
-    <span
-      id={"app-#{@app.id}-language"}
-      class={[
-        "inline-flex items-center rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
-        @badge_classes
-      ]}
-    >
+    <span id={"app-#{@app.id}-language"} class="font-mono text-xs text-hd-muted">
       {@language}
     </span>
     """
   end
-
-  defp language_badge_classes("golang"), do: "border-hd-green/40 bg-hd-green/10 text-hd-green"
-  defp language_badge_classes("node"), do: "border-hd-blue/40 bg-hd-blue/10 text-hd-blue"
-  defp language_badge_classes("rails"), do: "border-hd-red/40 bg-hd-red/10 text-hd-red"
-  defp language_badge_classes("rust"), do: "border-amber-500/40 bg-amber-500/10 text-amber-500"
-  defp language_badge_classes("gleam"), do: "border-pink-400/40 bg-pink-400/10 text-pink-400"
-  defp language_badge_classes(_runtime), do: "border-hd-orange/40 bg-hd-orange/10 text-hd-orange"
 
   @doc """
   Whether the app opted into idle shutdown (auto sleep).
@@ -58,9 +46,9 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
       id={"app-#{@app.id}-idle"}
       title={@idle_hint}
       class={[
-        "inline-flex items-center gap-1 rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
-        @app.idle_shutdown_enabled && "border-hd-green/40 bg-hd-green/10 text-hd-green",
-        !@app.idle_shutdown_enabled && "border-hd-border bg-hd-aside text-hd-muted"
+        "inline-flex items-center gap-1.5 font-mono text-xs",
+        @app.idle_shutdown_enabled && "text-hd-green",
+        !@app.idle_shutdown_enabled && "text-hd-muted"
       ]}
     >
       <.icon :if={@app.idle_shutdown_enabled} name="hero-moon" class="size-3" />
@@ -86,10 +74,7 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
     <span
       id={"app-#{@app.id}-state"}
       title={@state.hint}
-      class={[
-        "inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide",
-        @state.class
-      ]}
+      class={["inline-flex items-center gap-1.5 font-mono text-xs", @state.class]}
     >
       <span class={["size-1.5 rounded-full", @state.dot]} />
       {@state.label}
@@ -114,8 +99,8 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
     %{
       label: "Off",
       hint: "Unit is stopped (auto sleep or hibernate) — the next request wakes it",
-      class: "text-hd-blue",
-      dot: "bg-hd-blue"
+      class: "text-hd-muted",
+      dot: "bg-hd-muted/50"
     }
   end
 
@@ -140,7 +125,7 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
     ~H"""
     <span
       id={"app-#{@app.id}-ram"}
-      class="font-mono text-sm tabular-nums text-hd-text"
+      class={["font-mono text-[13px] tabular-nums", metric_value_class(@label)]}
       title={@peak}
     >
       {@label}
@@ -157,7 +142,7 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
     ~H"""
     <span
       id={"app-#{@app.id}-cpu"}
-      class="font-mono text-sm tabular-nums text-hd-text"
+      class={["font-mono text-[13px] tabular-nums", metric_value_class(@label)]}
       title="Share of one vCPU"
     >
       {@label}
@@ -174,7 +159,7 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
     ~H"""
     <span
       id={"app-#{@app.id}-disk"}
-      class="font-mono text-sm tabular-nums text-hd-text"
+      class={["font-mono text-[13px] tabular-nums", metric_value_class(@label)]}
       title="Release + data"
     >
       {@label}
@@ -182,30 +167,28 @@ defmodule CleatDeployWeb.PaasComponents.Badges do
     """
   end
 
+  defp metric_value_class("—"), do: "text-hd-muted/60"
+  defp metric_value_class(_label), do: "text-hd-secondary"
+
   attr :status, :atom, required: true
 
   def deploy_status_badge(assigns) do
     {class, pulse?, label} =
       case assigns.status do
-        :queued -> {"text-hd-orange", true, "queued"}
-        :running -> {"text-sky-400", true, "running"}
+        :queued -> {"text-hd-orange", false, "queued"}
+        :running -> {"text-hd-orange", true, "running"}
         :success -> {"text-hd-green", false, "success"}
-        :failed -> {"text-rose-500", false, "failed"}
+        :failed -> {"text-hd-red", false, "failed"}
       end
 
     assigns = assign(assigns, class: class, pulse?: pulse?, label: label)
 
     ~H"""
     <span class={["inline-flex items-center gap-1.5 font-mono text-xs capitalize", @class]}>
-      <span
-        :if={@pulse?}
-        class={[
-          "size-1.5 rounded-full bg-current",
-          @status == :queued && "animate-ping",
-          @status == :running && "animate-pulse"
-        ]}
-      />
-      <span :if={not @pulse?} class="size-1.5 rounded-full bg-current" />
+      <span class={[
+        "size-1.5 rounded-full bg-current",
+        @pulse? && "motion-safe:animate-pulse"
+      ]} />
       {@label}
     </span>
     """

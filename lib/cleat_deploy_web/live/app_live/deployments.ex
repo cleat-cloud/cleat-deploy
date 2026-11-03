@@ -277,38 +277,35 @@ defmodule CleatDeployWeb.AppLive.Deployments do
         <div id="app-detail-tabs" class="paas-card overflow-hidden">
           <Layout.tab_bar app={@app} active_tab={@app_detail_tab} detail_tabs={@detail_tabs} />
 
-          <div id="app-deployments" class="space-y-4 p-4">
+          <div id="app-deployments" class="space-y-4 p-5">
             <div :if={@viewed_deployment} class="space-y-1.5">
               <div class="flex flex-wrap items-center justify-between gap-2 px-0.5">
-                <div class="space-y-0.5">
-                  <span class="block font-mono text-[10px] font-semibold uppercase tracking-widest text-hd-muted">
-                    Build Output Stream logs
-                  </span>
-                  <span
-                    :if={@selected_deployment_id && @viewed_deployment}
-                    class="font-mono text-[10px] text-hd-muted"
-                  >
-                    Viewing deploy #{@viewed_deployment.id} · click another row in history to switch
-                  </span>
-                </div>
+                <span
+                  :if={@selected_deployment_id && @viewed_deployment}
+                  class="text-xs text-hd-muted"
+                >
+                  Viewing deploy
+                  <span class="font-mono text-hd-secondary">#{@viewed_deployment.id}</span>
+                  — pick another row in history to switch
+                </span>
                 <div class="flex flex-wrap items-center gap-3">
                   <span
                     :if={Deployments.duration(@viewed_deployment)}
-                    class="font-mono text-[11px] tabular-nums text-hd-text"
+                    class="font-mono text-xs tabular-nums text-hd-secondary"
                   >
-                    Duration: {Deployments.format_duration(Deployments.duration(@viewed_deployment))}
+                    {Deployments.format_duration(Deployments.duration(@viewed_deployment))}
                   </span>
                   <span
                     :if={@deploying? and @viewed_deployment.status == :running}
-                    class="flex items-center gap-1 font-mono text-[11px] text-hd-orange"
+                    class="flex items-center gap-1.5 text-xs text-hd-orange"
                   >
-                    <span class="size-1 animate-ping rounded-full bg-hd-orange" />
-                    Compiling OTP release…
+                    <span class="size-1.5 rounded-full bg-hd-orange motion-safe:animate-pulse" />
+                    Building
                   </span>
                   <span
                     :if={Deployments.wait_reason_message(@viewed_deployment)}
                     id="deploy-wait-reason"
-                    class="font-mono text-[11px] text-hd-orange"
+                    class="text-xs text-hd-orange"
                   >
                     {Deployments.wait_reason_message(@viewed_deployment)}
                   </span>
@@ -325,15 +322,15 @@ defmodule CleatDeployWeb.AppLive.Deployments do
               />
             </div>
 
-            <div class="overflow-hidden rounded-md border border-hd-border bg-hd-card">
-              <div class="border-b border-hd-border bg-hd-aside px-4 py-2">
-                <span class="font-display text-xs font-semibold text-hd-text">
-                  Deployments Version History
+            <div class="overflow-hidden rounded-xl border border-hd-border bg-hd-card">
+              <div class="border-b border-hd-border px-4 py-3">
+                <span class="text-sm font-medium text-hd-text">
+                  Deploy history
                 </span>
                 <p
                   :if={@app.server && @app.server.deploy_mode != "dedicated"}
                   id="shared-build-cap"
-                  class="mt-1 font-mono text-[10px] text-hd-muted"
+                  class="mt-1 text-xs text-hd-muted"
                 >
                   Shared server: at most {Deployments.max_running_per_server()} builds at a time.
                   Apps with solo_server in deploy.json need a dedicated server.
@@ -343,18 +340,18 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                 <table class="paas-table w-full text-left font-mono">
                   <thead>
                     <tr>
-                      <th>Build Status</th>
-                      <th>Commit/SHA Code</th>
+                      <th>Status</th>
+                      <th>Commit</th>
                       <th>Trigger</th>
                       <th>Duration</th>
-                      <th>Executed Timestamp</th>
+                      <th>Started</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody id="deployments" phx-update="stream">
                     <tr :if={@deployments_empty?} id="deployments-empty">
-                      <td colspan="6" class="py-6 text-center text-xs text-hd-muted">
-                        No deployments registered yet. Click "Deploy now" to launch container builds.
+                      <td colspan="6" class="py-10 text-center text-xs text-hd-muted">
+                        No deploys yet — use Deploy to queue the first build
                       </td>
                     </tr>
                     <tr
@@ -363,28 +360,28 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                       class={[
                         "transition-colors",
                         @viewed_deployment && @viewed_deployment.id == deployment.id &&
-                          "bg-hd-aside/60"
+                          "bg-hd-raised/40"
                       ]}
                     >
                       <td>
                         <.deploy_status_badge status={deployment.status} />
                         <span
                           :if={Deployments.wait_reason_message(deployment)}
-                          class="mt-0.5 block font-mono text-[10px] text-hd-muted"
+                          class="mt-0.5 block text-[11px] text-hd-muted"
                         >
                           {Deployments.wait_reason_message(deployment)}
                         </span>
                       </td>
                       <td>
-                        <span class="rounded border border-hd-border bg-hd-aside px-1.5 py-0.5 text-[10px] text-hd-orange">
+                        <span class="keycap">
                           {deployment.git_sha}
                         </span>
                       </td>
-                      <td class="text-[11px] text-hd-muted">{deployment.triggered_by}</td>
-                      <td class="text-[11px] tabular-nums text-hd-text">
+                      <td class="text-xs text-hd-muted">{deployment.triggered_by}</td>
+                      <td class="text-xs tabular-nums text-hd-secondary">
                         {Deployments.format_duration(Deployments.duration(deployment))}
                       </td>
-                      <td class="text-[11px] text-hd-muted">
+                      <td class="text-xs text-hd-muted">
                         {format_datetime(deployment.started_at || deployment.inserted_at)}
                       </td>
                       <td class="text-right">
@@ -400,11 +397,11 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                             )
                           }
                           class={[
-                            "rounded border px-2 py-0.5 font-mono text-[10px] transition-colors",
+                            "rounded-lg border px-2 py-1 text-xs transition-colors",
                             @viewed_deployment && @viewed_deployment.id == deployment.id &&
-                              "border-hd-orange/50 bg-hd-orange/10 text-hd-orange",
+                              "border-hd-text/25 bg-hd-raised text-hd-text",
                             (!@viewed_deployment || @viewed_deployment.id != deployment.id) &&
-                              "border-hd-border text-hd-muted hover:border-hd-orange/40 hover:text-hd-orange"
+                              "border-hd-border text-hd-muted hover:text-hd-text"
                           ]}
                         >
                           View log
@@ -417,15 +414,15 @@ defmodule CleatDeployWeb.AppLive.Deployments do
               <div
                 :if={@history_total_pages > 1}
                 id="deployments-pagination"
-                class="flex flex-wrap items-center justify-between gap-3 border-t border-hd-border bg-hd-aside px-4 py-2"
+                class="flex flex-wrap items-center justify-between gap-3 border-t border-hd-border px-4 py-2.5"
               >
                 <span
                   id="deployments-page-status"
-                  class="font-mono text-[11px] tabular-nums text-hd-muted"
+                  class="font-mono text-xs tabular-nums text-hd-muted"
                 >
                   {history_range(@history_page, @history_total)} of {@history_total}
                 </span>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5">
                   <button
                     id="deployments-page-first"
                     type="button"
@@ -433,7 +430,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                     phx-value-page={1}
                     disabled={@history_page <= 1}
                     title="First page"
-                    class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                    class="paas-btn-secondary px-2 py-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <.icon name="hero-chevron-double-left" class="size-3.5" />
                   </button>
@@ -443,12 +440,12 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                     phx-click="paginate"
                     phx-value-page={@history_page - 1}
                     disabled={@history_page <= 1}
-                    class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                    class="paas-btn-secondary px-2 py-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <.icon name="hero-chevron-left" class="size-3.5" /> Prev
                   </button>
-                  <span class="font-mono text-[10px] uppercase tracking-widest text-hd-muted">
-                    Page {@history_page}/{@history_total_pages}
+                  <span class="px-1 font-mono text-xs text-hd-muted">
+                    {@history_page} / {@history_total_pages}
                   </span>
                   <button
                     id="deployments-page-next"
@@ -456,7 +453,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                     phx-click="paginate"
                     phx-value-page={@history_page + 1}
                     disabled={@history_page >= @history_total_pages}
-                    class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                    class="paas-btn-secondary px-2 py-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Next <.icon name="hero-chevron-right" class="size-3.5" />
                   </button>
@@ -467,7 +464,7 @@ defmodule CleatDeployWeb.AppLive.Deployments do
                     phx-value-page={@history_total_pages}
                     disabled={@history_page >= @history_total_pages}
                     title="Last page"
-                    class="paas-btn-secondary px-2 py-1 text-[10px] uppercase disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                    class="paas-btn-secondary px-2 py-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <.icon name="hero-chevron-double-right" class="size-3.5" />
                   </button>
