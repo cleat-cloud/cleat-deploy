@@ -35,6 +35,18 @@ defmodule CleatDeployWeb.SignalsLiveTest do
     refute has_element?(view, "#signals-detail")
   end
 
+  test "paints Signals tabs with primary and secondary button colors", %{conn: conn} do
+    {:ok, overview, _html} = live(conn, ~p"/signals")
+
+    assert has_element?(overview, "#signals-tab-overview.paas-btn-primary")
+    assert has_element?(overview, "#signals-tab-issues.paas-btn-secondary")
+
+    {:ok, issues, _html} = live(conn, ~p"/signals?tab=issues")
+
+    assert has_element?(issues, "#signals-tab-issues.paas-btn-primary")
+    assert has_element?(issues, "#signals-tab-overview.paas-btn-secondary")
+  end
+
   test "warns while the log collector is off", %{conn: conn, scope: scope} do
     server = TenancyFixtures.server_fixture(scope)
     TenancyFixtures.app_fixture(scope, server)
