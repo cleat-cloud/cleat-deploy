@@ -8,7 +8,7 @@ defmodule CleatDeployWeb.Api.Serializer do
   alias CleatDeploy.Deployments.Deployment
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Servers.Server
-  alias CleatDeploy.Signals.Alert
+  alias CleatDeploy.Signals.{Alert, Issue}
 
   def scope(%Scope{user: user, tenant: tenant, role: role}) do
     %{user: user(user), tenant: tenant(tenant), role: role}
@@ -272,6 +272,29 @@ defmodule CleatDeployWeb.Api.Serializer do
     }
   end
 
+  def signal_issue(%Issue{} = issue) do
+    %{
+      id: issue.id,
+      app_id: issue.app_id,
+      slug: issue_slug(issue),
+      fingerprint: issue.fingerprint,
+      status: issue.status,
+      severity: issue.severity,
+      sample: issue.sample,
+      count: issue.count,
+      first_seen_at: issue.first_seen_at,
+      last_seen_at: issue.last_seen_at,
+      last_deployment_id: issue.last_deployment_id,
+      source: issue.source
+    }
+  end
+
+  def signal_issue_detail(%Issue{} = issue, events) when is_list(events) do
+    issue
+    |> signal_issue()
+    |> Map.put(:events, Enum.map(events, &log_event/1))
+  end
+
   def signal_trace_detail(detail) do
     %{
       trace: signal_trace(detail.trace),
@@ -323,6 +346,9 @@ defmodule CleatDeployWeb.Api.Serializer do
 
   defp alert_slug(%Alert{app: %App{slug: slug}}), do: slug
   defp alert_slug(_alert), do: nil
+
+  defp issue_slug(%Issue{app: %App{slug: slug}}), do: slug
+  defp issue_slug(_issue), do: nil
 
   defp requested_path(row), do: %{path: row.path, requests: row.requests}
 

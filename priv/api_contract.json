@@ -193,6 +193,35 @@
     "service_map",
     "logs"
   ],
+  "signal_issue": [
+    "id",
+    "app_id",
+    "slug",
+    "fingerprint",
+    "status",
+    "severity",
+    "sample",
+    "count",
+    "first_seen_at",
+    "last_seen_at",
+    "last_deployment_id",
+    "source"
+  ],
+  "signal_issue_detail": [
+    "id",
+    "app_id",
+    "slug",
+    "fingerprint",
+    "status",
+    "severity",
+    "sample",
+    "count",
+    "first_seen_at",
+    "last_seen_at",
+    "last_deployment_id",
+    "source",
+    "events"
+  ],
   "me": [
     "user",
     "tenant",

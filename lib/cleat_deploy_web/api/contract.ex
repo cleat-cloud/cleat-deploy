@@ -55,6 +55,14 @@ defmodule CleatDeployWeb.Api.Contract do
     "signal_service_map" => ~w(nodes edges),
     "signal_sampling" => ~w(app_id slug trace_sample_rate),
     "signal_trace_detail" => ~w(trace spans service_map logs),
+    "signal_issue" => ~w(
+      id app_id slug fingerprint status severity sample count
+      first_seen_at last_seen_at last_deployment_id source
+    ),
+    "signal_issue_detail" => ~w(
+      id app_id slug fingerprint status severity sample count
+      first_seen_at last_seen_at last_deployment_id source events
+    ),
     "user" => ~w(id email),
     "tenant" => ~w(id name slug),
     "me" => ~w(user tenant role),

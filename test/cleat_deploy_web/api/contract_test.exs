@@ -2,7 +2,7 @@ defmodule CleatDeployWeb.Api.ContractTest do
   use CleatDeploy.DataCase, async: false
 
   alias CleatDeploy.Deployments.Deployment
-  alias CleatDeploy.Signals.Alert
+  alias CleatDeploy.Signals.{Alert, Issue}
   alias CleatDeploy.TenancyFixtures
   alias CleatDeployWeb.Api.{Contract, Serializer}
 
@@ -171,6 +171,24 @@ defmodule CleatDeployWeb.Api.ContractTest do
     }
 
     assert keys(Serializer.signal_trace_detail(detail)) == contract_keys("signal_trace_detail")
+
+    issue = %Issue{
+      id: 1,
+      app_id: app.id,
+      app: app,
+      fingerprint: "abc123",
+      status: "unresolved",
+      severity: "err",
+      sample: "boom",
+      count: 2,
+      first_seen_at: DateTime.utc_now(:second),
+      last_seen_at: DateTime.utc_now(:second),
+      last_deployment_id: nil,
+      source: "journal"
+    }
+
+    assert keys(Serializer.signal_issue(issue)) == contract_keys("signal_issue")
+    assert keys(Serializer.signal_issue_detail(issue, [])) == contract_keys("signal_issue_detail")
   end
 
   defp contract_keys(resource), do: resource |> Contract.keys() |> Enum.sort()

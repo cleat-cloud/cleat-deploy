@@ -65,6 +65,8 @@ defmodule CleatDeployWeb.Router do
     get "/signals/incidents", SignalsController, :incident
     get "/signals/traces", SignalsController, :traces
     get "/signals/sampling", SignalsController, :sampling
+    get "/signals/issues", SignalsController, :issues
+    get "/signals/issues/:id", SignalsController, :show_issue
     post "/signals/otlp/v1/traces", SignalsController, :ingest_traces
 
     get "/analytics/requested", AnalyticsController, :requested
@@ -103,6 +105,9 @@ defmodule CleatDeployWeb.Router do
 
     post "/signals/alerts/:id/ack", SignalsController, :ack
     patch "/signals/sampling", SignalsController, :update_sampling
+    post "/signals/issues/:id/resolve", SignalsController, :resolve_issue
+    post "/signals/issues/:id/ignore", SignalsController, :ignore_issue
+    post "/signals/issues/:id/reopen", SignalsController, :reopen_issue
   end
 
   scope "/webhooks", CleatDeployWeb do

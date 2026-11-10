@@ -5,7 +5,7 @@ defmodule CleatDeployWeb.Api.SignalsController do
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Signals
-  alias CleatDeploy.Signals.{Pages, Traces}
+  alias CleatDeploy.Signals.{Issues, Pages, Traces}
   alias CleatDeployWeb.Api.Serializer
 
   def health(conn, params) do
@@ -165,6 +165,36 @@ defmodule CleatDeployWeb.Api.SignalsController do
     end
   end
 
+  def issues(conn, params) do
+    scope = conn.assigns.current_scope
+
+    case app_filter(scope, params["app"]) do
+      {:ok, app} ->
+        filters = %{status: params["status"], app_id: app && app.id}
+        rows = Issues.list(scope, filters)
+        json(conn, %{data: Enum.map(rows, &Serializer.signal_issue/1)})
+
+      :error ->
+        not_found(conn)
+    end
+  end
+
+  def show_issue(conn, %{"id" => id}) do
+    scope = conn.assigns.current_scope
+
+    with {issue_id, ""} <- Integer.parse(id),
+         {:ok, issue} <- Issues.get(scope, issue_id) do
+      events = Issues.events(scope, issue)
+      json(conn, %{data: Serializer.signal_issue_detail(issue, events)})
+    else
+      _ -> not_found(conn)
+    end
+  end
+
+  def resolve_issue(conn, %{"id" => id}), do: mutate_issue(conn, id, &Issues.resolve/2)
+  def ignore_issue(conn, %{"id" => id}), do: mutate_issue(conn, id, &Issues.ignore/2)
+  def reopen_issue(conn, %{"id" => id}), do: mutate_issue(conn, id, &Issues.reopen/2)
+
   def incident(conn, params) do
     scope = conn.assigns.current_scope
 
@@ -174,6 +204,20 @@ defmodule CleatDeployWeb.Api.SignalsController do
     else
       :error -> not_found(conn)
       {:error, :not_found} -> not_found(conn)
+    end
+  end
+
+  defp mutate_issue(conn, id, fun) do
+    scope = conn.assigns.current_scope
+
+    with {issue_id, ""} <- Integer.parse(id),
+         {:ok, issue} <- fun.(scope, issue_id) do
+      json(conn, %{data: Serializer.signal_issue(issue)})
+    else
+      :error -> not_found(conn)
+      {:error, :not_found} -> not_found(conn)
+      {:error, :unauthorized} -> forbidden(conn)
+      _ -> not_found(conn)
     end
   end
 
