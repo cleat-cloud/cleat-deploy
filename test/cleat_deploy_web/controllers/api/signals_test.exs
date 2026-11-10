@@ -297,6 +297,103 @@ defmodule CleatDeployWeb.Api.SignalsTest do
     _ = {scope, server}
   end
 
+  test "lists unresolved issues and resolves them", %{
+    token: token,
+    app: app,
+    scope: scope,
+    server: server
+  } do
+    event = insert_error_issue(scope, app, server, "boom in worker")
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/signals/issues")
+    [row] = json_response(conn, 200)["data"]
+    assert row["app_id"] == app.id
+    assert row["slug"] == app.slug
+    assert row["status"] == "unresolved"
+    assert row["count"] == 1
+    assert row["sample"] =~ "boom"
+    assert row["fingerprint"] == event.fingerprint
+
+    assert row |> Map.keys() |> Enum.sort() ==
+             Contract.keys("signal_issue") |> Enum.sort()
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> post(~p"/api/v1/signals/issues/#{row["id"]}/resolve")
+
+    resolved = json_response(conn, 200)["data"]
+    assert resolved["status"] == "resolved"
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/signals/issues")
+    assert json_response(conn, 200)["data"] == []
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> get(~p"/api/v1/signals/issues?status=resolved")
+
+    assert [%{"id" => id, "status" => "resolved"}] = json_response(conn, 200)["data"]
+    assert id == row["id"]
+  end
+
+  test "shows an issue with recent events and ignores it", %{
+    token: token,
+    app: app,
+    scope: scope,
+    server: server
+  } do
+    event = insert_error_issue(scope, app, server, "timeout waiting")
+    issue = hd(CleatDeploy.Signals.Issues.list(scope))
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/signals/issues/#{issue.id}")
+    data = json_response(conn, 200)["data"]
+    assert data["id"] == issue.id
+    assert data["slug"] == app.slug
+    assert [%{"id" => event_id}] = data["events"]
+    assert event_id == event.id
+
+    assert data |> Map.keys() |> Enum.sort() ==
+             Contract.keys("signal_issue_detail") |> Enum.sort()
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> post(~p"/api/v1/signals/issues/#{issue.id}/ignore")
+
+    assert json_response(conn, 200)["data"]["status"] == "ignored"
+
+    conn =
+      build_conn()
+      |> auth(token)
+      |> post(~p"/api/v1/signals/issues/#{issue.id}/reopen")
+
+    assert json_response(conn, 200)["data"]["status"] == "unresolved"
+  end
+
+  test "404s an issue from another tenant", %{token: token} do
+    other = TenancyFixtures.scope_fixture()
+    other_server = TenancyFixtures.server_fixture(other)
+    other_app = TenancyFixtures.app_fixture(other, other_server)
+    insert_error_issue(other, other_app, other_server, "secret crash")
+    foreign = hd(CleatDeploy.Signals.Issues.list(other))
+
+    conn = build_conn() |> auth(token) |> get(~p"/api/v1/signals/issues/#{foreign.id}")
+    assert json_response(conn, 404)["error"] == "not_found"
+  end
+
+  defp insert_error_issue(scope, app, server, message) do
+    event =
+      insert_event(scope.tenant.id, app, server, %{
+        severity: "err",
+        message: message,
+        fingerprint: CleatDeploy.Observability.Fingerprint.of(message)
+      })
+
+    CleatDeploy.Signals.Issues.record(event)
+    event
+  end
+
   defp insert_deploy(app, attrs) do
     Repo.insert!(%Deployment{
       app_id: app.id,

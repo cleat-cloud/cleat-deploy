@@ -28,6 +28,7 @@ defmodule CleatDeploy.Apps.App do
     field :release_name, :string
     field :custom_domain, CleatDeploy.EctoBool, default: false
     field :trace_sample_rate, :float, default: 0.0
+    field :exception_sample_rate, :float, default: 0.0
     field :analytics_inject, :boolean, default: false
 
     belongs_to :tenant, Tenant
@@ -91,9 +92,12 @@ defmodule CleatDeploy.Apps.App do
 
   def sampling_changeset(app, attrs) do
     app
-    |> cast(attrs, [:trace_sample_rate])
-    |> validate_required([:trace_sample_rate])
+    |> cast(attrs, [:trace_sample_rate, :exception_sample_rate])
     |> validate_number(:trace_sample_rate,
+      greater_than_or_equal_to: 0.0,
+      less_than_or_equal_to: 1.0
+    )
+    |> validate_number(:exception_sample_rate,
       greater_than_or_equal_to: 0.0,
       less_than_or_equal_to: 1.0
     )

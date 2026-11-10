@@ -4,7 +4,8 @@ defmodule CleatDeployWeb.SignalsLive do
   alias CleatDeploy.Apps
   alias CleatDeploy.Observability
   alias CleatDeploy.Signals
-  alias CleatDeploy.Signals.Traces
+  alias CleatDeploy.Signals.{Issues, Traces}
+  alias CleatDeployWeb.SignalsLive.Issues, as: IssuesPanel
 
   @impl true
   def mount(_params, _session, socket) do
@@ -23,12 +24,20 @@ defmodule CleatDeployWeb.SignalsLive do
      |> assign(:trace_id, nil)
      |> assign(:waterfall, nil)
      |> assign(:service_map, nil)
-     |> assign(:sampling_form, sampling_form(0.0))}
+     |> assign(:sampling_form, sampling_form(0.0, 0.0))
+     |> assign(:panel, :overview)
+     |> assign(:issues, [])
+     |> assign(:issue_detail, nil)
+     |> assign(:issue_events, [])}
   end
 
   @impl true
   def handle_params(params, _uri, socket) do
-    {:noreply, load(socket, params["app"], params["trace_id"])}
+    {:noreply,
+     socket
+     |> assign(:panel, panel_from(params["tab"]))
+     |> load(params["app"], params["trace_id"])
+     |> load_issues(params["issue_id"])}
   end
 
   @impl true
@@ -41,12 +50,21 @@ defmodule CleatDeployWeb.SignalsLive do
     end
   end
 
-  def handle_event("set_sampling", %{"sampling" => %{"rate" => rate}}, socket) do
+  def handle_event("resolve_issue", %{"id" => id}, socket),
+    do: mutate_issue(socket, id, &Issues.resolve/2, "Issue resolvida")
+
+  def handle_event("ignore_issue", %{"id" => id}, socket),
+    do: mutate_issue(socket, id, &Issues.ignore/2, "Issue ignorada")
+
+  def handle_event("reopen_issue", %{"id" => id}, socket),
+    do: mutate_issue(socket, id, &Issues.reopen/2, "Issue reaberta")
+
+  def handle_event("set_sampling", %{"sampling" => params}, socket) do
     app = socket.assigns.selected
 
     with true <- not is_nil(app),
-         {:ok, parsed} <- parse_rate(rate),
-         {:ok, _} <- Traces.set_sampling(socket.assigns.current_scope, app, parsed) do
+         {:ok, attrs} <- sampling_attrs(params),
+         {:ok, _} <- Traces.set_sampling(socket.assigns.current_scope, app, attrs) do
       {:noreply,
        socket
        |> put_flash(:info, "Amostragem atualizada")
@@ -75,6 +93,7 @@ defmodule CleatDeployWeb.SignalsLive do
               Detecte degradação e o release que antecedeu a mudança, sem abrir SSH.
             </p>
           </div>
+          <IssuesPanel.tabs panel={@panel} selected={@selected} />
         </div>
 
         <div
@@ -102,7 +121,15 @@ defmodule CleatDeployWeb.SignalsLive do
           </p>
         </div>
 
-        <div class="grid gap-3 md:grid-cols-3">
+        <IssuesPanel.panel
+          :if={@panel == :issues}
+          issues={@issues}
+          issue_detail={@issue_detail}
+          issue_events={@issue_events}
+          selected={@selected}
+        />
+
+        <div :if={@panel == :overview} class="grid gap-3 md:grid-cols-3">
           <.metric_card
             title="Saudáveis"
             value={Integer.to_string(count_status(@rows, :healthy))}
@@ -120,7 +147,7 @@ defmodule CleatDeployWeb.SignalsLive do
           />
         </div>
 
-        <section class="paas-card overflow-hidden">
+        <section :if={@panel == :overview} class="paas-card overflow-hidden">
           <div class="border-b border-hd-border px-5 py-3.5">
             <h3 class="text-sm font-medium text-hd-text">
               Overview
@@ -177,7 +204,7 @@ defmodule CleatDeployWeb.SignalsLive do
           </table>
         </section>
 
-        <section id="signals-alerts" class="paas-card overflow-hidden">
+        <section :if={@panel == :overview} id="signals-alerts" class="paas-card overflow-hidden">
           <div class="border-b border-hd-border px-5 py-3.5">
             <h3 class="text-sm font-medium text-hd-text">
               Alertas
@@ -212,7 +239,11 @@ defmodule CleatDeployWeb.SignalsLive do
           </ul>
         </section>
 
-        <div :if={@selected} id="signals-detail" class="grid gap-4 lg:grid-cols-2">
+        <div
+          :if={@panel == :overview && @selected}
+          id="signals-detail"
+          class="grid gap-4 lg:grid-cols-2"
+        >
           <.area_chart
             :if={@metrics}
             id="chart-signals-errors"
@@ -242,7 +273,7 @@ defmodule CleatDeployWeb.SignalsLive do
           </section>
         </div>
 
-        <div :if={@selected} class="grid gap-4 lg:grid-cols-2">
+        <div :if={@panel == :overview && @selected} class="grid gap-4 lg:grid-cols-2">
           <section id="signals-traces" class="paas-card overflow-hidden">
             <div class="border-b border-hd-border px-4 py-3">
               <h3 class="font-mono text-xs text-hd-muted">
@@ -289,7 +320,7 @@ defmodule CleatDeployWeb.SignalsLive do
               Amostragem
             </h3>
             <p class="mt-1 text-sm text-hd-muted">
-              Fração de traces gravados (0 desliga, 1 grava todos).
+              Fração gravada (0 desliga, 1 grava todos). Traces e exceptions são independentes.
             </p>
             <.form
               for={@sampling_form}
@@ -303,7 +334,15 @@ defmodule CleatDeployWeb.SignalsLive do
                 min="0"
                 max="1"
                 step="0.01"
-                label="Taxa"
+                label="Traces"
+              />
+              <.input
+                field={@sampling_form[:exception_rate]}
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                label="Exceptions"
               />
               <button type="submit" class="paas-btn-secondary px-3 py-1.5 text-xs">
                 Salvar amostragem
@@ -312,7 +351,7 @@ defmodule CleatDeployWeb.SignalsLive do
           </section>
         </div>
 
-        <div :if={@waterfall} class="grid gap-4 lg:grid-cols-2">
+        <div :if={@panel == :overview && @waterfall} class="grid gap-4 lg:grid-cols-2">
           <section id="signals-waterfall" class="paas-card p-4">
             <h3 class="font-mono text-xs text-hd-muted">
               Waterfall
@@ -367,7 +406,60 @@ defmodule CleatDeployWeb.SignalsLive do
 
   defp reload(socket) do
     slug = socket.assigns.selected && socket.assigns.selected.slug
-    load(socket, slug, socket.assigns.trace_id)
+    issue_id = socket.assigns.issue_detail && socket.assigns.issue_detail.id
+
+    socket
+    |> load(slug, socket.assigns.trace_id)
+    |> load_issues(issue_id && Integer.to_string(issue_id))
+  end
+
+  defp panel_from("issues"), do: :issues
+  defp panel_from(_), do: :overview
+
+  defp load_issues(socket, issue_id) do
+    scope = socket.assigns.current_scope
+    app = socket.assigns.selected
+    issues = Issues.list(scope, %{app_id: app && app.id})
+
+    socket
+    |> assign(:issues, issues)
+    |> assign_issue_detail(scope, issue_id)
+  end
+
+  defp assign_issue_detail(socket, _scope, id) when id in [nil, ""] do
+    socket
+    |> assign(:issue_detail, nil)
+    |> assign(:issue_events, [])
+  end
+
+  defp assign_issue_detail(socket, scope, id) do
+    with {issue_id, ""} <- Integer.parse(to_string(id)),
+         {:ok, issue} <- Issues.get(scope, issue_id) do
+      socket
+      |> assign(:issue_detail, issue)
+      |> assign(:issue_events, Issues.events(scope, issue))
+    else
+      _ ->
+        socket
+        |> assign(:issue_detail, nil)
+        |> assign(:issue_events, [])
+    end
+  end
+
+  defp mutate_issue(socket, id, fun, flash) do
+    with {issue_id, ""} <- Integer.parse(id),
+         {:ok, _issue} <- fun.(socket.assigns.current_scope, issue_id) do
+      {:noreply,
+       socket
+       |> put_flash(:info, flash)
+       |> push_patch(to: ~p"/signals?#{IssuesPanel.issues_query(socket.assigns.selected)}")}
+    else
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "Sem permissão para alterar issues")}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Não foi possível atualizar a issue")}
+    end
   end
 
   defp assign_selected(socket, _scope, param, _trace_id) when param in [nil, ""] do
@@ -382,6 +474,7 @@ defmodule CleatDeployWeb.SignalsLive do
         traces = Traces.list(scope, app)
         sampling = fetch_ok(Traces.get_sampling(scope, app))
         rate = (sampling && sampling.trace_sample_rate) || 0.0
+        exception_rate = (sampling && sampling.exception_sample_rate) || 0.0
 
         socket
         |> assign(:selected, app)
@@ -389,7 +482,7 @@ defmodule CleatDeployWeb.SignalsLive do
         |> assign(:incident, incident)
         |> assign(:traces, traces)
         |> assign(:log_jumps, log_jumps(scope, app, traces))
-        |> assign(:sampling_form, sampling_form(rate))
+        |> assign(:sampling_form, sampling_form(rate, exception_rate))
         |> assign_trace(scope, app, trace_id)
 
       :error ->
@@ -445,8 +538,29 @@ defmodule CleatDeployWeb.SignalsLive do
     end)
   end
 
-  defp sampling_form(rate) do
-    to_form(%{"rate" => rate_string(rate)}, as: :sampling)
+  defp sampling_form(rate, exception_rate \\ 0.0) do
+    to_form(
+      %{"rate" => rate_string(rate), "exception_rate" => rate_string(exception_rate)},
+      as: :sampling
+    )
+  end
+
+  defp sampling_attrs(params) when is_map(params) do
+    with {:ok, attrs} <- put_rate(%{}, :trace_sample_rate, params["rate"]),
+         {:ok, attrs} <- put_rate(attrs, :exception_sample_rate, params["exception_rate"]) do
+      if attrs == %{}, do: :error, else: {:ok, attrs}
+    end
+  end
+
+  defp sampling_attrs(_), do: :error
+
+  defp put_rate(attrs, _key, value) when value in [nil, ""], do: {:ok, attrs}
+
+  defp put_rate(attrs, key, value) do
+    case parse_rate(value) do
+      {:ok, rate} -> {:ok, Map.put(attrs, key, rate)}
+      :error -> :error
+    end
   end
 
   defp rate_string(rate) when is_integer(rate), do: Integer.to_string(rate)

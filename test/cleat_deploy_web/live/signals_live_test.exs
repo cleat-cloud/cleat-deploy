@@ -6,8 +6,9 @@ defmodule CleatDeployWeb.SignalsLiveTest do
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Observability.LogEvent
   alias CleatDeploy.Repo
+  alias CleatDeploy.Observability.Fingerprint
   alias CleatDeploy.Signals
-  alias CleatDeploy.Signals.Traces
+  alias CleatDeploy.Signals.{Issues, Traces}
   alias CleatDeploy.TenancyFixtures
 
   @trace_id "5b8aa5a2d2c872e8321cf37308d69df2"
@@ -158,10 +159,49 @@ defmodule CleatDeployWeb.SignalsLiveTest do
     {:ok, view, _html} = live(conn, ~p"/signals?app=#{app.slug}")
 
     view
-    |> form("#signals-sampling-form", sampling: %{rate: "1"})
+    |> form("#signals-sampling-form", sampling: %{rate: "1", exception_rate: "1"})
     |> render_submit()
 
     assert Repo.get!(App, app.id).trace_sample_rate == 1.0
+    assert Repo.get!(App, app.id).exception_sample_rate == 1.0
+  end
+
+  test "lists unresolved issues and resolves them from the Issues tab", %{
+    conn: conn,
+    scope: scope
+  } do
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server)
+
+    event =
+      insert_event(scope, server, app, %{
+        severity: "err",
+        message: "boom in worker",
+        fingerprint: Fingerprint.of("boom in worker")
+      })
+
+    Issues.record(event)
+    issue = hd(Issues.list(scope))
+
+    {:ok, view, _html} = live(conn, ~p"/signals?tab=issues")
+
+    assert has_element?(view, "#signals-issues")
+    assert has_element?(view, "#signals-issue-#{issue.id}", "boom in worker")
+    assert has_element?(view, "#signals-issue-#{issue.id}", app.slug)
+
+    view
+    |> element("#signals-issue-#{issue.id}")
+    |> render_click()
+
+    assert_patch(view, ~p"/signals?#{%{"issue_id" => issue.id, "tab" => "issues"}}")
+    assert has_element?(view, "#signals-issue-detail", "boom in worker")
+
+    view
+    |> element("#signals-issue-resolve-#{issue.id}")
+    |> render_click()
+
+    refute has_element?(view, "#signals-issue-#{issue.id}")
+    assert Issues.list(scope) == []
   end
 
   defp checkout_payload do

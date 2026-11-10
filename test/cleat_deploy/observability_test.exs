@@ -92,6 +92,36 @@ defmodule CleatDeploy.ObservabilityTest do
       assert event.fingerprint == CleatDeploy.Observability.Fingerprint.of(event.message)
       assert event.severity == "err"
     end
+
+    test "promotes a journal info Elixir crash to err and groups by stack", ctx do
+      crash_a = elixir_crash("payment declined for alice", 42)
+      crash_b = elixir_crash("payment declined for bob", 88)
+
+      expect(RuntimeLogsMock, :run, fn %Server{}, _argv ->
+        {:ok,
+         journal([
+           entry("c1", "6", crash_a),
+           entry("c2", "6", crash_b),
+           entry("c3", "6", "request completed")
+         ])}
+      end)
+
+      assert {:ok, 3} = Observability.ingest_app(ctx.app)
+
+      events = Repo.all(LogEvent) |> Enum.sort_by(& &1.cursor)
+      [first, second, third] = events
+
+      assert first.severity == "err"
+      assert second.severity == "err"
+      assert third.severity == "info"
+      assert first.fingerprint == second.fingerprint
+      refute first.fingerprint == third.fingerprint
+
+      assert [group] = Observability.group_errors(ctx.scope)
+      assert group.count == 2
+      assert group.severity == "err"
+      assert group.sample == "** (RuntimeError) payment declined for alice"
+    end
   end
 
   describe "ingest_server/2" do
@@ -446,5 +476,14 @@ defmodule CleatDeploy.ObservabilityTest do
       "MESSAGE" => message,
       "_SYSTEMD_UNIT" => unit
     }
+  end
+
+  defp elixir_crash(message, line) do
+    """
+    GenServer MyApp.Worker terminating
+    ** (RuntimeError) #{message}
+        (my_app 1.0.0) lib/my_app/worker.ex:#{line}: MyApp.Worker.handle_info/2
+        (stdlib 6.2) gen_server.erl:1850: :gen_server.try_dispatch/4
+    """
   end
 end

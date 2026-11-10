@@ -24,10 +24,14 @@ defmodule CleatDeploy.Signals.Traces do
   end
 
   @doc "Set sampling in `0.0..1.0`. Rate 0 disables ingest."
-  def set_sampling(%Scope{} = scope, %App{} = app, rate) do
+  def set_sampling(%Scope{} = scope, %App{} = app, rate) when is_number(rate) do
+    set_sampling(scope, app, %{trace_sample_rate: rate})
+  end
+
+  def set_sampling(%Scope{} = scope, %App{} = app, attrs) when is_map(attrs) do
     with :ok <- owned?(scope, app),
          :ok <- writable?(scope) do
-      case app |> App.sampling_changeset(%{trace_sample_rate: rate}) |> Repo.update() do
+      case app |> App.sampling_changeset(attrs) |> Repo.update() do
         {:ok, updated} -> {:ok, sampling(updated)}
         {:error, changeset} -> {:error, changeset}
       end
@@ -43,7 +47,7 @@ defmodule CleatDeploy.Signals.Traces do
   def ingest(%Scope{} = scope, %App{} = app, %{"resourceSpans" => resource_spans})
       when is_list(resource_spans) do
     with :ok <- owned?(scope, app) do
-      rate = sample_rate(Repo.get!(App, app.id))
+      rate = sample_rate(Repo.get!(App, app.id).trace_sample_rate)
       parsed = Enum.flat_map(resource_spans, &flatten_resource/1)
 
       {accepted, dropped} =
@@ -140,10 +144,15 @@ defmodule CleatDeploy.Signals.Traces do
   end
 
   defp sampling(%App{} = app) do
-    %{app_id: app.id, slug: app.slug, trace_sample_rate: sample_rate(app)}
+    %{
+      app_id: app.id,
+      slug: app.slug,
+      trace_sample_rate: sample_rate(app.trace_sample_rate),
+      exception_sample_rate: sample_rate(app.exception_sample_rate)
+    }
   end
 
-  defp sample_rate(%App{trace_sample_rate: rate}) when is_number(rate), do: rate / 1
+  defp sample_rate(rate) when is_number(rate), do: rate / 1
   defp sample_rate(_), do: 0.0
 
   defp owned?(%Scope{tenant: %{id: id}}, %App{tenant_id: id}), do: :ok

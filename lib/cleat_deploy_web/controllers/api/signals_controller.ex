@@ -5,7 +5,7 @@ defmodule CleatDeployWeb.Api.SignalsController do
 
   alias CleatDeploy.Apps
   alias CleatDeploy.Signals
-  alias CleatDeploy.Signals.{Pages, Traces}
+  alias CleatDeploy.Signals.{Exceptions, Issues, Pages, Traces}
   alias CleatDeployWeb.Api.Serializer
 
   def health(conn, params) do
@@ -73,24 +73,16 @@ defmodule CleatDeployWeb.Api.SignalsController do
   end
 
   def ingest_traces(conn, params) do
-    scope = conn.assigns.current_scope
+    ingest_otlp(conn, params, &Traces.ingest/3, "payload must include resourceSpans")
+  end
 
-    with {:ok, app} <- require_app(scope, params["app"]) do
-      case Traces.ingest(scope, app, params) do
-        {:ok, result} ->
-          conn
-          |> put_status(:accepted)
-          |> json(%{data: result})
-
-        {:error, :invalid_payload} ->
-          unprocessable(conn, "payload must include resourceSpans")
-
-        {:error, :not_found} ->
-          not_found(conn)
-      end
-    else
-      :error -> not_found(conn)
-    end
+  def ingest_logs(conn, params) do
+    ingest_otlp(
+      conn,
+      params,
+      &Exceptions.ingest/3,
+      "payload must include resourceLogs or exception spans"
+    )
   end
 
   def traces(conn, params) do
@@ -145,13 +137,13 @@ defmodule CleatDeployWeb.Api.SignalsController do
     scope = conn.assigns.current_scope
 
     with {:ok, app} <- require_app(scope, params["app"]),
-         {:ok, rate} <- parse_rate(params["rate"]) do
-      case Traces.set_sampling(scope, app, rate) do
+         {:ok, attrs} <- sampling_attrs(params) do
+      case Traces.set_sampling(scope, app, attrs) do
         {:ok, sampling} ->
           json(conn, %{data: Serializer.signal_sampling(sampling)})
 
         {:error, %Ecto.Changeset{}} ->
-          unprocessable(conn, "trace_sample_rate must be between 0 and 1")
+          unprocessable(conn, "sample rates must be between 0 and 1")
 
         {:error, :unauthorized} ->
           forbidden(conn)
@@ -161,9 +153,39 @@ defmodule CleatDeployWeb.Api.SignalsController do
       end
     else
       :error -> not_found(conn)
-      :invalid_rate -> unprocessable(conn, "trace_sample_rate must be between 0 and 1")
+      :invalid_rate -> unprocessable(conn, "sample rates must be between 0 and 1")
     end
   end
+
+  def issues(conn, params) do
+    scope = conn.assigns.current_scope
+
+    case app_filter(scope, params["app"]) do
+      {:ok, app} ->
+        filters = %{status: params["status"], app_id: app && app.id}
+        rows = Issues.list(scope, filters)
+        json(conn, %{data: Enum.map(rows, &Serializer.signal_issue/1)})
+
+      :error ->
+        not_found(conn)
+    end
+  end
+
+  def show_issue(conn, %{"id" => id}) do
+    scope = conn.assigns.current_scope
+
+    with {issue_id, ""} <- Integer.parse(id),
+         {:ok, issue} <- Issues.get(scope, issue_id) do
+      events = Issues.events(scope, issue)
+      json(conn, %{data: Serializer.signal_issue_detail(issue, events)})
+    else
+      _ -> not_found(conn)
+    end
+  end
+
+  def resolve_issue(conn, %{"id" => id}), do: mutate_issue(conn, id, &Issues.resolve/2)
+  def ignore_issue(conn, %{"id" => id}), do: mutate_issue(conn, id, &Issues.ignore/2)
+  def reopen_issue(conn, %{"id" => id}), do: mutate_issue(conn, id, &Issues.reopen/2)
 
   def incident(conn, params) do
     scope = conn.assigns.current_scope
@@ -174,6 +196,20 @@ defmodule CleatDeployWeb.Api.SignalsController do
     else
       :error -> not_found(conn)
       {:error, :not_found} -> not_found(conn)
+    end
+  end
+
+  defp mutate_issue(conn, id, fun) do
+    scope = conn.assigns.current_scope
+
+    with {issue_id, ""} <- Integer.parse(id),
+         {:ok, issue} <- fun.(scope, issue_id) do
+      json(conn, %{data: Serializer.signal_issue(issue)})
+    else
+      :error -> not_found(conn)
+      {:error, :not_found} -> not_found(conn)
+      {:error, :unauthorized} -> forbidden(conn)
+      _ -> not_found(conn)
     end
   end
 
@@ -192,6 +228,41 @@ defmodule CleatDeployWeb.Api.SignalsController do
     case Integer.parse(value) do
       {id, ""} -> Apps.get_app!(scope, id)
       _ -> Apps.get_app_by_slug!(scope, value)
+    end
+  end
+
+  defp ingest_otlp(conn, params, fun, invalid_message) do
+    scope = conn.assigns.current_scope
+
+    case require_app(scope, params["app"]) do
+      {:ok, app} -> otlp_result(conn, fun.(scope, app, params), invalid_message)
+      :error -> not_found(conn)
+    end
+  end
+
+  defp otlp_result(conn, {:ok, result}, _message) do
+    conn
+    |> put_status(:accepted)
+    |> json(%{data: result})
+  end
+
+  defp otlp_result(conn, {:error, :invalid_payload}, message), do: unprocessable(conn, message)
+  defp otlp_result(conn, {:error, :not_found}, _message), do: not_found(conn)
+
+  defp sampling_attrs(params) do
+    with {:ok, attrs} <-
+           put_rate(%{}, :trace_sample_rate, params["rate"] || params["trace_sample_rate"]),
+         {:ok, attrs} <- put_rate(attrs, :exception_sample_rate, params["exception_sample_rate"]) do
+      if attrs == %{}, do: :invalid_rate, else: {:ok, attrs}
+    end
+  end
+
+  defp put_rate(attrs, _key, value) when value in [nil, ""], do: {:ok, attrs}
+
+  defp put_rate(attrs, key, value) do
+    case parse_rate(value) do
+      {:ok, rate} -> {:ok, Map.put(attrs, key, rate)}
+      :invalid_rate -> :invalid_rate
     end
   end
 

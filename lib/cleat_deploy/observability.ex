@@ -17,10 +17,21 @@ defmodule CleatDeploy.Observability do
   alias CleatDeploy.Accounts.Scope
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deployments.Deployment
-  alias CleatDeploy.Observability.{CollectorRun, Fingerprint, Journal, LogEvent, Query, Redact}
+
+  alias CleatDeploy.Observability.{
+    CollectorRun,
+    Fingerprint,
+    Journal,
+    LogEvent,
+    Query,
+    Redact,
+    Severity
+  }
+
   alias CleatDeploy.Repo
   alias CleatDeploy.Repo.BusyRetry
   alias CleatDeploy.Servers.Server
+  alias CleatDeploy.Signals.Issues
 
   @ingest_tail 1000
   @ingest_overlap_seconds 300
@@ -140,7 +151,7 @@ defmodule CleatDeploy.Observability do
           source: meta.source,
           unit: meta.unit || entry.unit || "",
           cursor: entry.cursor,
-          severity: entry.severity,
+          severity: Severity.promote(entry.severity, message),
           message: message,
           environment: meta.environment || "",
           fingerprint: Fingerprint.of(message),
@@ -153,8 +164,12 @@ defmodule CleatDeploy.Observability do
                  conflict_target: [:server_id, :cursor]
                )
              end) do
-          {:ok, %{id: id}} when is_integer(id) -> acc + 1
-          _ -> acc
+          {:ok, %{id: id} = inserted} when is_integer(id) ->
+            Issues.record(inserted)
+            acc + 1
+
+          _ ->
+            acc
         end
       end)
 
