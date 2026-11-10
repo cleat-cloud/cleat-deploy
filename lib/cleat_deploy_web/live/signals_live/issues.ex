@@ -4,7 +4,7 @@ defmodule CleatDeployWeb.SignalsLive.Issues do
 
   def tabs(assigns) do
     ~H"""
-    <nav id="signals-tabs" class="flex flex-wrap gap-1">
+    <nav id="signals-tabs" class="flex flex-wrap gap-2">
       <.link
         id="signals-tab-overview"
         patch={~p"/signals?#{overview_query(@selected)}"}
@@ -113,9 +113,6 @@ defmodule CleatDeployWeb.SignalsLive.Issues do
   defp maybe_put(map, _key, empty) when empty in [nil, ""], do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-  defp tab_class(true),
-    do: "rounded-md bg-hd-aside px-3 py-1.5 text-xs font-medium text-hd-text"
-
-  defp tab_class(false),
-    do: "rounded-md px-3 py-1.5 text-xs font-medium text-hd-muted hover:text-hd-text"
+  defp tab_class(true), do: "paas-btn-primary"
+  defp tab_class(false), do: "paas-btn-secondary"
 end
