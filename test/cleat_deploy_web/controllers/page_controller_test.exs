@@ -4,9 +4,15 @@ defmodule CleatDeployWeb.PageControllerTest do
   import CleatDeployWeb.ConnCase, only: [log_in_user: 2]
   import CleatDeploy.AccountsFixtures
 
-  test "GET / sends anonymous visitors to the public landing", %{conn: conn} do
+  test "GET / sends anonymous visitors to log in", %{conn: conn} do
     conn = get(conn, ~p"/")
-    assert redirected_to(conn) == ~p"/features"
+    assert redirected_to(conn) == ~p"/users/log-in"
+    refute Phoenix.Flash.get(conn.assigns.flash, :error)
+  end
+
+  test "GET /features is gone", %{conn: conn} do
+    conn = get(conn, "/features")
+    assert conn.status == 404
   end
 
   test "GET / renders dashboard when authenticated", %{conn: conn} do

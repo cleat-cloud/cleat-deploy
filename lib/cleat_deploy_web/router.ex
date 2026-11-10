@@ -140,16 +140,6 @@ defmodule CleatDeployWeb.Router do
     end
   end
 
-  # Public landing page: what Cleat does, reachable without an account (the
-  # root sends anonymous visitors here instead of straight to the login form).
-  scope "/", CleatDeployWeb do
-    pipe_through :browser
-
-    live_session :public, on_mount: [{CleatDeployWeb.UserAuth, :mount_current_scope}] do
-      live "/features", FeaturesLive, :index
-    end
-  end
-
   if Application.compile_env(:cleat_deploy, :dev_routes) do
     import Phoenix.LiveDashboard.Router
 
