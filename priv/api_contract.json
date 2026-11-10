@@ -185,7 +185,8 @@
   "signal_sampling": [
     "app_id",
     "slug",
-    "trace_sample_rate"
+    "trace_sample_rate",
+    "exception_sample_rate"
   ],
   "signal_trace_detail": [
     "trace",

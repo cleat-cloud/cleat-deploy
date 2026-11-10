@@ -53,7 +53,7 @@ defmodule CleatDeployWeb.Api.Contract do
       start_time_unix_nano duration_ms depth attributes
     ),
     "signal_service_map" => ~w(nodes edges),
-    "signal_sampling" => ~w(app_id slug trace_sample_rate),
+    "signal_sampling" => ~w(app_id slug trace_sample_rate exception_sample_rate),
     "signal_trace_detail" => ~w(trace spans service_map logs),
     "signal_issue" => ~w(
       id app_id slug fingerprint status severity sample count

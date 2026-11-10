@@ -159,7 +159,12 @@ defmodule CleatDeployWeb.Api.ContractTest do
              contract_keys("signal_service_map")
 
     assert keys(
-             Serializer.signal_sampling(%{app_id: app.id, slug: app.slug, trace_sample_rate: 0.0})
+             Serializer.signal_sampling(%{
+               app_id: app.id,
+               slug: app.slug,
+               trace_sample_rate: 0.0,
+               exception_sample_rate: 0.0
+             })
            ) ==
              contract_keys("signal_sampling")
 

@@ -268,7 +268,8 @@ defmodule CleatDeployWeb.Api.Serializer do
     %{
       app_id: sampling.app_id,
       slug: sampling.slug,
-      trace_sample_rate: sampling.trace_sample_rate
+      trace_sample_rate: sampling.trace_sample_rate,
+      exception_sample_rate: Map.get(sampling, :exception_sample_rate, 0.0)
     }
   end
 
