@@ -279,8 +279,6 @@ defmodule CleatDeployWeb.UserAuth do
     else
       conn =
         if landing_entry?(conn) do
-          # The root doubles as the marketing entry point; do not greet a first
-          # time visitor with an error toast, just show what Cleat does.
           drop_flash(conn, :info)
         else
           conn
@@ -290,16 +288,13 @@ defmodule CleatDeployWeb.UserAuth do
 
       conn
       |> maybe_store_return_to()
-      |> redirect(to: unauthenticated_redirect_to(conn))
+      |> redirect(to: ~p"/users/log-in")
       |> halt()
     end
   end
 
   defp landing_entry?(%{request_path: "/"}), do: true
   defp landing_entry?(_conn), do: false
-
-  defp unauthenticated_redirect_to(%{request_path: "/"}), do: ~p"/features"
-  defp unauthenticated_redirect_to(_conn), do: ~p"/users/log-in"
 
   defp maybe_store_return_to(%{method: "GET"} = conn) do
     put_session(conn, :user_return_to, current_path(conn))
