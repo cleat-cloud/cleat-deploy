@@ -31,6 +31,7 @@ defmodule CleatDeploy.Observability do
   alias CleatDeploy.Repo
   alias CleatDeploy.Repo.BusyRetry
   alias CleatDeploy.Servers.Server
+  alias CleatDeploy.Signals.Issues
 
   @ingest_tail 1000
   @ingest_overlap_seconds 300
@@ -163,8 +164,12 @@ defmodule CleatDeploy.Observability do
                  conflict_target: [:server_id, :cursor]
                )
              end) do
-          {:ok, %{id: id}} when is_integer(id) -> acc + 1
-          _ -> acc
+          {:ok, %{id: id} = inserted} when is_integer(id) ->
+            Issues.record(inserted)
+            acc + 1
+
+          _ ->
+            acc
         end
       end)
 
