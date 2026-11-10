@@ -20,6 +20,7 @@ Register VMs, link GitHub repos, trigger manual deploys or push-to-deploy, and w
 - **Oban queue** — background deploy worker with Mox-tested runner behaviour
 - **SSH deploys** — clone, build on the VM, migrate, restart systemd
 - **CLI** — [`cleat`](https://github.com/cleat-cloud/cleat-cli) for servers, apps, env vars, deploys and log streaming
+- **Signals** — journal grouping plus opt-in OTLP traces and exceptions ([export](docs/signals-otlp.md))
 
 ## Requirements
 

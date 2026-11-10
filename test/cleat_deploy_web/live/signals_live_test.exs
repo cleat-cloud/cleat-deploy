@@ -159,10 +159,11 @@ defmodule CleatDeployWeb.SignalsLiveTest do
     {:ok, view, _html} = live(conn, ~p"/signals?app=#{app.slug}")
 
     view
-    |> form("#signals-sampling-form", sampling: %{rate: "1"})
+    |> form("#signals-sampling-form", sampling: %{rate: "1", exception_rate: "1"})
     |> render_submit()
 
     assert Repo.get!(App, app.id).trace_sample_rate == 1.0
+    assert Repo.get!(App, app.id).exception_sample_rate == 1.0
   end
 
   test "lists unresolved issues and resolves them from the Issues tab", %{

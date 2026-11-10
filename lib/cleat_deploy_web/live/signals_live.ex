@@ -24,7 +24,7 @@ defmodule CleatDeployWeb.SignalsLive do
      |> assign(:trace_id, nil)
      |> assign(:waterfall, nil)
      |> assign(:service_map, nil)
-     |> assign(:sampling_form, sampling_form(0.0))
+     |> assign(:sampling_form, sampling_form(0.0, 0.0))
      |> assign(:panel, :overview)
      |> assign(:issues, [])
      |> assign(:issue_detail, nil)
@@ -59,12 +59,12 @@ defmodule CleatDeployWeb.SignalsLive do
   def handle_event("reopen_issue", %{"id" => id}, socket),
     do: mutate_issue(socket, id, &Issues.reopen/2, "Issue reaberta")
 
-  def handle_event("set_sampling", %{"sampling" => %{"rate" => rate}}, socket) do
+  def handle_event("set_sampling", %{"sampling" => params}, socket) do
     app = socket.assigns.selected
 
     with true <- not is_nil(app),
-         {:ok, parsed} <- parse_rate(rate),
-         {:ok, _} <- Traces.set_sampling(socket.assigns.current_scope, app, parsed) do
+         {:ok, attrs} <- sampling_attrs(params),
+         {:ok, _} <- Traces.set_sampling(socket.assigns.current_scope, app, attrs) do
       {:noreply,
        socket
        |> put_flash(:info, "Amostragem atualizada")
@@ -320,7 +320,7 @@ defmodule CleatDeployWeb.SignalsLive do
               Amostragem
             </h3>
             <p class="mt-1 text-sm text-hd-muted">
-              Fração de traces gravados (0 desliga, 1 grava todos).
+              Fração gravada (0 desliga, 1 grava todos). Traces e exceptions são independentes.
             </p>
             <.form
               for={@sampling_form}
@@ -334,7 +334,15 @@ defmodule CleatDeployWeb.SignalsLive do
                 min="0"
                 max="1"
                 step="0.01"
-                label="Taxa"
+                label="Traces"
+              />
+              <.input
+                field={@sampling_form[:exception_rate]}
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                label="Exceptions"
               />
               <button type="submit" class="paas-btn-secondary px-3 py-1.5 text-xs">
                 Salvar amostragem
@@ -466,6 +474,7 @@ defmodule CleatDeployWeb.SignalsLive do
         traces = Traces.list(scope, app)
         sampling = fetch_ok(Traces.get_sampling(scope, app))
         rate = (sampling && sampling.trace_sample_rate) || 0.0
+        exception_rate = (sampling && sampling.exception_sample_rate) || 0.0
 
         socket
         |> assign(:selected, app)
@@ -473,7 +482,7 @@ defmodule CleatDeployWeb.SignalsLive do
         |> assign(:incident, incident)
         |> assign(:traces, traces)
         |> assign(:log_jumps, log_jumps(scope, app, traces))
-        |> assign(:sampling_form, sampling_form(rate))
+        |> assign(:sampling_form, sampling_form(rate, exception_rate))
         |> assign_trace(scope, app, trace_id)
 
       :error ->
@@ -529,8 +538,29 @@ defmodule CleatDeployWeb.SignalsLive do
     end)
   end
 
-  defp sampling_form(rate) do
-    to_form(%{"rate" => rate_string(rate)}, as: :sampling)
+  defp sampling_form(rate, exception_rate \\ 0.0) do
+    to_form(
+      %{"rate" => rate_string(rate), "exception_rate" => rate_string(exception_rate)},
+      as: :sampling
+    )
+  end
+
+  defp sampling_attrs(params) when is_map(params) do
+    with {:ok, attrs} <- put_rate(%{}, :trace_sample_rate, params["rate"]),
+         {:ok, attrs} <- put_rate(attrs, :exception_sample_rate, params["exception_rate"]) do
+      if attrs == %{}, do: :error, else: {:ok, attrs}
+    end
+  end
+
+  defp sampling_attrs(_), do: :error
+
+  defp put_rate(attrs, _key, value) when value in [nil, ""], do: {:ok, attrs}
+
+  defp put_rate(attrs, key, value) do
+    case parse_rate(value) do
+      {:ok, rate} -> {:ok, Map.put(attrs, key, rate)}
+      :error -> :error
+    end
   end
 
   defp rate_string(rate) when is_integer(rate), do: Integer.to_string(rate)
