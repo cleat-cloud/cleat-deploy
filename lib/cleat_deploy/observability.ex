@@ -17,7 +17,17 @@ defmodule CleatDeploy.Observability do
   alias CleatDeploy.Accounts.Scope
   alias CleatDeploy.Apps.App
   alias CleatDeploy.Deployments.Deployment
-  alias CleatDeploy.Observability.{CollectorRun, Fingerprint, Journal, LogEvent, Query, Redact}
+
+  alias CleatDeploy.Observability.{
+    CollectorRun,
+    Fingerprint,
+    Journal,
+    LogEvent,
+    Query,
+    Redact,
+    Severity
+  }
+
   alias CleatDeploy.Repo
   alias CleatDeploy.Repo.BusyRetry
   alias CleatDeploy.Servers.Server
@@ -140,7 +150,7 @@ defmodule CleatDeploy.Observability do
           source: meta.source,
           unit: meta.unit || entry.unit || "",
           cursor: entry.cursor,
-          severity: entry.severity,
+          severity: Severity.promote(entry.severity, message),
           message: message,
           environment: meta.environment || "",
           fingerprint: Fingerprint.of(message),

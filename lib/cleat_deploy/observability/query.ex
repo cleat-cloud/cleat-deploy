@@ -5,7 +5,7 @@ defmodule CleatDeploy.Observability.Query do
 
   alias CleatDeploy.Accounts.Scope
   alias CleatDeploy.Deployments.Deployment
-  alias CleatDeploy.Observability.LogEvent
+  alias CleatDeploy.Observability.{Fingerprint, LogEvent}
   alias CleatDeploy.Repo
 
   @default_limit 200
@@ -43,6 +43,7 @@ defmodule CleatDeploy.Observability.Query do
     |> order_by([e], desc: count(e.id))
     |> limit(^(filters[:limit] || 50))
     |> Repo.all()
+    |> Enum.map(fn group -> Map.update!(group, :sample, &Fingerprint.title/1) end)
   end
 
   def parse_limit(nil), do: {:ok, @default_limit}
