@@ -2,15 +2,19 @@
 # Installed to /etc/cleat_deploy/litestream.yml (mode 600).
 #
 # The file replica is the default: it survives accidental deletes on the
-# live path. Point `replica` at S3/B2 for disk-loss recovery:
+# live path. Production (gestaobem-cx33) replicates every app SQLite file to
+# Backblaze B2 bucket cleat-litestream-phoenix via the S3-compatible API
+# (endpoint s3.us-east-005.backblazeb2.com, force-path-style). Do not point
+# this sidecar at AWS S3: ListBucket on 27 DBs at sync-interval 1s ran
+# ~US$54/month. Credentials live in /etc/cleat_deploy/litestream.env.
 #
 #   replica:
 #     type: s3
-#     bucket: $LITESTREAM_S3_BUCKET
+#     bucket: cleat-litestream-phoenix
 #     path: panel
-#     endpoint: $LITESTREAM_S3_ENDPOINT
-#     access-key-id: $LITESTREAM_ACCESS_KEY_ID
-#     secret-access-key: $LITESTREAM_SECRET_ACCESS_KEY
+#     region: us-east-005
+#     endpoint: s3.us-east-005.backblazeb2.com
+#     force-path-style: true
 #
 dbs:
   - path: /var/lib/cleat_deploy/cleat.db
