@@ -26,13 +26,14 @@ deploy touches the server, with the reason in the deploy log.
 
 | key | type | default | what it does |
 |---|---|---|---|
-| `runtime` | `"phoenix" \| "golang" \| "node" \| "rails" \| "rust" \| "gleam" \| "static"` | detected, else `phoenix` | Chooses the build/run pipeline. |
+| `runtime` | `"phoenix" \| "golang" \| "node" \| "rails" \| "rust" \| "gleam" \| "python" \| "static"` | detected, else `phoenix` | Chooses the build/run pipeline. |
 | `build_dir` | string | auto-detected | Subdirectory holding the project (monorepos). |
 | `build_command` | string | runtime default | Overrides the build step (e.g. `npm run build:prod`). |
 | `start_command` | string | runtime default | Command the app's `web` process runs. |
 | `node_version` | string | `engines.node` → `22` | Node major installed for the build (node runtime and Rails asset pipeline). |
 | `ruby_version` | string | `.ruby-version` → Gemfile → `3.3.6` | Ruby version installed through mise. |
 | `gleam_version` | string | `1.18.1` | Gleam version installed through mise (Erlang is pinned to the panel's `28.4.1`). |
+| `python_version` | string | `3.12` | CPython minor installed through uv (python runtime). |
 | `binaries` | list | `["server"]` | Go runtime only: one systemd unit per binary (`server` owns the base unit, others get `<unit>-<name>`). |
 
 ## Hosting
@@ -87,8 +88,8 @@ Rules:
   sweeper and the Hibernate/Wake up buttons act on the base unit, so a sleeping
   app keeps its workers running (queues do not stop).
 
-Runtimes: `rails`, `node` and `rust`. A single-process app omits `processes` and
-behaves exactly as before.
+Runtimes: `rails`, `node`, `rust`, `gleam` and `python`. A single-process app
+omits `processes` and behaves exactly as before.
 
 ## Addons
 

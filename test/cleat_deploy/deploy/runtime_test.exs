@@ -206,4 +206,45 @@ defmodule CleatDeploy.Deploy.RuntimeTest do
 
     assert Runtime.kind(repo_path, app) == :gleam
   end
+
+  test "detects python from pyproject.toml", %{scope: scope, server: server, repo_path: repo_path} do
+    File.write!(
+      Path.join(repo_path, "pyproject.toml"),
+      """
+      [project]
+      name = "hermes"
+      version = "0.1.0"
+      requires-python = ">=3.12"
+      """
+    )
+
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Hermes",
+        slug: "hermes-detect",
+        github_repo: "puppe1990/hermes-detect",
+        host: "hermes-detect.gestaobem.com",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :python
+  end
+
+  test "app.runtime python is detected as python", %{
+    scope: scope,
+    server: server,
+    repo_path: repo_path
+  } do
+    {:ok, app, _} =
+      CleatDeploy.Apps.create_app(scope, %{
+        name: "Hermes",
+        slug: "hermes-forced",
+        github_repo: "puppe1990/hermes-forced",
+        host: "hermes-forced.gestaobem.com",
+        runtime: "python",
+        server_id: server.id
+      })
+
+    assert Runtime.kind(repo_path, app) == :python
+  end
 end

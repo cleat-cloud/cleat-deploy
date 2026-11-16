@@ -8,6 +8,7 @@ defmodule CleatDeploy.Deploy.Runtime do
   def kind(_repo_path, %App{runtime: "rails"}), do: :rails
   def kind(_repo_path, %App{runtime: "rust"}), do: :rust
   def kind(_repo_path, %App{runtime: "gleam"}), do: :gleam
+  def kind(_repo_path, %App{runtime: "python"}), do: :python
 
   def kind(repo_path, %App{}) when is_binary(repo_path) do
     go? = File.exists?(Path.join(repo_path, "go.mod"))
@@ -19,11 +20,18 @@ defmodule CleatDeploy.Deploy.Runtime do
       File.exists?(Path.join(repo_path, "Gemfile")) and
         File.exists?(Path.join(repo_path, "config/application.rb"))
 
+    python? =
+      File.exists?(Path.join(repo_path, "pyproject.toml")) or
+        File.exists?(Path.join(repo_path, "requirements.txt")) or
+        File.exists?(Path.join(repo_path, "Pipfile")) or
+        File.exists?(Path.join(repo_path, "uv.lock"))
+
     cond do
       go? and not mix? -> :golang
       rails? and not mix? -> :rails
       rust? and not mix? -> :rust
       gleam? and not mix? -> :gleam
+      python? and not mix? -> :python
       true -> :phoenix
     end
   end

@@ -18,7 +18,7 @@ defmodule CleatDeploy.Deploy.ServerProvision do
     do: Static.provision_script(app, config, manifest)
 
   def provision_script(%App{} = app, config, %AppManifest{runtime: runtime} = manifest)
-      when runtime in ["node", "rails", "rust", "gleam"],
+      when runtime in ["node", "rails", "rust", "gleam", "python"],
       do: Service.provision_script(app, config, manifest)
 
   def provision_script(%App{} = app, config, %AppManifest{runtime: "phoenix"} = manifest),

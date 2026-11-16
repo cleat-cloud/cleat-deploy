@@ -141,6 +141,7 @@ defmodule CleatDeploy.Deploy.Provision.Release do
   defp runtime_env_map(%AppManifest{runtime: "rails"}), do: %{"RAILS_ENV" => "production"}
   defp runtime_env_map(%AppManifest{runtime: "node"}), do: %{"NODE_ENV" => "production"}
   defp runtime_env_map(%AppManifest{runtime: "rust"}), do: %{"LOCO_ENV" => "production"}
+  defp runtime_env_map(%AppManifest{runtime: "python"}), do: %{"PYTHONUNBUFFERED" => "1"}
   defp runtime_env_map(%AppManifest{}), do: %{}
 
   defp migration_eval(otp_app) when is_binary(otp_app) do

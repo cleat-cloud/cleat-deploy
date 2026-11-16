@@ -25,6 +25,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
             node_version: nil,
             ruby_version: nil,
             gleam_version: nil,
+            python_version: nil,
             release_command: [],
             release_timeout_s: 300,
             processes: %{},
@@ -48,6 +49,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
           node_version: String.t() | nil,
           ruby_version: String.t() | nil,
           gleam_version: String.t() | nil,
+          python_version: String.t() | nil,
           release_command: [String.t()],
           release_timeout_s: integer(),
           processes: %{String.t() => String.t()},
@@ -90,6 +92,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       file?(repo_path, "gleam.toml") -> "gleam"
       rails?(repo_path) -> "rails"
       node_project?(repo_path) -> "node"
+      python_project?(repo_path) -> "python"
       file?(repo_path, "index.html") or file?(repo_path, "package.json") -> "static"
       true -> nil
     end
@@ -123,6 +126,13 @@ defmodule CleatDeploy.Deploy.AppManifest do
     do: String.ends_with?(rest, "-start") or String.ends_with?(rest, "/start")
 
   defp node_framework?(_dep), do: false
+
+  defp python_project?(repo_path) do
+    file?(repo_path, "pyproject.toml") or
+      file?(repo_path, "requirements.txt") or
+      file?(repo_path, "Pipfile") or
+      file?(repo_path, "uv.lock")
+  end
 
   defp file?(repo_path, relative), do: File.exists?(Path.join(repo_path, relative))
 
@@ -286,6 +296,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       node_version: nil,
       ruby_version: nil,
       gleam_version: nil,
+      python_version: nil,
       release_command: [],
       release_timeout_s: 300,
       processes: %{},
@@ -369,6 +380,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
       node_version: blank_to_nil(Map.get(map, "node_version")),
       ruby_version: blank_to_nil(Map.get(map, "ruby_version")),
       gleam_version: blank_to_nil(Map.get(map, "gleam_version")),
+      python_version: blank_to_nil(Map.get(map, "python_version")),
       release_command: parse_release_command(Map.get(map, "release_command")),
       release_timeout_s: parse_int(Map.get(map, "release_timeout_s")),
       processes: parse_processes(Map.get(map, "processes")),
@@ -418,6 +430,7 @@ defmodule CleatDeploy.Deploy.AppManifest do
   defp parse_runtime("rails"), do: "rails"
   defp parse_runtime("rust"), do: "rust"
   defp parse_runtime("gleam"), do: "gleam"
+  defp parse_runtime("python"), do: "python"
   defp parse_runtime(_), do: nil
 
   defp parse_binaries(list) when is_list(list) do

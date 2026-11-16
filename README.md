@@ -190,7 +190,29 @@ so `erl` is linked into `/usr/local/bin` for the root unit), and the app reads
 an app that migrates from its source tree should do it: the shipment does not
 carry `src/`.
 
-Rails, Node, Rust and Gleam apps can also declare a **release phase**,
+### Python apps
+
+Set `runtime: "python"` (or put `"runtime": "python"` in `.cleat_deploy/deploy.json`).
+A repo with `pyproject.toml`, `requirements.txt`, `Pipfile` or `uv.lock` is
+detected automatically. The panel installs [uv](https://docs.astral.sh/uv/),
+installs a managed CPython into the release (`.cleat-python`, so the
+unprivileged unit does not need the build user's `$HOME`), syncs the project
+into a relocatable `.venv`, and keeps it alive with a `python-<slug>` systemd
+unit behind Caddy.
+
+The start command is resolved at build time:
+
+1. `start_command` from the manifest, if set
+2. `processes.web`, if declared
+3. `.venv/bin/python main.py`, if `main.py` exists
+4. `.venv/bin/python app.py`, if `app.py` exists
+5. `.venv/bin/python server.py`, if `server.py` exists
+
+`python_version` overrides the CPython minor (default `3.12`). `build_command`
+runs after the venv is ready. The unit sets `PYTHONUNBUFFERED=1`, `PORT` and
+`CLEAT_DATA_DIR`. Bind `127.0.0.1:$PORT`.
+
+Rails, Node, Rust, Gleam and Python apps can also declare a **release phase**,
 **multiple processes** (web + worker) and **managed addons** (Postgres with
 pgvector, Redis) in `.cleat_deploy/deploy.json` — full reference in
 [docs/deploy-json.md](docs/deploy-json.md).

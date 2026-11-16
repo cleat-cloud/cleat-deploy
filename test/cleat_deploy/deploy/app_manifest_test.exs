@@ -242,6 +242,37 @@ defmodule CleatDeploy.Deploy.AppManifestTest do
     assert manifest.build_command == "gleam export erlang-shipment"
   end
 
+  test "infers python for a pyproject.toml repo without deploy.json" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path =
+      tmp_repo(%{
+        "pyproject.toml" => ~s([project]\nname = "hermes"\nversion = "0.1.0"\n)
+      })
+
+    assert AppManifest.resolve(repo_path, app).runtime == "python"
+  end
+
+  test "deploy.json runtime python is accepted and carries the version" do
+    scope = TenancyFixtures.scope_fixture()
+    server = TenancyFixtures.server_fixture(scope)
+    app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    repo_path =
+      tmp_repo(%{
+        "pyproject.toml" => ~s([project]\nname = "hermes"\n),
+        ".cleat_deploy/deploy.json" =>
+          ~s({"runtime": "python", "python_version": "3.14", "start_command": "uv run gunicorn app:app --bind 127.0.0.1:$PORT"})
+      })
+
+    manifest = AppManifest.resolve(repo_path, app)
+    assert manifest.runtime == "python"
+    assert manifest.python_version == "3.14"
+    assert manifest.start_command == "uv run gunicorn app:app --bind 127.0.0.1:$PORT"
+  end
+
   test "resolve reads the release phase, processes and addons", %{app: app, repo_path: repo_path} do
     File.write!(
       Path.join(repo_path, ".cleat_deploy/deploy.json"),

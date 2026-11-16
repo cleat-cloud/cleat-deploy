@@ -10,6 +10,7 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
   attr :gleam, :integer, default: 0
   attr :go, :integer, required: true
   attr :js, :integer, required: true
+  attr :python, :integer, default: 0
   attr :ruby, :integer, required: true
   attr :rust, :integer, default: 0
   attr :static, :integer, default: 0
@@ -22,6 +23,7 @@ defmodule CleatDeployWeb.PaasComponents.Bars do
       {"Gleam", :gleam, assigns.gleam},
       {"Go", :golang, assigns.go},
       {"JavaScript", :node, assigns.js},
+      {"Python", :python, assigns.python},
       {"Ruby", :rails, assigns.ruby},
       {"Rust", :rust, assigns.rust},
       {"Static", :static, assigns.static}

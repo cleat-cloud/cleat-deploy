@@ -331,6 +331,20 @@ defmodule CleatDeployWeb.AppLiveTest do
     assert_patch(view, ~p"/apps?runtime=gleam")
   end
 
+  test "filters python apps by the python chip", %{conn: conn, scope: scope, server: server} do
+    python_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "python"})
+    phx_app = TenancyFixtures.app_fixture(scope, server, %{runtime: "phoenix"})
+
+    {:ok, view, _html} = live(conn, ~p"/apps?runtime=python")
+    rendered = render(view)
+    assert rendered =~ python_app.host
+    refute rendered =~ phx_app.host
+
+    {:ok, view, _html} = live(conn, ~p"/apps")
+    view |> element("#apps-filter-python") |> render_click()
+    assert_patch(view, ~p"/apps?runtime=python")
+  end
+
   test "deletes an app from the list after slug confirmation", %{
     conn: conn,
     scope: scope,

@@ -214,6 +214,7 @@ defmodule CleatDeployWeb.DashboardLive do
               gleam={@insights.runtimes.gleam}
               go={@insights.runtimes.go}
               js={@insights.runtimes.node}
+              python={@insights.runtimes.python}
               ruby={@insights.runtimes.ruby}
               rust={@insights.runtimes.rust}
               static={@insights.runtimes.static}

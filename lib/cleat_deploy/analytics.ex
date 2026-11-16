@@ -6,7 +6,7 @@ defmodule CleatDeploy.Analytics do
   alias CleatDeploy.Analytics.Summary
   alias CleatDeploy.Apps.App
 
-  @runtimes ~w(phoenix golang node rails rust gleam)
+  @runtimes ~w(phoenix golang node rails rust gleam python)
   @ranges ~w(24h 7d 90d)
 
   def listen_port do

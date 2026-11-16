@@ -7,7 +7,7 @@ defmodule CleatDeploy.Deploy.Provision.Service do
 
   @doc """
   Systemd units for long-lived app servers that start through a generated
-  `current/start.sh` (Node, Rails, Rust, Gleam).
+  `current/start.sh` (Node, Rails, Rust, Gleam, Python).
   """
   def provision_script(%App{} = app, config, %AppManifest{runtime: runtime} = manifest) do
     {env_lines, label} = runtime_profile(runtime, app)
@@ -112,6 +112,9 @@ defmodule CleatDeploy.Deploy.Provision.Service do
   # from /usr/local/bin (linked at build time) because the shipment carries no
   # ERTS of its own.
   defp runtime_profile("gleam", _app), do: {[], "Gleam"}
+
+  defp runtime_profile("python", _app),
+    do: {["Environment=PYTHONUNBUFFERED=1"], "Python"}
 
   # One unit per process: `web` keeps the base unit name (Caddy, the wake agent
   # and the idle sweeper all point at it) and is the only one that gets
