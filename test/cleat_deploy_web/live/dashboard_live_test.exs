@@ -252,6 +252,28 @@ defmodule CleatDeployWeb.DashboardLiveTest do
     assert html =~ ~r/>Gleam<\/span>\s*<span[^>]*>2<\/span>/
   end
 
+  test "counts python apps in their own language bar", %{conn: conn, scope: scope} do
+    server =
+      TenancyFixtures.server_fixture(scope, %{name: "python-host", instance_status: "running"})
+
+    TenancyFixtures.app_fixture(scope, server, %{
+      runtime: "phoenix",
+      slug: "phx-python-host",
+      name: "Phx"
+    })
+
+    TenancyFixtures.app_fixture(scope, server, %{runtime: "python", slug: "py-one", name: "One"})
+
+    TenancyFixtures.app_fixture(scope, server, %{runtime: "python", slug: "py-two", name: "Two"})
+
+    {:ok, view, _html} = live(conn, ~p"/")
+    html = render(view)
+
+    assert has_element?(view, "#chart-runtimes", "3 registered on this server")
+    assert html =~ ~r/>Elixir<\/span>\s*<span[^>]*>1<\/span>/
+    assert html =~ ~r/>Python<\/span>\s*<span[^>]*>2<\/span>/
+  end
+
   test "language bars link to the apps index filtered by runtime", %{conn: conn, scope: scope} do
     server =
       TenancyFixtures.server_fixture(scope, %{name: "filter-host", instance_status: "running"})

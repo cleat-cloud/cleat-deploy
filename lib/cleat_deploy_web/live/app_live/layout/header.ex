@@ -59,6 +59,7 @@ defmodule CleatDeployWeb.AppLive.Layout.Header do
   def runtime_badge_label("rails"), do: "RB"
   def runtime_badge_label("rust"), do: "RS"
   def runtime_badge_label("gleam"), do: "GL"
+  def runtime_badge_label("python"), do: "PY"
   def runtime_badge_label("static"), do: "HTML"
   def runtime_badge_label(_runtime), do: "PHX"
 

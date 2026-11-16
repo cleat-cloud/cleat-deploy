@@ -64,11 +64,11 @@ defmodule CleatDeploy.Deploy.Provision.Account do
     do: service_ownership_script(app, config, manifest)
 
   @doc """
-  Hands data (and, for Node/Rails/Rust/Gleam, the release tree) to the app
+  Hands data (and, for Node/Rails/Rust/Gleam/Python, the release tree) to the app
   account after root-owned migrate/release commands.
   """
   def service_ownership_script(%App{} = app, config, %AppManifest{runtime: runtime} = manifest)
-      when runtime in ["node", "rails", "rust", "gleam"] do
+      when runtime in ["node", "rails", "rust", "gleam", "python"] do
     data_dir = Shell.data_dir_for(manifest, config)
     user = service_user(app.slug)
 

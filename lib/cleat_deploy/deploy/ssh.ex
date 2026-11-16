@@ -8,6 +8,7 @@ defmodule CleatDeploy.Deploy.Ssh do
   alias CleatDeploy.Deploy.Gleam
   alias CleatDeploy.Deploy.Golang
   alias CleatDeploy.Deploy.Node
+  alias CleatDeploy.Deploy.Python
   alias CleatDeploy.Deploy.Rails
   alias CleatDeploy.Deploy.Runtime
   alias CleatDeploy.Deploy.Rust
@@ -15,7 +16,7 @@ defmodule CleatDeploy.Deploy.Ssh do
   alias CleatDeploy.Repo
   alias CleatDeploy.Deploy.Ssh.{Clone, Env, Phoenix, Session}
 
-  @tar_excludes ~w(_build deps node_modules .git tmp priv/static/assets target)
+  @tar_excludes ~w(_build deps node_modules .venv .cleat-python __pycache__ .pytest_cache .git tmp priv/static/assets target)
 
   def cleanup_stale_identity_files, do: Session.cleanup_stale_identity_files()
 
@@ -304,6 +305,9 @@ defmodule CleatDeploy.Deploy.Ssh do
 
       manifest.runtime == "gleam" or Runtime.kind(work_dir, app) == :gleam ->
         Gleam.remote_build_script(server, app, config, sha, remote_tar, manifest)
+
+      manifest.runtime == "python" or Runtime.kind(work_dir, app) == :python ->
+        Python.remote_build_script(server, app, config, sha, remote_tar, manifest)
 
       Runtime.kind(work_dir, app) == :golang or manifest.runtime == "golang" ->
         Golang.remote_build_script(server, app, config, sha, remote_tar, manifest)

@@ -718,12 +718,12 @@ defmodule CleatDeploy.Deploy.ServerProvisionTest do
     end
   end
 
-  describe "dedicated user for node/rails/rust/gleam (#231)" do
+  describe "dedicated user for node/rails/rust/gleam/python (#231)" do
     test "web and extra units drop root and only write the app paths", %{
       scope: scope,
       server: server
     } do
-      for runtime <- ["node", "rails", "rust", "gleam"] do
+      for runtime <- ["node", "rails", "rust", "gleam", "python"] do
         {:ok, app, _} =
           CleatDeploy.Apps.create_app(scope, %{
             name: "#{runtime} app",

@@ -76,6 +76,13 @@ defmodule CleatDeployWeb.AppLive.Index.Filters do
             Gleam
           </.runtime_filter_chip>
           <.runtime_filter_chip
+            id="apps-filter-python"
+            runtime={:python}
+            current={@apps_runtime}
+          >
+            Python
+          </.runtime_filter_chip>
+          <.runtime_filter_chip
             id="apps-filter-static"
             runtime={:static}
             current={@apps_runtime}

@@ -4,7 +4,7 @@ defmodule CleatDeploy.AnalyticsTest do
   alias CleatDeploy.Analytics
 
   test "runtimes default on" do
-    for runtime <- ~w(phoenix golang node rails rust gleam) do
+    for runtime <- ~w(phoenix golang node rails rust gleam python) do
       assert Analytics.default_inject?(runtime, "nfe-facil")
     end
   end

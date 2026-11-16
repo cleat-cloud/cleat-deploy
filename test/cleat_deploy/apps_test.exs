@@ -187,6 +187,15 @@ defmodule CleatDeploy.AppsTest do
       assert Ecto.Changeset.get_field(changeset, :systemd_unit) == "gleam-minha-app"
       assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/minha-app"
     end
+
+    test "python runtime uses python-<slug> unit and /opt/slug" do
+      changeset =
+        Apps.change_app(%CleatDeploy.Apps.App{}, %{slug: "hermes", runtime: "python"})
+
+      assert Ecto.Changeset.get_field(changeset, :runtime) == "python"
+      assert Ecto.Changeset.get_field(changeset, :systemd_unit) == "python-hermes"
+      assert Ecto.Changeset.get_field(changeset, :release_path) == "/opt/hermes"
+    end
   end
 
   describe "main_language/1" do
@@ -195,6 +204,7 @@ defmodule CleatDeploy.AppsTest do
       assert App.main_language(%App{runtime: "golang"}) == "Go"
       assert App.main_language(%App{runtime: "rust"}) == "Rust"
       assert App.main_language(%App{runtime: "gleam"}) == "Gleam"
+      assert App.main_language(%App{runtime: "python"}) == "Python"
       assert App.main_language(%App{runtime: nil}) == "Elixir"
     end
   end
@@ -203,6 +213,9 @@ defmodule CleatDeploy.AppsTest do
     test "keeps runtime data outside the release dir" do
       assert App.data_dir(%App{runtime: "node", slug: "leitor", release_path: "/opt/leitor"}) ==
                "/opt/leitor/data"
+
+      assert App.data_dir(%App{runtime: "python", slug: "hermes", release_path: "/opt/hermes"}) ==
+               "/opt/hermes/data"
 
       assert App.data_dir(%App{runtime: "golang", slug: "trama", release_path: "/opt/trama"}) ==
                "/opt/trama/data"
